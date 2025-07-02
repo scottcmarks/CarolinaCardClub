@@ -36,3 +36,7 @@ Player ID list is
 
 Player list is
 - (Derived) some (Name, Email address, Phone Number) for each player
+
+
+## Toolchain
+[DB Browser for SQLite](https://sqlitebrowser.org/dl/)
