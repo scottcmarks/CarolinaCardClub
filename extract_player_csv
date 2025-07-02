@@ -1,0 +1,2 @@
+#!/bin/bash
+sqlite3 -header -csv CarolinaCardClub.db "SELECT * FROM Player;" >> Player.csv
