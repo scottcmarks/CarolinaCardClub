@@ -40,3 +40,11 @@ Player list is
 
 ## Toolchain
 [DB Browser for SQLite](https://sqlitebrowser.org/dl/)
+
+
+## Session GUI
+- Initialize Session start time
+- Start individual player Session objects (clock in)
+    -  Search sort order for players: (Category, Most recent Session clock out/in, NickName/Name)
+- Stop individual player Session objects (clock out, compute payoff, enter payoff)
+- Stop Session -- closing out open individual player Sessions as unpaid
