@@ -5,33 +5,72 @@ import tkinter.font as tkFont # Import the font module for custom fonts
 import sqlite3
 import datetime
 import time
+from enum import Enum
 
 #Useful color chart at https://cs111.wellesley.edu/archive/cs111_fall14/public_html/labs/lab12/tkintercolor.html
+carolina_blue_hex = "#4B9CD3"
+
+class ClockResolution(Enum):
+    SECONDS = 1000
+    MINUTES = SECONDS * 60
+
+digital_clock_resolution = ClockResolution.MINUTES
+
+player_data_query = """
+SELECT p.ID,
+       p.Played_Super_Bowl,
+       IFNULL(p.NickName, p.Name),
+       p.Name,
+       p.Email_address,
+       p.Phone_number,
+       p.Other_phone_number_1,
+       p.Other_phone_number_2,
+       p.Other_phone_number_3,
+       p.Prepaid_balance,
+       p.Flag,
+       c.Name,
+       c.Hourly_Rate
+FROM Player as p
+       INNER JOIN
+     Player_Category as c
+       WHERE p.Player_Category_ID = c.ID
+"""
+
+
+non_flagged_player_data_query = """
+SELECT p.ID,
+       p.Played_Super_Bowl,
+       IFNULL(p.NickName, p.Name),
+       p.Name,
+       p.Email_address,
+       p.Phone_number,
+       p.Other_phone_number_1,
+       p.Other_phone_number_2,
+       p.Other_phone_number_3,
+       p.Prepaid_balance,
+       p.Flag,
+       c.Name,
+       c.Hourly_Rate
+FROM Player as p
+       INNER JOIN
+     Player_Category as c
+       WHERE p.Player_Category_ID = c.ID
+         AND p.Flag IS NULL
+"""
+
+
+
+
 root = tk.Tk()
 
-def fetch_data_from_db():
+
+def fetch_data_from_db(query):
     """Fetches data from an SQLite database."""
     conn = None
     try:
         conn = sqlite3.connect('CarolinaCardClub.db')
         cursor = conn.cursor()
-        cursor.execute("""SELECT p.ID,
-                                 p.Played_Super_Bowl,
-                                 IFNULL(p.NickName, p.Name),
-                                 p.Name,
-                                 p.Email_address,
-                                 p.Phone_number,
-                                 p.Other_phone_number_1,
-                                 p.Other_phone_number_2,
-                                 p.Other_phone_number_3,
-                                 p.Prepaid_balance,
-                                 p.Flag,
-                                 c.Name,
-                                 c.Hourly_Rate
-                          FROM Player as p
-                                 INNER JOIN
-                               Player_Category as c
-                                WHERE p.Player_Category_ID = c.ID""")
+        cursor.execute(query)
         data = cursor.fetchall()
         return data
     except sqlite3.Error as e:
@@ -44,21 +83,6 @@ def fetch_data_from_db():
 def close_window():
     root.destroy()
 
-def today_at_1930():
-    # Get today's date
-    today = datetime.date.today()
-
-    # Create a time object for 7:30 PM
-    time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
-
-    # Combine the date and time into a datetime object
-    datetime_730pm = datetime.datetime.combine(today, time_730pm)
-
-    # Format the datetime object as a string
-    # %I for 12-hour clock, %M for minutes, %p for AM/PM
-    time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
-    return time_string
-
 class InputPopup(tk.Toplevel):
     def __init__(self, parent, title, prompt, default=None):
         super().__init__(parent)
@@ -67,9 +91,9 @@ class InputPopup(tk.Toplevel):
 
         self.user_input = None
 
-        ttk.Label(self, text=prompt).pack(padx=10, pady=5)
+        ttk.Label(self, text=prompt).pack(padx=10)
         self.entry = ttk.Entry(self)
-        self.entry.pack(padx=10, pady=5)
+        self.entry.pack(padx=10)
         self.entry.focus_set()  # Set focus to the entry field
         if default is not None:
             self.entry.insert(0,default)
@@ -105,42 +129,69 @@ class InputPopup(tk.Toplevel):
         self.button2.invoke()
         self.destroy()
 
+
+
+def today_at_1930():
+    # Get today's date
+    today = datetime.date.today()
+
+    # Create a time object for 7:30 PM
+    time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
+
+    # Combine the date and time into a datetime object
+    datetime_730pm = datetime.datetime.combine(today, time_730pm)
+
+    # Format the datetime object as a string
+    # %I for 12-hour clock, %M for minutes, %p for AM/PM
+    time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
+    return time_string
+
+
 class SessionStartTimeInputPopup(InputPopup):
     def __init__(self):
         super().__init__(root, "Session Start Time", "Enter start time:", today_at_1930())
 
-def show_custom_input():
-    popup = InputPopup(root, "Custom Input", "Enter your data:")
-    root.wait_window(popup) # Wait for the popup window to close
 
-    if popup.user_input is not None:
-        print("User entered:", popup.user_input)
-    else:
-        print("Popup closed without input.")
+class DigitalClock(tk.Label):
 
-digital_clock_resolution="minutes"
-if digital_clock_resolution == "seconds" :
-    digital_clock_time_format = '%H:%M:%S'
-    digital_clock_delay = 1000
-elif digital_clock_resolution == "minutes" :
-    digital_clock_time_format = '%H:%M'
-    digital_clock_delay = 60 * 1000
-else:
-    print("Unrecognized digital clock resolution", digital_clock_resolution)
-    exit( 1 )
+    def __init__(self, resolution, bgcolor):
+        super().__init__(root, font=('Arial', 20), background=bgcolor, foreground='light gray')
+        self.update_time(resolution)
 
-def update_time(digital_clock):
-    """Updates the digital_clock label with the current time."""
-    # Get the current time and format it
-    string_time = time.strftime(digital_clock_time_format)  # Example: 15:03:00
-    digital_clock.config(text=string_time)  # Update the label's text
+    def update_time(self, resolution):
+        """Updates the digital_clock label with the current time."""
+        # Get the current time and format it
 
-    # Schedule the update_time function to run again after 1000 milliseconds (1 second)
-    digital_clock.after(digital_clock_delay, update_time, digital_clock)
+        if resolution is ClockResolution.SECONDS :
+            digital_clock_time_format = '%H:%M:%S'
+        elif resolution is ClockResolution.MINUTES:
+            digital_clock_time_format = '%H:%M'
+        else:
+            print("Unrecognized digital clock resolution", resolution)
+            exit( 1 )
+
+        string_time = time.strftime(digital_clock_time_format)  # Example: 15:03:00
+        self.config(text=string_time)  # Update the label's text
+
+        one_millisecond_in_microseconds = 1000
+        one_second_in_milliseconds = 1000
+
+
+        # Get the current datetime object
+        current_datetime = datetime.datetime.now()
+
+        # Extract the microseconds
+        current_time_in_microseconds = current_datetime.microsecond
+
+        current_time_in_milliseconds = ( current_time_in_microseconds + (one_millisecond_in_microseconds // 2) ) // one_millisecond_in_microseconds
+        delay_in_milliseconds = (current_time_in_milliseconds + one_second_in_milliseconds - 1 ) // one_second_in_milliseconds * one_second_in_milliseconds - current_time_in_milliseconds
+
+        # Schedule the update_time function to run again after 1000 milliseconds (1 second)
+        self.after(delay_in_milliseconds, self.update_time, resolution)
+
 
 def draw_session_panel_background():
     # Define the hex code for Carolina Blue
-    carolina_blue_hex = "#4B9CD3"
     root['bg']=carolina_blue_hex
 
     # Create a custom font for the label
@@ -152,12 +203,12 @@ def draw_session_panel_background():
     except tkFont.TclError:
         # Fallback to a different font if Old English is not available
         carolina_font = tkFont.Font(family="Arial, size=48, weight=bold")
-        print("Warning: 'Academy Engraved' not found, using Arial (bold) as a fallback.") # Add a warning
+        print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.") # Add a warning
 
     # Create the small digital clock
-    digital_clock = tk.Label(root, font=('Arial', 20), background=carolina_blue_hex, foreground='light gray')
-    digital_clock.grid(row=0,column=1,pady=10)
-    update_time(digital_clock)
+    digital_clock = DigitalClock(digital_clock_resolution, carolina_blue_hex)
+    digital_clock.grid(row=0,column=3)
+
 
     # Create the big label
     label_text = "Carolina Card Club"
@@ -165,7 +216,7 @@ def draw_session_panel_background():
                               bg=carolina_blue_hex, fg="white")
 
     # Place the label in the grid, spanning the available width (sticky='ew')
-    carolina_label.grid(row=1, column=0, columnspan=2, sticky='ew', pady=20)
+    carolina_label.grid(row=1, column=0, columnspan=3, sticky='ew')
 
 
 
@@ -184,6 +235,57 @@ def set_session_start_time():
 
 
 
+def show_session_start_time(sessionStartTime):
+    # Create the start time label
+    label_text = "Session Start Time " + sessionStartTime
+    start_time_label = tk.Label(root, text=label_text, font=('Arial', 12),
+                                background=carolina_blue_hex, fg="light gray")
+
+    # Place the label in the grid, spanning the available width (sticky='ew')
+    start_time_label.grid(row=2, column=1)
+
+    print("Session Start Time set to", sessionStartTime)
+    return
+
+
+def show_session_close_button():
+#    style = ttk.Style()
+
+    # Configure the 'TButton' style
+    # You can use a specific theme to ensure the style applies
+    # style.theme_use('clam')  # Example theme
+#    style.configure('TButton', background='blue', foreground='white', font=('Arial', 12))
+
+    # Create a ttk Button and apply the style
+    close_button = ttk.Button(root, text="Close Session",command=close_window)
+    close_button.grid(row=2,column=2)
+
+
+def show_player_sessions():
+    data_list = fetch_data_from_db(non_flagged_player_data_query)
+    if not data_list:
+        messagebox.showinfo("No Data", "No items found in the database.")
+        return
+
+
+    names = [item[2] for item in data_list] # Extract the names into a list
+    listbox = tk.Listbox(root)
+    for item in names:
+        listbox.insert(tk.END, item)
+    listbox['bg']=carolina_blue_hex
+    listbox.grid(row=3,column=0)
+    listbox.selection_clear(0,tk.END)
+
+    def on_select(event):
+        selected_index = listbox.curselection()
+        if selected_index:
+            selected_item = listbox.get(selected_index[0])
+        else:
+            selected_item = None
+
+    listbox.bind('<<ListboxSelect>>', on_select)
+
+
 def show_session_panel():
     # Define the hex code for Carolina Blue
 
@@ -196,11 +298,15 @@ def show_session_panel():
     # Add more widgets here if needed
 
     sessionStartTime = set_session_start_time()
-    if sessionStartTime is not None:
-        print("Session Start Time set to:", sessionStartTime)
-    else:
+    if sessionStartTime is None:
         print("Popup closed without input.")
         return
+
+    show_session_start_time(sessionStartTime)
+
+    show_session_close_button()
+
+    show_player_sessions()
 
     root.mainloop()
 
