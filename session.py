@@ -180,14 +180,14 @@ class DigitalClock(tk.Label):
         self.after_cancel(self.next_update)
 
 
-    def now(self):
+    def now():
         # Get the current time
         time_now = datetime.datetime.now()
         time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
         return time_string
 
 
-    def today_at_1930(self):
+    def today_at_1930():
         # Get today's date
         today = datetime.date.today()
 
@@ -211,14 +211,18 @@ class DigitalClock(tk.Label):
 # Create the small digital clock
 digital_clock = DigitalClock(digital_clock_resolution, carolina_blue_hex)
 
-class SessionStartTimeInputPopup(InputPopup):
-    def __init__(self):
-        super().__init__(root, "Session Start Time", "Enter start time:", DigitalClock.today_at_1930(self))
 
 
-class ClockSetTimeInputPopup(InputPopup):
-    def __init__(self):
-        super().__init__(root, "Set Clock Time", "Enter clock time:", DigitalClock.now(self))
+def get_time(label, prompt, default):
+    popup = InputPopup(root, label, prompt, default)
+    root.wait_window(popup) # Wait for the popup window to close
+    return popup.user_input
+
+def get_session_start_time():
+    return get_time("Session Start Time", "Enter start time:", DigitalClock.today_at_1930())
+
+def get_clock_set_time():
+    return get_time("Set Clock Time", "Enter clock time:", DigitalClock.now())
 
 
 
@@ -260,13 +264,6 @@ def configure_session_panel_grid():
     # Use the grid layout manager to place the label
     # Configure the column to expand when the window is resized
     root.grid_columnconfigure(0, weight=1)
-
-
-
-def set_session_start_time():
-    popup = SessionStartTimeInputPopup()
-    root.wait_window(popup) # Wait for the popup window to close
-    return popup.user_input
 
 
 
@@ -333,7 +330,7 @@ def show_session_panel():
 
     # Add more widgets here if needed
 
-    sessionStartTime = set_session_start_time()
+    sessionStartTime = get_session_start_time()
     if sessionStartTime is None:
         print("Popup closed without input.")
         return
