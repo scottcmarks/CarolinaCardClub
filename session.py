@@ -62,6 +62,7 @@ FROM Player as p
 
 
 root = tk.Tk()
+digital_clock = None
 
 
 def fetch_data_from_db(query):
@@ -82,6 +83,7 @@ def fetch_data_from_db(query):
 
 def close_window():
     root.destroy()
+    exit(0)
 
 class InputPopup(tk.Toplevel):
     def __init__(self, parent, title, prompt, default=None):
@@ -131,46 +133,30 @@ class InputPopup(tk.Toplevel):
 
 
 
-def today_at_1930():
-    # Get today's date
-    today = datetime.date.today()
-
-    # Create a time object for 7:30 PM
-    time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
-
-    # Combine the date and time into a datetime object
-    datetime_730pm = datetime.datetime.combine(today, time_730pm)
-
-    # Format the datetime object as a string
-    # %I for 12-hour clock, %M for minutes, %p for AM/PM
-    time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
-    return time_string
-
-
-class SessionStartTimeInputPopup(InputPopup):
-    def __init__(self):
-        super().__init__(root, "Session Start Time", "Enter start time:", today_at_1930())
-
-
 class DigitalClock(tk.Label):
 
     def __init__(self, resolution, bgcolor):
-        super().__init__(root, font=('Arial', 20), background=bgcolor, foreground='light gray')
-        self.update_time(resolution)
-
-    def update_time(self, resolution):
-        """Updates the digital_clock label with the current time."""
-        # Get the current time and format it
+        super().__init__(root,
+                         font=('Arial', 20), background=bgcolor, foreground='light gray',
+                         cursor="hand2")
 
         if resolution is ClockResolution.SECONDS :
-            digital_clock_time_format = '%H:%M:%S'
+            self.digital_clock_time_format = '%H:%M:%S'
         elif resolution is ClockResolution.MINUTES:
-            digital_clock_time_format = '%H:%M'
+            self.digital_clock_time_format = '%H:%M'
         else:
             print("Unrecognized digital clock resolution", resolution)
             exit( 1 )
 
-        string_time = time.strftime(digital_clock_time_format)  # Example: 15:03:00
+        self.resolution = resolution
+        self.bind("<Button-1>", self.reset_clock)
+        self.update_time()
+
+    def update_time(self):
+        """Updates the digital_clock label with the current time."""
+        # Get the current time and format it
+
+        string_time = time.strftime(self.digital_clock_time_format)  # Example: 15:03:00
         self.config(text=string_time)  # Update the label's text
 
         one_millisecond_in_microseconds = 1000
@@ -183,11 +169,57 @@ class DigitalClock(tk.Label):
         # Extract the microseconds
         current_time_in_microseconds = current_datetime.microsecond
 
+        # Round to milliseconds
         current_time_in_milliseconds = ( current_time_in_microseconds + (one_millisecond_in_microseconds // 2) ) // one_millisecond_in_microseconds
-        delay_in_milliseconds = (current_time_in_milliseconds + one_second_in_milliseconds - 1 ) // one_second_in_milliseconds * one_second_in_milliseconds - current_time_in_milliseconds
+        # Compute the next second's tick
+        next_tick_time_in_seconds = (current_time_in_milliseconds + one_second_in_milliseconds) // one_second_in_milliseconds
+
+        # Delay for that in milliseconds
+        delay_in_milliseconds = next_tick_time_in_seconds * one_second_in_milliseconds - current_time_in_milliseconds
+
 
         # Schedule the update_time function to run again after 1000 milliseconds (1 second)
-        self.after(delay_in_milliseconds, self.update_time, resolution)
+        self.after(delay_in_milliseconds, self.update_time)
+
+
+    def now(self):
+        # Get the current time
+        time_now = datetime.datetime.now()
+        time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
+        return time_string
+
+
+    def today_at_1930(self):
+        # Get today's date
+        today = datetime.date.today()
+
+        # Create a time object for 7:30 PM
+        time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
+
+        # Combine the date and time into a datetime object
+        datetime_730pm = datetime.datetime.combine(today, time_730pm)
+
+        # Format the datetime object as a string
+        # %I for 12-hour clock, %M for minutes, %p for AM/PM
+        time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
+        return time_string
+
+
+    def reset_clock(self, event):
+        print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
+        self.update_time()
+
+
+
+class SessionStartTimeInputPopup(InputPopup):
+    def __init__(self):
+        super().__init__(root, "Session Start Time", "Enter start time:", DigitalClock.today_at_1930(self))
+
+
+class ClockSetTimeInputPopup(InputPopup):
+    def __init__(self):
+        super().__init__(root, "Set Clock Time", "Enter clock time:", DigitalClock.now(self))
+
 
 
 def draw_session_panel_background():
@@ -246,6 +278,7 @@ def show_session_start_time(sessionStartTime):
 
     print("Session Start Time set to", sessionStartTime)
     return
+
 
 
 def show_session_close_button():
