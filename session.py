@@ -81,10 +81,6 @@ def fetch_data_from_db(query):
         if conn:
             conn.close()
 
-def close_window():
-    root.destroy()
-    exit(0)
-
 class InputPopup(tk.Toplevel):
     def __init__(self, parent, title, prompt, default=None):
         super().__init__(parent)
@@ -177,9 +173,11 @@ class DigitalClock(tk.Label):
         # Delay for that in milliseconds
         delay_in_milliseconds = next_tick_time_in_seconds * one_second_in_milliseconds - current_time_in_milliseconds
 
-
         # Schedule the update_time function to run again after 1000 milliseconds (1 second)
-        self.after(delay_in_milliseconds, self.update_time)
+        self.next_update = self.after(delay_in_milliseconds, self.update_time)
+
+    def cancel_updating(self):
+        self.after_cancel(self.next_update)
 
 
     def now(self):
@@ -210,6 +208,8 @@ class DigitalClock(tk.Label):
         self.update_time()
 
 
+# Create the small digital clock
+digital_clock = DigitalClock(digital_clock_resolution, carolina_blue_hex)
 
 class SessionStartTimeInputPopup(InputPopup):
     def __init__(self):
@@ -237,10 +237,8 @@ def draw_session_panel_background():
         carolina_font = tkFont.Font(family="Arial, size=48, weight=bold")
         print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.") # Add a warning
 
-    # Create the small digital clock
-    digital_clock = DigitalClock(digital_clock_resolution, carolina_blue_hex)
-    digital_clock.grid(row=0,column=3)
 
+    digital_clock.grid(row=0,column=3)
 
     # Create the big label
     label_text = "Carolina Card Club"
@@ -249,6 +247,11 @@ def draw_session_panel_background():
 
     # Place the label in the grid, spanning the available width (sticky='ew')
     carolina_label.grid(row=1, column=0, columnspan=3, sticky='ew')
+
+
+def close_window():
+    digital_clock.cancel_updating()
+    root.destroy()
 
 
 
@@ -342,6 +345,8 @@ def show_session_panel():
     show_player_sessions()
 
     root.mainloop()
+
+
 
 
 if __name__ == "__main__":
