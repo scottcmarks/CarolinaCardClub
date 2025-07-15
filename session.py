@@ -6,6 +6,7 @@ import sqlite3
 import datetime
 import time
 from enum import Enum
+import locale
 
 #Useful color chart at https://cs111.wellesley.edu/archive/cs111_fall14/public_html/labs/lab12/tkintercolor.html
 carolina_blue_hex = "#4B9CD3"
@@ -14,7 +15,7 @@ class ClockResolution(Enum):
     SECONDS = 1000
     MINUTES = SECONDS * 60
 
-digital_clock_resolution = ClockResolution.MINUTES
+digital_clock_resolution = ClockResolution.SECONDS
 
 player_data_query = """
 SELECT p.ID,
@@ -58,12 +59,24 @@ FROM Player as p
          AND p.Flag IS NULL
 """
 
+player_name_query = """
+SELECT p.ID,
+       IFNULL(p.NickName, p.Name)
+FROM Player as p
+       INNER JOIN
+     Player_Category as c
+       WHERE p.Player_Category_ID = c.ID
+         AND p.Flag IS NULL
+"""
 
 
 
 root = tk.Tk()
 digital_clock = None
 
+
+# Set the locale (example for US English)
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 def fetch_data_from_db(query):
     """Fetches data from an SQLite database."""
@@ -128,6 +141,11 @@ class InputPopup(tk.Toplevel):
         self.destroy()
 
 
+def reset_clock(event):
+    print("RESET CLOCK", event, digital_clock.resolution, digital_clock.digital_clock_time_format)
+    digital_clock.update_time()
+
+
 
 class DigitalClock(tk.Label):
 
@@ -145,7 +163,8 @@ class DigitalClock(tk.Label):
             exit( 1 )
 
         self.resolution = resolution
-        self.bind("<Button-1>", self.reset_clock)
+        self.bind("<Button-1>", reset_clock)
+        self.clock_offset = 0
         self.update_time()
 
     def update_time(self):
@@ -166,9 +185,12 @@ class DigitalClock(tk.Label):
         current_time_in_microseconds = current_datetime.microsecond
 
         # Round to milliseconds
-        current_time_in_milliseconds = ( current_time_in_microseconds + (one_millisecond_in_microseconds // 2) ) // one_millisecond_in_microseconds
-        # Compute the next second's tick
-        next_tick_time_in_seconds = (current_time_in_milliseconds + one_second_in_milliseconds) // one_second_in_milliseconds
+        current_time_in_milliseconds = ( ( current_time_in_microseconds + (one_millisecond_in_microseconds // 2) )
+                                         // one_millisecond_in_microseconds )
+
+        # Compute the next tick
+        next_tick_time_in_seconds    = ( ( current_time_in_milliseconds + one_second_in_milliseconds)
+                                         // one_second_in_milliseconds )
 
         # Delay for that in milliseconds
         delay_in_milliseconds = next_tick_time_in_seconds * one_second_in_milliseconds - current_time_in_milliseconds
@@ -203,15 +225,10 @@ class DigitalClock(tk.Label):
         return time_string
 
 
-    def reset_clock(self, event):
-        print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
-        self.update_time()
 
 
 # Create the small digital clock
 digital_clock = DigitalClock(digital_clock_resolution, carolina_blue_hex)
-
-
 
 def get_time(label, prompt, default):
     popup = InputPopup(root, label, prompt, default)
@@ -253,18 +270,10 @@ def draw_session_panel_background():
     carolina_label.grid(row=1, column=0, columnspan=3, sticky='ew')
 
 
-def close_window():
-    digital_clock.cancel_updating()
-    root.destroy()
-
-
-
-
 def configure_session_panel_grid():
     # Use the grid layout manager to place the label
     # Configure the column to expand when the window is resized
     root.grid_columnconfigure(0, weight=1)
-
 
 
 def show_session_start_time(sessionStartTime):
@@ -276,8 +285,6 @@ def show_session_start_time(sessionStartTime):
     # Place the label in the grid, spanning the available width (sticky='ew')
     start_time_label.grid(row=2, column=1)
 
-    print("Session Start Time set to", sessionStartTime)
-    return
 
 
 
@@ -294,36 +301,169 @@ def show_session_close_button():
     close_button.grid(row=2,column=2)
 
 
-def show_player_sessions():
-    data_list = fetch_data_from_db(non_flagged_player_data_query)
-    if not data_list:
-        messagebox.showinfo("No Data", "No items found in the database.")
-        return
 
 
-    names = [item[2] for item in data_list] # Extract the names into a list
-    listbox = tk.Listbox(root)
-    for item in names:
-        listbox.insert(tk.END, item)
-    listbox['bg']=carolina_blue_hex
-    listbox.grid(row=3,column=0)
-    listbox.selection_clear(0,tk.END)
+class PlayerNameListbox(tk.Listbox):
 
-    def on_select(event):
-        selected_index = listbox.curselection()
-        if selected_index:
-            selected_item = listbox.get(selected_index[0])
+    def __init__(self, selectedfn):
+        super().__init__(root, selectmode=tk.SINGLE)
+        self['bg'] = carolina_blue_hex
+        self.ID_and_name_list = None
+        self.selectedfn = selectedfn
+        self.bind('<<ListboxSelect>>', self.on_player_name_select)
+
+    def refresh_ID_and_name_list(self):
+        self.delete(0,tk.END)
+        self.ID_and_name_list = fetch_data_from_db(player_name_query)
+        if not self.ID_and_name_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        names = [item[1] for item in self.ID_and_name_list] # Extract the names into a list
+        for item in names:
+            self.insert(tk.END, item)
+            self.selection_clear(0,tk.END)
+        return self
+
+    def on_player_name_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_item = self.get(selected_index[0])
+            (selected_ID, selected_name) = self.ID_and_name_list[selected_index[0]]
+            self.selectedfn(self, selected_ID, selected_name)
         else:
             selected_item = None
 
-    listbox.bind('<<ListboxSelect>>', on_select)
+
+
+class SessionsTreeview(ttk.Treeview):
+
+    sessions_query="""
+SELECT
+    s.ID
+        as "Session_ID",
+
+    s.Player_ID
+        as "Player_ID",
+
+    IFNULL(p.NickName,p.Name)
+	as "Name",
+
+    s.Start_Time,
+
+    s.Stop_Time,
+
+    p.Prepaid_balance + ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
+        as "Amount",
+
+    p.Prepaid_balance
+        as "Prepaid_balance",
+
+    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
+        as "Session_Seat_Fee",
+
+    c.Name
+        as "Category",
+
+    c.Hourly_Rate
+        as "Hourly_Rate"
+
+FROM
+       Player as p
+   INNER JOIN
+       Player_Category as c
+   INNER JOIN
+       Session as s
+   ON
+       p.ID = s.Player_ID
+   AND
+       p.Player_Category_ID = c.ID;
+
+"""
+
+    def __init__(self, selectedfn):
+        super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
+        self.column("Column1", width=150, stretch=False)
+        self.heading("Column1", text="Name")
+        self.column("Column2", width=150, stretch=False)
+        self.heading("Column2", text="Start Time")
+        self.column("Column3", width=150, stretch=False)
+        self.heading("Column3", text="Stop Time")
+        self.column("Column4", width=75, stretch=False)
+        self.heading("Column4", text="Amount Due")
+
+
+
+
+    def refresh_ID_and_name_list(self):
+        self.delete(*self.get_children())
+        self.session_list = fetch_data_from_db(self.sessions_query)
+        if not self.session_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        def strip_time(time_string):
+            return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
+                                     .strftime("%Y-%m-%d %I:%M %p"))
+
+        for (sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance, _, _, _, _) in self.session_list:
+            self.insert("", "end", values=(playerName,
+                                           strip_time(sessionStartTime),
+                                           strip_time(sessionStopTime),
+                                           locale.currency(sessionBalance, grouping=True).rjust(10)) )
+
+        self.selection_clear()
+
+        return self
+
+    def on_session_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_session = self.get(selected_index[0])
+            (sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance, _, _, _, _) = self.session_list[selected_index[0]]
+            self.selectedfn(self, sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance)
+        else:
+            selected_item = None
+
+
+def create_sessions_treeview():
+    def selectedfn(sessions_treeview, sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance):
+        print("selected_ID:", sessionID, "selected_name:", playerName)
+
+    sessions_treeview = SessionsTreeview(selectedfn)
+
+    if sessions_treeview.refresh_ID_and_name_list() is None:
+        return None
+
+    return sessions_treeview
+
+def create_player_name_listbox(sessions_treeview):
+    def selectedfn(player_name_listbox, ID, name, sessions_treeview):
+        print("selected_ID:", ID, "selected_name:", name)
+
+    player_name_listbox = PlayerNameListbox(selectedfn)
+
+    if player_name_listbox.refresh_ID_and_name_list() is None:
+        return None
+
+    return player_name_listbox
+
+
+def show_player_sessions():
+    sessions_treeview = create_sessions_treeview()
+
+    player_name_listbox=create_player_name_listbox(sessions_treeview)
+    if player_name_listbox is None:
+        return
+    player_name_listbox.grid(row=3, column=0)
+    sessions_treeview.grid(row=3, column=1, columnspan=2, sticky="ew")
 
 
 def show_session_panel():
     # Define the hex code for Carolina Blue
 
     root.title("Carolina Card Club Session")
-    root.geometry('640x480')
+    root.geometry('800x600')
     configure_session_panel_grid()
 
     draw_session_panel_background()
@@ -344,6 +484,9 @@ def show_session_panel():
     root.mainloop()
 
 
+def close_window():
+    digital_clock.cancel_updating()
+    root.destroy()
 
 
 if __name__ == "__main__":
