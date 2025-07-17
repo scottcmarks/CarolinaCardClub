@@ -18,7 +18,7 @@ class ClockResolution(Enum):
 digital_clock_resolution = ClockResolution.SECONDS
 
 player_data_query = """
-SELECT p.ID,
+SELECT p.Player_ID,
        p.Played_Super_Bowl,
        IFNULL(p.NickName, p.Name),
        p.Name,
@@ -27,7 +27,6 @@ SELECT p.ID,
        p.Other_phone_number_1,
        p.Other_phone_number_2,
        p.Other_phone_number_3,
-       p.Prepaid_balance,
        p.Flag,
        c.Name,
        c.Hourly_Rate
@@ -39,7 +38,7 @@ FROM Player as p
 
 
 non_flagged_player_data_query = """
-SELECT p.ID,
+SELECT p.Player_ID,
        p.Played_Super_Bowl,
        IFNULL(p.NickName, p.Name),
        p.Name,
@@ -48,7 +47,6 @@ SELECT p.ID,
        p.Other_phone_number_1,
        p.Other_phone_number_2,
        p.Other_phone_number_3,
-       p.Prepaid_balance,
        p.Flag,
        c.Name,
        c.Hourly_Rate
@@ -60,19 +58,18 @@ FROM Player as p
 """
 
 player_name_query = """
-SELECT p.ID,
+SELECT p.Player_ID,
        IFNULL(p.NickName, p.Name)
 FROM Player as p
        INNER JOIN
      Player_Category as c
-       WHERE p.Player_Category_ID = c.ID
+       WHERE p.Player_Category_ID = c.Player_Category_ID
          AND p.Flag IS NULL
 """
 
 
 
 root = tk.Tk()
-digital_clock = None
 
 
 # Set the locale (example for US English)
@@ -228,7 +225,8 @@ class DigitalClock(tk.Label):
 
 
 # Create the small digital clock
-digital_clock = DigitalClock(digital_clock_resolution, carolina_blue_hex)
+def create_digital_clock():
+    return DigitalClock(digital_clock_resolution, carolina_blue_hex)
 
 def get_time(label, prompt, default):
     popup = InputPopup(root, label, prompt, default)
@@ -242,63 +240,35 @@ def get_clock_set_time():
     return get_time("Set Clock Time", "Enter clock time:", DigitalClock.now())
 
 
+def create_Carolina_font():
+    try:
+        return tkFont.Font(family="Academy Engraved LET", size=48)
+    except tkFont.TclError:
+        # Fallback to a different font if Old English is not available
+        print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.") # Add a warning
+        return tkFont.Font(family="Arial, size=48, weight=bold")
 
-def draw_session_panel_background():
-    # Define the hex code for Carolina Blue
-    root['bg']=carolina_blue_hex
-
+def create_Carolina_label(label_text):
     # Create a custom font for the label
         # Replace "Old English Text MT" with an available font on your system
         # You might need to experiment or use a font like "Blackletter"
         # You can also adjust the size as needed
-    try:
-        carolina_font = tkFont.Font(family="Academy Engraved LET", size=48)
-    except tkFont.TclError:
-        # Fallback to a different font if Old English is not available
-        carolina_font = tkFont.Font(family="Arial, size=48, weight=bold")
-        print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.") # Add a warning
-
-
-    digital_clock.grid(row=0,column=3)
-
     # Create the big label
-    label_text = "Carolina Card Club"
-    carolina_label = tk.Label(root, text=label_text, font=carolina_font,
+    return tk.Label(root, text=label_text, font=carolina_font,
                               bg=carolina_blue_hex, fg="white")
 
-    # Place the label in the grid, spanning the available width (sticky='ew')
-    carolina_label.grid(row=1, column=0, columnspan=3, sticky='ew')
 
 
-def configure_session_panel_grid():
-    # Use the grid layout manager to place the label
-    # Configure the column to expand when the window is resized
-    root.grid_columnconfigure(0, weight=1)
 
-
-def show_session_start_time(sessionStartTime):
+def create_session_start_time_label(sessionStartTime):
     # Create the start time label
     label_text = "Session Start Time " + sessionStartTime
-    start_time_label = tk.Label(root, text=label_text, font=('Arial', 12),
-                                background=carolina_blue_hex, fg="light gray")
-
-    # Place the label in the grid, spanning the available width (sticky='ew')
-    start_time_label.grid(row=2, column=1)
+    return tk.Label(root, text=label_text, font=('Arial', 12),
+                    background=carolina_blue_hex, fg="light gray")
 
 
-
-
-def show_session_close_button():
-#    style = ttk.Style()
-
-    # Configure the 'TButton' style
-    # You can use a specific theme to ensure the style applies
-    # style.theme_use('clam')  # Example theme
-#    style.configure('TButton', background='blue', foreground='white', font=('Arial', 12))
-
-    # Create a ttk Button and apply the style
-    close_button = ttk.Button(root, text="Close Session",command=close_window)
-    close_button.grid(row=2,column=2)
+def create_session_close_button():
+    return ttk.Button(root, text="Close Session", command=close_window)
 
 
 
@@ -340,7 +310,7 @@ class SessionsTreeview(ttk.Treeview):
 
     sessions_query="""
 SELECT
-    s.ID
+    s.Session_ID
         as "Session_ID",
 
     s.Player_ID
@@ -352,12 +322,6 @@ SELECT
     s.Start_Time,
 
     s.Stop_Time,
-
-    p.Prepaid_balance + ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
-        as "Amount",
-
-    p.Prepaid_balance
-        as "Prepaid_balance",
 
     ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
         as "Session_Seat_Fee",
@@ -375,23 +339,24 @@ FROM
    INNER JOIN
        Session as s
    ON
-       p.ID = s.Player_ID
+       p.Player_ID = s.Player_ID
    AND
-       p.Player_Category_ID = c.ID;
+       p.Player_Category_ID = c.Player_Category_ID;
 
 """
 
     def __init__(self, selectedfn):
         super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
-        self.column("Column1", width=150, stretch=False)
+        self.column("Column1", width=160, stretch=False)
         self.heading("Column1", text="Name")
-        self.column("Column2", width=150, stretch=False)
+        self.column("Column2", width=80, stretch=False)
         self.heading("Column2", text="Start Time")
-        self.column("Column3", width=150, stretch=False)
+        self.column("Column3", width=80, stretch=False)
         self.heading("Column3", text="Stop Time")
         self.column("Column4", width=75, stretch=False)
         self.heading("Column4", text="Amount Due")
 
+        self.tag_configure("courier", font=("Courier", 10))
 
 
 
@@ -404,13 +369,17 @@ FROM
 
         def strip_time(time_string):
             return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
-                                     .strftime("%Y-%m-%d %I:%M %p"))
+                                     .strftime("%-m/%-d %H:%M"))
 
-        for (sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance, _, _, _, _) in self.session_list:
-            self.insert("", "end", values=(playerName,
-                                           strip_time(sessionStartTime),
-                                           strip_time(sessionStopTime),
-                                           locale.currency(sessionBalance, grouping=True).rjust(10)) )
+        for (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) in self.session_list:
+            self.insert("", "end",
+                        values=(playerName,
+                                strip_time(sessionStartTime),
+                                strip_time(sessionStopTime),
+                                locale.currency(sessionSeatFee, grouping=True).rjust(8)),
+                        tags=("courier",))
 
         self.selection_clear()
 
@@ -420,14 +389,18 @@ FROM
         selected_index = self.curselection()
         if selected_index is not None:
             selected_session = self.get(selected_index[0])
-            (sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance, _, _, _, _) = self.session_list[selected_index[0]]
-            self.selectedfn(self, sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance)
+            (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) = self.session_list[selected_index[0]]
+            self.selectedfn(self, sessionID, playerID, playerName,
+                            sessionStartTime, sessionStopTime, sessionSeatFee)
         else:
             selected_item = None
 
 
 def create_sessions_treeview():
-    def selectedfn(sessions_treeview, sessionID, playerID, playerName, sessionStartTime, sessionStopTime, sessionBalance):
+    def selectedfn(sessions_treeview, sessionID, playerID, playerName,
+                   sessionStartTime, sessionStopTime, sessionSeatFee):
         print("selected_ID:", sessionID, "selected_name:", playerName)
 
     sessions_treeview = SessionsTreeview(selectedfn)
@@ -449,37 +422,756 @@ def create_player_name_listbox(sessions_treeview):
     return player_name_listbox
 
 
-def show_player_sessions():
-    sessions_treeview = create_sessions_treeview()
+def create_bottom_banner():
+     return tk.Label(root, text=label_text, font=carolina_font,
+                              bg=carolina_blue_hex, fg="white")
 
-    player_name_listbox=create_player_name_listbox(sessions_treeview)
-    if player_name_listbox is None:
-        return
-    player_name_listbox.grid(row=3, column=0)
-    sessions_treeview.grid(row=3, column=1, columnspan=2, sticky="ew")
 
+
+
+
+def create_session_start_time_label(sessionStartTime):
+    # Create the start time label
+    label_text = "Session Start Time " + sessionStartTime
+    return tk.Label(root, text=label_text, font=('Arial', 12),
+                    background=carolina_blue_hex, fg="light gray")
+
+
+def create_session_close_button():
+    return ttk.Button(root, text="Close Session", command=close_window)
+
+
+
+
+class PlayerNameListbox(tk.Listbox):
+
+    def __init__(self, selectedfn):
+        super().__init__(root, selectmode=tk.SINGLE)
+        self['bg'] = carolina_blue_hex
+        self.ID_and_name_list = None
+        self.selectedfn = selectedfn
+        self.bind('<<ListboxSelect>>', self.on_player_name_select)
+
+    def refresh_ID_and_name_list(self):
+        self.delete(0,tk.END)
+        self.ID_and_name_list = fetch_data_from_db(player_name_query)
+        if not self.ID_and_name_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        names = [item[1] for item in self.ID_and_name_list] # Extract the names into a list
+        for item in names:
+            self.insert(tk.END, item)
+            self.selection_clear(0,tk.END)
+        return self
+
+    def on_player_name_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_item = self.get(selected_index[0])
+            (selected_ID, selected_name) = self.ID_and_name_list[selected_index[0]]
+            self.selectedfn(self, selected_ID, selected_name)
+        else:
+            selected_item = None
+
+
+
+class SessionsTreeview(ttk.Treeview):
+
+    sessions_query="""
+SELECT
+    s.Session_ID
+        as "Session_ID",
+
+    s.Player_ID
+        as "Player_ID",
+
+    IFNULL(p.NickName,p.Name)
+	as "Name",
+
+    s.Start_Time,
+
+    s.Stop_Time,
+
+    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
+        as "Session_Seat_Fee",
+
+    c.Name
+        as "Category",
+
+    c.Hourly_Rate
+        as "Hourly_Rate"
+
+FROM
+       Player as p
+   INNER JOIN
+       Player_Category as c
+   INNER JOIN
+       Session as s
+   ON
+       p.Player_ID = s.Player_ID
+   AND
+       p.Player_Category_ID = c.Player_Category_ID;
+
+"""
+
+    def __init__(self, selectedfn):
+        super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
+        self.column("Column1", width=160, stretch=False)
+        self.heading("Column1", text="Name")
+        self.column("Column2", width=80, stretch=False)
+        self.heading("Column2", text="Start Time")
+        self.column("Column3", width=80, stretch=False)
+        self.heading("Column3", text="Stop Time")
+        self.column("Column4", width=75, stretch=False)
+        self.heading("Column4", text="Amount Due")
+
+        self.tag_configure("courier", font=("Courier", 10))
+
+
+
+    def refresh_ID_and_name_list(self):
+        self.delete(*self.get_children())
+        self.session_list = fetch_data_from_db(self.sessions_query)
+        if not self.session_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        def strip_time(time_string):
+            return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
+                                     .strftime("%-m/%-d %H:%M"))
+
+        for (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) in self.session_list:
+            self.insert("", "end",
+                        values=(playerName,
+                                strip_time(sessionStartTime),
+                                strip_time(sessionStopTime),
+                                locale.currency(sessionSeatFee, grouping=True).rjust(8)),
+                        tags=("courier",))
+
+        self.selection_clear()
+
+        return self
+
+    def on_session_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_session = self.get(selected_index[0])
+            (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) = self.session_list[selected_index[0]]
+            self.selectedfn(self, sessionID, playerID, playerName,
+                            sessionStartTime, sessionStopTime, sessionSeatFee)
+        else:
+            selected_item = None
+
+
+def create_sessions_treeview():
+    def selectedfn(sessions_treeview, sessionID, playerID, playerName,
+                   sessionStartTime, sessionStopTime, sessionSeatFee):
+        print("selected_ID:", sessionID, "selected_name:", playerName)
+
+    sessions_treeview = SessionsTreeview(selectedfn)
+
+    if sessions_treeview.refresh_ID_and_name_list() is None:
+        return None
+
+    return sessions_treeview
+
+def create_player_name_listbox(sessions_treeview):
+    def selectedfn(player_name_listbox, ID, name, sessions_treeview):
+        print("selected_ID:", ID, "selected_name:", name)
+
+    player_name_listbox = PlayerNameListbox(selectedfn)
+
+    if player_name_listbox.refresh_ID_and_name_list() is None:
+        return None
+
+    return player_name_listbox
+
+
+def create_bottom_banner():
+     return tk.Label(root, text=label_text, font=carolina_font,
+                              bg=carolina_blue_hex, fg="white")
+
+
+
+
+
+def create_session_start_time_label(sessionStartTime):
+    # Create the start time label
+    label_text = "Session Start Time " + sessionStartTime
+    return tk.Label(root, text=label_text, font=('Arial', 12),
+                    background=carolina_blue_hex, fg="light gray")
+
+
+def create_session_close_button():
+    return ttk.Button(root, text="Close Session", command=close_window)
+
+
+
+
+class PlayerNameListbox(tk.Listbox):
+
+    def __init__(self, selectedfn):
+        super().__init__(root, selectmode=tk.SINGLE)
+        self['bg'] = carolina_blue_hex
+        self.ID_and_name_list = None
+        self.selectedfn = selectedfn
+        self.bind('<<ListboxSelect>>', self.on_player_name_select)
+
+    def refresh_ID_and_name_list(self):
+        self.delete(0,tk.END)
+        self.ID_and_name_list = fetch_data_from_db(player_name_query)
+        if not self.ID_and_name_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        names = [item[1] for item in self.ID_and_name_list] # Extract the names into a list
+        for item in names:
+            self.insert(tk.END, item)
+            self.selection_clear(0,tk.END)
+        return self
+
+    def on_player_name_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_item = self.get(selected_index[0])
+            (selected_ID, selected_name) = self.ID_and_name_list[selected_index[0]]
+            self.selectedfn(self, selected_ID, selected_name)
+        else:
+            selected_item = None
+
+
+
+class SessionsTreeview(ttk.Treeview):
+
+    sessions_query="""
+SELECT
+    s.Session_ID
+        as "Session_ID",
+
+    s.Player_ID
+        as "Player_ID",
+
+    IFNULL(p.NickName,p.Name)
+	as "Name",
+
+    s.Start_Time,
+
+    s.Stop_Time,
+
+    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
+        as "Session_Seat_Fee",
+
+    c.Name
+        as "Category",
+
+    c.Hourly_Rate
+        as "Hourly_Rate"
+
+FROM
+       Player as p
+   INNER JOIN
+       Player_Category as c
+   INNER JOIN
+       Session as s
+   ON
+       p.Player_ID = s.Player_ID
+   AND
+       p.Player_Category_ID = c.Player_Category_ID;
+
+"""
+
+    def __init__(self, selectedfn):
+        super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
+        self.column("Column1", width=160, stretch=False)
+        self.heading("Column1", text="Name")
+        self.column("Column2", width=80, stretch=False)
+        self.heading("Column2", text="Start Time")
+        self.column("Column3", width=80, stretch=False)
+        self.heading("Column3", text="Stop Time")
+        self.column("Column4", width=75, stretch=False)
+        self.heading("Column4", text="Amount Due")
+
+        self.tag_configure("courier", font=("Courier", 10))
+
+
+
+    def refresh_ID_and_name_list(self):
+        self.delete(*self.get_children())
+        self.session_list = fetch_data_from_db(self.sessions_query)
+        if not self.session_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        def strip_time(time_string):
+            return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
+                                     .strftime("%-m/%-d %H:%M"))
+
+        for (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) in self.session_list:
+            self.insert("", "end",
+                        values=(playerName,
+                                strip_time(sessionStartTime),
+                                strip_time(sessionStopTime),
+                                locale.currency(sessionSeatFee, grouping=True).rjust(8)),
+                        tags=("courier",))
+
+        self.selection_clear()
+
+        return self
+
+    def on_session_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_session = self.get(selected_index[0])
+            (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) = self.session_list[selected_index[0]]
+            self.selectedfn(self, sessionID, playerID, playerName,
+                            sessionStartTime, sessionStopTime, sessionSeatFee)
+        else:
+            selected_item = None
+
+
+def create_sessions_treeview():
+    def selectedfn(sessions_treeview, sessionID, playerID, playerName,
+                   sessionStartTime, sessionStopTime, sessionSeatFee):
+        print("selected_ID:", sessionID, "selected_name:", playerName)
+
+    sessions_treeview = SessionsTreeview(selectedfn)
+
+    if sessions_treeview.refresh_ID_and_name_list() is None:
+        return None
+
+    return sessions_treeview
+
+def create_player_name_listbox(sessions_treeview):
+    def selectedfn(player_name_listbox, ID, name, sessions_treeview):
+        print("selected_ID:", ID, "selected_name:", name)
+
+    player_name_listbox = PlayerNameListbox(selectedfn)
+
+    if player_name_listbox.refresh_ID_and_name_list() is None:
+        return None
+
+    return player_name_listbox
+
+
+def create_bottom_banner():
+     return tk.Label(root, text=label_text, font=carolina_font,
+                              bg=carolina_blue_hex, fg="white")
+
+
+
+
+
+def create_session_start_time_label(sessionStartTime):
+    # Create the start time label
+    label_text = "Session Start Time " + sessionStartTime
+    return tk.Label(root, text=label_text, font=('Arial', 12),
+                    background=carolina_blue_hex, fg="light gray")
+
+
+def create_session_close_button():
+    return ttk.Button(root, text="Close Session", command=close_window)
+
+
+
+
+class PlayerNameListbox(tk.Listbox):
+
+    def __init__(self, selectedfn):
+        super().__init__(root, selectmode=tk.SINGLE)
+        self['bg'] = carolina_blue_hex
+        self.ID_and_name_list = None
+        self.selectedfn = selectedfn
+        self.bind('<<ListboxSelect>>', self.on_player_name_select)
+
+    def refresh_ID_and_name_list(self):
+        self.delete(0,tk.END)
+        self.ID_and_name_list = fetch_data_from_db(player_name_query)
+        if not self.ID_and_name_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        names = [item[1] for item in self.ID_and_name_list] # Extract the names into a list
+        for item in names:
+            self.insert(tk.END, item)
+            self.selection_clear(0,tk.END)
+        return self
+
+    def on_player_name_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_item = self.get(selected_index[0])
+            (selected_ID, selected_name) = self.ID_and_name_list[selected_index[0]]
+            self.selectedfn(self, selected_ID, selected_name)
+        else:
+            selected_item = None
+
+
+
+class SessionsTreeview(ttk.Treeview):
+
+    sessions_query="""
+SELECT
+    s.Session_ID
+        as "Session_ID",
+
+    s.Player_ID
+        as "Player_ID",
+
+    IFNULL(p.NickName,p.Name)
+	as "Name",
+
+    s.Start_Time,
+
+    s.Stop_Time,
+
+    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
+        as "Session_Seat_Fee",
+
+    c.Name
+        as "Category",
+
+    c.Hourly_Rate
+        as "Hourly_Rate"
+
+FROM
+       Player as p
+   INNER JOIN
+       Player_Category as c
+   INNER JOIN
+       Session as s
+   ON
+       p.Player_ID = s.Player_ID
+   AND
+       p.Player_Category_ID = c.Player_Category_ID;
+
+"""
+
+    def __init__(self, selectedfn):
+        super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
+        self.column("Column1", width=160, stretch=False)
+        self.heading("Column1", text="Name")
+        self.column("Column2", width=80, stretch=False)
+        self.heading("Column2", text="Start Time")
+        self.column("Column3", width=80, stretch=False)
+        self.heading("Column3", text="Stop Time")
+        self.column("Column4", width=75, stretch=False)
+        self.heading("Column4", text="Amount Due")
+
+        self.tag_configure("courier", font=("Courier", 10))
+
+
+
+    def refresh_ID_and_name_list(self):
+        self.delete(*self.get_children())
+        self.session_list = fetch_data_from_db(self.sessions_query)
+        if not self.session_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        def strip_time(time_string):
+            return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
+                                     .strftime("%-m/%-d %H:%M"))
+
+        for (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) in self.session_list:
+            self.insert("", "end",
+                        values=(playerName,
+                                strip_time(sessionStartTime),
+                                strip_time(sessionStopTime),
+                                locale.currency(sessionSeatFee, grouping=True).rjust(8)),
+                        tags=("courier",))
+
+        self.selection_clear()
+
+        return self
+
+    def on_session_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_session = self.get(selected_index[0])
+            (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) = self.session_list[selected_index[0]]
+            self.selectedfn(self, sessionID, playerID, playerName,
+                            sessionStartTime, sessionStopTime, sessionSeatFee)
+        else:
+            selected_item = None
+
+
+def create_sessions_treeview():
+    def selectedfn(sessions_treeview, sessionID, playerID, playerName,
+                   sessionStartTime, sessionStopTime, sessionSeatFee):
+        print("selected_ID:", sessionID, "selected_name:", playerName)
+
+    sessions_treeview = SessionsTreeview(selectedfn)
+
+    if sessions_treeview.refresh_ID_and_name_list() is None:
+        return None
+
+    return sessions_treeview
+
+def create_player_name_listbox(sessions_treeview):
+    def selectedfn(player_name_listbox, ID, name, sessions_treeview):
+        print("selected_ID:", ID, "selected_name:", name)
+
+    player_name_listbox = PlayerNameListbox(selectedfn)
+
+    if player_name_listbox.refresh_ID_and_name_list() is None:
+        return None
+
+    return player_name_listbox
+
+
+def create_bottom_banner():
+     return tk.Label(root, text=label_text, font=carolina_font,
+                              bg=carolina_blue_hex, fg="white")
+
+
+
+
+def create_session_start_time_label(sessionStartTime):
+    # Create the start time label
+    label_text = "Session Start Time " + sessionStartTime
+    return tk.Label(root, text=label_text, font=('Arial', 12),
+                    background=carolina_blue_hex, fg="light gray")
+
+
+
+
+class PlayerNameListbox(tk.Listbox):
+
+    def __init__(self, selectedfn):
+        super().__init__(root, selectmode=tk.SINGLE)
+        self['bg'] = carolina_blue_hex
+        self.ID_and_name_list = None
+        self.selectedfn = selectedfn
+        self.bind('<<ListboxSelect>>', self.on_player_name_select)
+
+    def refresh_ID_and_name_list(self):
+        self.delete(0,tk.END)
+        self.ID_and_name_list = fetch_data_from_db(player_name_query)
+        if not self.ID_and_name_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        names = [item[1] for item in self.ID_and_name_list] # Extract the names into a list
+        for item in names:
+            self.insert(tk.END, item)
+            self.selection_clear(0,tk.END)
+        return self
+
+    def on_player_name_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_item = self.get(selected_index[0])
+            (selected_ID, selected_name) = self.ID_and_name_list[selected_index[0]]
+            self.selectedfn(self, selected_ID, selected_name)
+        else:
+            selected_item = None
+
+
+
+class SessionsTreeview(ttk.Treeview):
+
+    sessions_query="""
+SELECT
+    s.Session_ID
+        as "Session_ID",
+
+    s.Player_ID
+        as "Player_ID",
+
+    IFNULL(p.NickName,p.Name)
+	as "Name",
+
+    s.Start_Time,
+
+    s.Stop_Time,
+
+    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
+        as "Session_Seat_Fee",
+
+    c.Name
+        as "Category",
+
+    c.Hourly_Rate
+        as "Hourly_Rate"
+
+FROM
+       Player as p
+   INNER JOIN
+       Player_Category as c
+   INNER JOIN
+       Session as s
+   ON
+       p.Player_ID = s.Player_ID
+   AND
+       p.Player_Category_ID = c.Player_Category_ID;
+
+"""
+
+    def __init__(self, selectedfn):
+        super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
+        self.column("Column1", width=160, stretch=False)
+        self.heading("Column1", text="Name")
+        self.column("Column2", width=80, stretch=False)
+        self.heading("Column2", text="Start Time")
+        self.column("Column3", width=80, stretch=False)
+        self.heading("Column3", text="Stop Time")
+        self.column("Column4", width=75, stretch=False)
+        self.heading("Column4", text="Amount Due")
+
+        self.tag_configure("courier", font=("Courier", 10))
+
+
+
+    def refresh_ID_and_name_list(self):
+        self.delete(*self.get_children())
+        self.session_list = fetch_data_from_db(self.sessions_query)
+        if not self.session_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+        def strip_time(time_string):
+            return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
+                                     .strftime("%-m/%-d %H:%M"))
+
+        for (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) in self.session_list:
+            self.insert("", "end",
+                        values=(playerName,
+                                strip_time(sessionStartTime),
+                                strip_time(sessionStopTime),
+                                locale.currency(sessionSeatFee, grouping=True).rjust(8)),
+                        tags=("courier",))
+
+        self.selection_clear()
+
+        return self
+
+    def on_session_select(self, event):
+        selected_index = self.curselection()
+        if selected_index is not None:
+            selected_session = self.get(selected_index[0])
+            (sessionID, playerID, playerName,
+             sessionStartTime, sessionStopTime, sessionSeatFee,
+             _, _) = self.session_list[selected_index[0]]
+            self.selectedfn(self, sessionID, playerID, playerName,
+                            sessionStartTime, sessionStopTime, sessionSeatFee)
+        else:
+            selected_item = None
+
+
+def create_sessions_treeview():
+    def selectedfn(sessions_treeview, sessionID, playerID, playerName,
+                   sessionStartTime, sessionStopTime, sessionSeatFee):
+        print("selected_ID:", sessionID, "selected_name:", playerName)
+
+    sessions_treeview = SessionsTreeview(selectedfn)
+
+    if sessions_treeview.refresh_ID_and_name_list() is None:
+        return None
+
+    return sessions_treeview
+
+def create_player_name_listbox():
+    def selectedfn(player_name_listbox, ID, name):
+        print("selected_ID:", ID, "selected_name:", name)
+
+    player_name_listbox = PlayerNameListbox(selectedfn)
+
+    if player_name_listbox.refresh_ID_and_name_list() is None:
+        return None
+
+    return player_name_listbox
+
+
+
+
+def create_session_close_button(width):
+    # Create a clear pixel
+    # Create a button with an image and text, compound ensures both are visible
+    return tk.Button(root, text="Close Session",
+                     width=round(width/10), command=close_window)
+
+
+def create_bottom_banner():
+    return tk.Label(root, text='♠️♥️♦️♣️', bg=carolina_blue_hex, fg="white")
+
+
+digital_clock=None
+sessionStartTime=None
+carolina_font=None
 
 def show_session_panel():
     # Define the hex code for Carolina Blue
 
     root.title("Carolina Card Club Session")
+    root['bg']=carolina_blue_hex
     root.geometry('800x600')
-    configure_session_panel_grid()
 
-    draw_session_panel_background()
 
-    # Add more widgets here if needed
+    root.grid_columnconfigure(0, weight=1)  # Column 0 expands
+    root.grid_columnconfigure(1, weight=1)  # Column 1 expands
+    root.rowconfigure(0, weight=0) # Row 3 expands
+    root.rowconfigure(1, weight=0) # Row 3 expands
+    root.rowconfigure(2, weight=0) # Row 3 expands
+    root.rowconfigure(3, weight=0) # Row 3 expands
+    root.rowconfigure(4, weight=1) # Row 3 expands
+    root.rowconfigure(5, weight=0) # Row 3 expands
 
+
+    global carolina_font
+    carolina_font = create_Carolina_font()
+    if carolina_font is None: return
+
+    global digital_clock
+    digital_clock=create_digital_clock()
+    digital_clock.grid(row=0, column=1, sticky="e")
+
+    carolina_label=create_Carolina_label("Carolina Card Club")
+    # Place the label in the grid, spanning the available width (sticky='ew')
+    carolina_label.grid(row=1, column=0, columnspan=2, sticky='ew')
+
+
+    global sessionStartTime
     sessionStartTime = get_session_start_time()
-    if sessionStartTime is None:
-        print("Popup closed without input.")
-        return
+    if sessionStartTime is None: return
 
-    show_session_start_time(sessionStartTime)
+    session_start_time_label = create_session_start_time_label(sessionStartTime)
+    if session_start_time_label is None: return
+    session_start_time_label.grid(row=2, column=1, sticky="w")
 
-    show_session_close_button()
+    sessions_treeview = create_sessions_treeview()
+    if sessions_treeview is None: return
+    sessions_treeview.grid(row=4, column=1, rowspan=1, sticky="nsw")
 
-    show_player_sessions()
+    player_name_listbox=create_player_name_listbox()
+    if player_name_listbox is None: return
+    player_name_listbox.grid(row=4, column=0, rowspan=1, sticky="nse")
+
+
+    # Get the width of the Treeview widget
+    root.update_idletasks()
+    treeview_width = sessions_treeview.winfo_width()
+    close_button = create_session_close_button(treeview_width)
+    if close_button is None: return
+    close_button.grid(row=3,column=1, sticky="w")
+
+    bottom_banner = create_bottom_banner()
+    if bottom_banner is None: return
+    bottom_banner.grid(row=5, column=0, columnspan=2, sticky="nsew")
 
     root.mainloop()
 
