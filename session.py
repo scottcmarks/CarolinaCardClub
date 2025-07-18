@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 Scott Marks
+
 import tkinter as tk
 from tkinter import messagebox, ttk
 import tkinter.font as tkFont # Import the font module for custom fonts
@@ -1106,8 +1108,12 @@ def create_session_close_button(width):
                      width=round(width/10), command=close_window)
 
 
-def create_bottom_banner():
-    return tk.Label(root, text='♠️♥️♦️♣️', bg=carolina_blue_hex, fg="white")
+def create_bottom_banner_left():
+    return tk.Label(root, text='Copyright (c) 2025 Scott Marks',
+                    bg=carolina_blue_hex, fg="black", font=("Arial",8))
+
+def create_bottom_banner_center():
+    return tk.Label(root, text='♠️♥️♦️♣️', bg=carolina_blue_hex, fg="white", font=(None,16))
 
 
 digital_clock=None
@@ -1169,9 +1175,12 @@ def show_session_panel():
     if close_button is None: return
     close_button.grid(row=3,column=1, sticky="w")
 
-    bottom_banner = create_bottom_banner()
-    if bottom_banner is None: return
-    bottom_banner.grid(row=5, column=0, columnspan=2, sticky="nsew")
+    bottom_banner_center = create_bottom_banner_center()
+    if bottom_banner_center is None: return
+    bottom_banner_center.grid(row=5, column=0, columnspan=2, sticky="nsew")
+    bottom_banner_left = create_bottom_banner_left()
+    if bottom_banner_left is None: return
+    bottom_banner_left.grid(row=6, column=0, sticky="nsw")
 
     root.mainloop()
 
