@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import tkinter as tk
 from tkinter import messagebox
 import sqlite3
@@ -8,7 +9,11 @@ def fetch_data_from_db():
     try:
         conn = sqlite3.connect('CarolinaCardClub.db')
         cursor = conn.cursor()
-        cursor.execute("""SELECT p.ID, p.Played_Super_Bowl, IFNULL(p.NickName, p.Name), p.Name, p.Email_address, p.Phone_number, p.Other_phone_number_1, p.Other_phone_number_2, p.Other_phone_number_3, p.Prepaid_balance, p.Flag, c.Name, c.Hourly_Rate FROM Player as p INNER JOIN Player_Category as c WHERE p.Player_Category_ID = c.ID""")
+        cursor.execute("""
+SELECT p.Player_ID, p.Played_Super_Bowl, IFNULL(p.NickName, p.Name), p.Name, p.Email_address, p.Phone_number, p.Other_phone_number_1, p.Other_phone_number_2, p.Other_phone_number_3, p.Flag, c.Name, c.Hourly_Rate 
+FROM Player as p INNER JOIN Player_Category as c 
+WHERE p.Player_Category_ID = c.Player_Category_ID
+""")
         data = cursor.fetchall()
         return data
     except sqlite3.Error as e:
