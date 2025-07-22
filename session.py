@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # Copyright (c) 2025 Scott Marks
+"""
+Run a session management module for Carolina Card Club
+"""
 
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -9,17 +12,20 @@ import datetime
 import time
 from enum import Enum
 import locale
+import sys
 
-#Useful color chart at https://cs111.wellesley.edu/archive/cs111_fall14/public_html/labs/lab12/tkintercolor.html
-carolina_blue_hex = "#4B9CD3"
+#Useful color chart at
+#https://cs111.wellesley.edu/archive/cs111_fall14/public_html/labs/lab12/tkintercolor.html
+CAROLINA_BLUE_HEX = "#4B9CD3"
 
 class ClockResolution(Enum):
+    """ Enum for selecting clock resolution """
     SECONDS = 1000
     MINUTES = SECONDS * 60
 
 digital_clock_resolution = ClockResolution.SECONDS
 
-player_data_query = """
+PLAYER_DATA_QUERY = """
 SELECT p.Player_ID,
        p.Played_Super_Bowl,
        IFNULL(p.NickName, p.Name),
@@ -39,7 +45,7 @@ FROM Player as p
 """
 
 
-non_flagged_player_data_query = """
+NON_FLAGGED_PLAYER_DATA_QUERY = """
 SELECT p.Player_ID,
        p.Played_Super_Bowl,
        IFNULL(p.NickName, p.Name),
@@ -59,15 +65,6 @@ FROM Player as p
          AND p.Flag IS NULL
 """
 
-player_name_query = """
-SELECT p.Player_ID,
-       IFNULL(p.NickName, p.Name)
-FROM Player as p
-       INNER JOIN
-     Player_Category as c
-       WHERE p.Player_Category_ID = c.Player_Category_ID
-         AND p.Flag IS NULL
-"""
 
 
 
@@ -78,7 +75,9 @@ root = tk.Tk()
 locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 def fetch_data_from_db(query):
-    """Fetches data from an SQLite database."""
+    """
+    Fetches data from the Carolina Card Club database.
+    """
     conn = None
     try:
         conn = sqlite3.connect('CarolinaCardClub.db')
@@ -94,6 +93,10 @@ def fetch_data_from_db(query):
             conn.close()
 
 class InputPopup(tk.Toplevel):
+    """
+    Specialize TopLevel to package a user Entry with
+    a Cancel Button and an OK Button
+    """
     def __init__(self, parent, title, prompt, default=None):
         super().__init__(parent)
         self.title(title)
@@ -128,25 +131,35 @@ class InputPopup(tk.Toplevel):
         self.bind('<space>', self.on_spacebar_press)
 
     def on_cancel(self):
+        """
+        The Cancel button picks no input
+        """
         self.user_input = None
         self.destroy()
 
     def on_ok(self):
+        """
+        The OK button pick the user input
+        """
         self.user_input = self.entry.get()
         self.destroy()
 
-    def on_spacebar_press(self, event):
+    def on_spacebar_press(self, _event):
+        """
+        Spacebar is an assistive shortcut for button2=OK.
+        """
         self.button2.invoke()
         self.destroy()
 
 
-def reset_clock(event):
-    print("RESET CLOCK", event, digital_clock.resolution, digital_clock.digital_clock_time_format)
-    digital_clock.update_time()
 
 
 
 class DigitalClock(tk.Label):
+    """
+       Label specialized to show time
+       and allow interaction to reset clock
+    """
 
     def __init__(self, resolution, bgcolor):
         super().__init__(root,
@@ -159,15 +172,18 @@ class DigitalClock(tk.Label):
             self.digital_clock_time_format = '%H:%M'
         else:
             print("Unrecognized digital clock resolution", resolution)
-            exit( 1 )
+            sys.exit( 1 )
 
         self.resolution = resolution
-        self.bind("<Button-1>", reset_clock)
+        self.bind("<Button-1>", self.reset_clock)
         self.clock_offset = 0
         self.update_time()
 
     def update_time(self):
-        """Updates the digital_clock label with the current time."""
+        """
+        Updates the digital_clock label with the current time.
+        """
+
         # Get the current time and format it
 
         string_time = time.strftime(self.digital_clock_time_format)  # Example: 15:03:00
@@ -184,143 +200,181 @@ class DigitalClock(tk.Label):
         current_time_in_microseconds = current_datetime.microsecond
 
         # Round to milliseconds
-        current_time_in_milliseconds = ( ( current_time_in_microseconds + (one_millisecond_in_microseconds // 2) )
+        current_time_in_milliseconds = ( ( current_time_in_microseconds
+                                           + (one_millisecond_in_microseconds // 2) )
                                          // one_millisecond_in_microseconds )
 
         # Compute the next tick
-        next_tick_time_in_seconds    = ( ( current_time_in_milliseconds + one_second_in_milliseconds)
+        next_tick_time_in_seconds    = ( ( current_time_in_milliseconds
+                                           + one_second_in_milliseconds)
                                          // one_second_in_milliseconds )
 
         # Delay for that in milliseconds
-        delay_in_milliseconds = next_tick_time_in_seconds * one_second_in_milliseconds - current_time_in_milliseconds
+        delay_in_milliseconds = ( ( next_tick_time_in_seconds * one_second_in_milliseconds )
+                                  -  current_time_in_milliseconds )
 
         # Schedule the update_time function to run again after 1000 milliseconds (1 second)
         self.next_update = self.after(delay_in_milliseconds, self.update_time)
 
     def cancel_updating(self):
+        """
+        Stop the clock updating.
+        Do this before stopping the program to avoid a messy error on sys.exiting.
+        """
         self.after_cancel(self.next_update)
 
+    def reset_clock(self, event):
+        """
+        Reset the system clock
+        """
+        print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
+        self.update_time()
 
-    def now():
-        # Get the current time
+
+    def now(self):
+        """
+        Get the current time in the current digital clock time format
+        """
         time_now = datetime.datetime.now()
         time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
         return time_string
 
 
-    def today_at_1930():
-        # Get today's date
-        today = datetime.date.today()
+def today_at_1930():
+    """
+    Compute the time for today at 7:30 PM for the default session start time
+    """
+    # Get today's date
+    today = datetime.date.today()
 
-        # Create a time object for 7:30 PM
-        time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
+    # Create a time object for 7:30 PM
+    time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
 
-        # Combine the date and time into a datetime object
-        datetime_730pm = datetime.datetime.combine(today, time_730pm)
+    # Combine the date and time into a datetime object
+    datetime_730pm = datetime.datetime.combine(today, time_730pm)
 
-        # Format the datetime object as a string
-        # %I for 12-hour clock, %M for minutes, %p for AM/PM
-        time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
-        return time_string
+    # Format the datetime object as a string
+    # %I for 12-hour clock, %M for minutes, %p for AM/PM
+    time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
+    return time_string
 
 
 
 
 # Create the small digital clock
 def create_digital_clock():
-    return DigitalClock(digital_clock_resolution, carolina_blue_hex)
+    """
+    Create a digital clock instance
+    """
+    return DigitalClock(digital_clock_resolution, CAROLINA_BLUE_HEX)
 
-def get_time(label, prompt, default):
+def get_user_input(label, prompt, default):
+    """
+    Use an InputPopup to get a user input
+    """
     popup = InputPopup(root, label, prompt, default)
     root.wait_window(popup) # Wait for the popup window to close
     return popup.user_input
 
 def get_session_start_time():
-    return get_time("Session Start Time", "Enter start time:", DigitalClock.today_at_1930())
+    """
+    Use the get_user_input popup to set the session start time
+    """
+    return get_user_input("Session Start Time", "Enter start time:", today_at_1930())
 
-def get_clock_set_time():
-    return get_time("Set Clock Time", "Enter clock time:", DigitalClock.now())
 
-
-def create_Carolina_font():
+def create_carolina_font():
+    """
+    Create the font used by the Carolina Card Club label
+    """
     try:
         return tkFont.Font(family="Academy Engraved LET", size=48)
-    except tkFont.TclError:
+    except tk.TclError:
         # Fallback to a different font if Old English is not available
-        print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.") # Add a warning
+        print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.")
         return tkFont.Font(family="Arial, size=48, weight=bold")
 
-def create_Carolina_label(label_text):
+def create_carolina_label(label_text):
+    """
+    Create the Carolina Card Club label at the top
+    """
     # Create a custom font for the label
         # Replace "Old English Text MT" with an available font on your system
         # You might need to experiment or use a font like "Blackletter"
         # You can also adjust the size as needed
     # Create the big label
     return tk.Label(root, text=label_text, font=carolina_font,
-                              bg=carolina_blue_hex, fg="white")
+                              bg=CAROLINA_BLUE_HEX, fg="white")
 
-
-
-
-def create_session_start_time_label(sessionStartTime):
-    # Create the start time label
-    label_text = "Session Start Time " + sessionStartTime
-    return tk.Label(root, text=label_text, font=('Arial', 12),
-                    background=carolina_blue_hex, fg="light gray")
 
 
 
 class PlayerNameListbox(tk.Listbox):
+    """
+       Listbox specialized to show a players query result
+       and allow interaction with a selected player.
+    """
 
     def __init__(self, selectedfn):
         super().__init__(root, selectmode=tk.SINGLE)
-        self['bg'] = carolina_blue_hex
-        self.ID_and_name_list = None
+        self['bg'] = CAROLINA_BLUE_HEX
+        self.id_and_name_list = None
         self.selectedfn = selectedfn
         self.bind('<<ListboxSelect>>', self.on_player_name_select)
 
-    def refresh_ID_and_name_list(self):
+        self.player_name_query = """
+SELECT p.Player_ID,
+       IFNULL(p.NickName, p.Name)
+FROM Player as p
+       INNER JOIN
+     Player_Category as c
+       WHERE p.Player_Category_ID = c.Player_Category_ID
+         AND p.Flag IS NULL
+"""
+    def refresh_id_and_name_list(self):
+        """
+        Fill out the list of players if possible.
+        """
         self.delete(0,tk.END)
-        self.ID_and_name_list = fetch_data_from_db(player_name_query)
-        if not self.ID_and_name_list:
+        self.id_and_name_list = fetch_data_from_db(self.player_name_query)
+        if not self.id_and_name_list:
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
 
-        names = [item[1] for item in self.ID_and_name_list] # Extract the names into a list
+        names = [item[1] for item in self.id_and_name_list] # Extract the names into a list
         for item in names:
             self.insert(tk.END, item)
             self.selection_clear(0,tk.END)
         return self
 
-    def on_player_name_select(self, event):
+    def on_player_name_select(self, _event):
+        """
+        Player selected by clicking.
+        """
         selected_index = self.curselection()
         if selected_index is not None:
-            selected_item = self.get(selected_index[0])
-            (selected_ID, selected_name) = self.ID_and_name_list[selected_index[0]]
-            self.selectedfn(self, selected_ID, selected_name)
-        else:
-            selected_item = None
+            (selected_player_id, selected_name) = self.id_and_name_list[selected_index[0]]
+            self.selectedfn(self, selected_player_id, selected_name)
 
 
-
-def create_bottom_banner():
-     return tk.Label(root, text=label_text, font=carolina_font,
-                              bg=carolina_blue_hex, fg="white")
-
-
-
-
-def create_session_start_time_label(sessionStartTime):
-    # Create the start time label
-    label_text = "Session Start Time " + sessionStartTime
+def create_session_start_time_label(start_time):
+    """
+    Create the start time label
+    """
+    if start_time is None:
+        return None
+    label_text = "Session Start Time " + start_time
     return tk.Label(root, text=label_text, font=('Arial', 12),
-                    background=carolina_blue_hex, fg="light gray")
+                    background=CAROLINA_BLUE_HEX, fg="light gray")
 
 
 
 
 class SessionsTreeview(ttk.Treeview):
-
+    """
+       Treeview specialized to show a sessions query result
+       and allow interaction with a selected session.
+    """
     sessions_query="""
 SELECT
     s.Session_ID
@@ -359,7 +413,9 @@ FROM
 """
 
     def __init__(self, selectedfn):
-        super().__init__(root, columns=("Column1", "Column2", "Column3", "Column4" ), show="headings")
+        super().__init__(root,
+                         columns=("Column1", "Column2", "Column3", "Column4" ),
+                         show="headings")
         self.column("Column1", width=160, stretch=False)
         self.heading("Column1", text="Name")
         self.column("Column2", width=80, stretch=False)
@@ -368,12 +424,15 @@ FROM
         self.heading("Column3", text="Stop Time")
         self.column("Column4", width=75, stretch=False)
         self.heading("Column4", text="Amount Due")
-
         self.tag_configure("courier", font=("Courier", 10))
+        self.selectedfn  = selectedfn
+        self.session_list = None
 
 
-
-    def refresh_ID_and_name_list(self):
+    def refresh_id_and_name_list(self):
+        """
+        Fill out the list of sessions if possible.
+        """
         self.delete(*self.get_children())
         self.session_list = fetch_data_from_db(self.sessions_query)
         if not self.session_list:
@@ -384,80 +443,116 @@ FROM
             return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
                                      .strftime("%-m/%-d %H:%M"))
 
-        for (sessionID, playerID, playerName,
-             sessionStartTime, sessionStopTime, sessionSeatFee,
+        for (_session_id, _player_id, player_name,
+             session_start_time, session_stop_time, session_seat_fee,
              _, _) in self.session_list:
             self.insert("", "end",
-                        values=(playerName,
-                                strip_time(sessionStartTime),
-                                strip_time(sessionStopTime),
-                                locale.currency(sessionSeatFee, grouping=True).rjust(8)),
+                        values=(player_name,
+                                strip_time(session_start_time),
+                                strip_time(session_stop_time),
+                                locale.currency(session_seat_fee, grouping=True).rjust(8)),
                         tags=("courier",))
 
         self.selection_clear()
 
         return self
 
-    def on_session_select(self, event):
-        selected_index = self.curselection()
-        if selected_index is not None:
-            selected_session = self.get(selected_index[0])
-            (sessionID, playerID, playerName,
-             sessionStartTime, sessionStopTime, sessionSeatFee,
-             _, _) = self.session_list[selected_index[0]]
-            self.selectedfn(self, sessionID, playerID, playerName,
-                            sessionStartTime, sessionStopTime, sessionSeatFee)
+    # def on_session_select(self, event):
+    #     selected_index = self.curselection()
+    #     if selected_index is not None:
+    #         selected_session = self.get(selected_index[0])
+    #         (session_id, player_id, player_name,
+    #          session_start_time, session_stop_time, session_seat_fee,
+    #          _, _) = self.session_list[selected_index[0]]
+    #         self.selectedfn(self, session_id, player_id, player_name,
+    #                         session_start_time, session_stop_time, session_seat_fee)
+    #     else:
+    #         selected_item = None
+
+    def on_session_select(self, _event):
+        """
+        Session selected by clicking.
+        """
+        selected_items = self.selection()  # Get the IDs of selected items
+        if selected_items is not None:
+            for item_id in selected_items:
+                item_data = self.item(item_id)  # Get the item's data dictionary
+                print(f"Selected item text: {item_data['text']}")  # Access the 'text' key
+                print(f"Selected item values: {item_data['values']}")  # Access the 'values' key
         else:
-            selected_item = None
+            print("No item selected.")
 
 
 def create_sessions_treeview():
-    def selectedfn(sessions_treeview, sessionID, playerID, playerName,
-                   sessionStartTime, sessionStopTime, sessionSeatFee):
-        print("selected sessionID:", sessionID, "playerName:", playerName)
+    """
+    Create the sessions treeview, which accesses session-related functions
+    """
+    def selectedfn(_sessions_treeview, session_id, _player_id, player_name,
+                   _session_start_time, _session_stop_time, _session_seat_fee):
+        print("selected session_id:", session_id, "player_name:", player_name)
 
     sessions_treeview = SessionsTreeview(selectedfn)
 
-    if sessions_treeview.refresh_ID_and_name_list() is None:
+    if sessions_treeview.refresh_id_and_name_list() is None:
         return None
 
     return sessions_treeview
 
+
 def create_player_name_listbox():
-    def selectedfn(player_name_listbox, ID, name):
-        print("selected playerID:", ID, "name:", name)
+    """
+    Create the player name listbox which accesses player-related functions
+    """
+    def selectedfn(_player_name_listbox, player_id, name):
+        print("selected player_id:", player_id, "name:", name)
 
     player_name_listbox = PlayerNameListbox(selectedfn)
 
-    if player_name_listbox.refresh_ID_and_name_list() is None:
+    if player_name_listbox.refresh_id_and_name_list() is None:
         return None
 
     return player_name_listbox
 
-def create_session_close_button(width):
-    # Create a clear pixel
-    # Create a button with an image and text, compound ensures both are visible
+
+def create_session_close_button(treeview, close_window):
+    """
+    Create the session close button, which kills the app cleanly by invoking close_window
+    """
+    if treeview is None:
+        return None
+    root.update_idletasks()
+    treeview_width = treeview.winfo_width()
     return tk.Button(root, text="Close Session",
-                     width=round(width/10), command=close_window)
+                     width=round(treeview_width/10), command=close_window)
 
 
 def create_bottom_banner_left():
+    """
+    Create the bottom banner copyright
+    """
     return tk.Label(root, text='Copyright (c) 2025 Scott Marks',
-                    bg=carolina_blue_hex, fg="black", font=("Arial",8))
+                    bg=CAROLINA_BLUE_HEX, fg="black", font=("Arial",8))
 
 def create_bottom_banner_center():
-    return tk.Label(root, text='♠️♥️♦️♣️', bg=carolina_blue_hex, fg="white", font=(None,16))
+    """
+    Create the bottom banner centerpiece, for decoration and spacing
+    """
+    return tk.Label(root, text='♠️♥️♦️♣️', bg=CAROLINA_BLUE_HEX, fg="white", font=(None,16))
 
 
-digital_clock=None
-sessionStartTime=None
-carolina_font=None
+carolina_font = create_carolina_font()
+if carolina_font is None:
+    sys.exit(1)
+
 
 def show_session_panel():
+    """
+    Show and lay out the main session panel, the main program window.
+    """
     # Define the hex code for Carolina Blue
 
     root.title("Carolina Card Club Session")
-    root['bg']=carolina_blue_hex
+    root['bg']=CAROLINA_BLUE_HEX
     root.geometry('800x600')
 
 
@@ -471,56 +566,66 @@ def show_session_panel():
     root.rowconfigure(5, weight=0) # Row 3 expands
 
 
-    global carolina_font
-    carolina_font = create_Carolina_font()
-    if carolina_font is None: return
 
-    global digital_clock
     digital_clock=create_digital_clock()
-    digital_clock.grid(row=0, column=1, sticky="e")
-
-    carolina_label=create_Carolina_label("Carolina Card Club")
-    # Place the label in the grid, spanning the available width (sticky='ew')
-    carolina_label.grid(row=1, column=0, columnspan=2, sticky='ew')
 
 
-    global sessionStartTime
-    sessionStartTime = get_session_start_time()
-    if sessionStartTime is None: return
+    def _get_clock_set_time():
+        """
+        Use the get_user_input popup to set the clock time
+        """
+        return get_user_input("Set Clock Time", "Enter clock time:", digital_clock.now())
 
-    session_start_time_label = create_session_start_time_label(sessionStartTime)
-    if session_start_time_label is None: return
-    session_start_time_label.grid(row=2, column=1, sticky="w")
 
+
+    carolina_label=create_carolina_label("Carolina Card Club")
+    session_start_time = get_session_start_time()
+    session_start_time_label = create_session_start_time_label(session_start_time)
     sessions_treeview = create_sessions_treeview()
-    if sessions_treeview is None: return
-    sessions_treeview.grid(row=4, column=1, rowspan=1, sticky="nsw")
-
     player_name_listbox=create_player_name_listbox()
-    if player_name_listbox is None: return
-    player_name_listbox.grid(row=4, column=0, rowspan=1, sticky="nse")
 
+    if (digital_clock is None or
+        carolina_label is None or
+        session_start_time_label is None or
+        sessions_treeview is None or
+        player_name_listbox is None):
+        sys.exit(1)
 
-    # Get the width of the Treeview widget
-    root.update_idletasks()
-    treeview_width = sessions_treeview.winfo_width()
-    close_button = create_session_close_button(treeview_width)
-    if close_button is None: return
-    close_button.grid(row=3,column=1, sticky="w")
+    def close_window():
+        """
+        Close the main window.
+        Stop the digital clock updating to end the program cleanly.
+        """
+        digital_clock.cancel_updating()
+        root.destroy()
+        sys.exit(0)
 
+    close_button = create_session_close_button(sessions_treeview, close_window)
     bottom_banner_center = create_bottom_banner_center()
-    if bottom_banner_center is None: return
-    bottom_banner_center.grid(row=5, column=0, columnspan=2, sticky="nsew")
     bottom_banner_left = create_bottom_banner_left()
-    if bottom_banner_left is None: return
-    bottom_banner_left.grid(row=6, column=0, sticky="nsw")
+
+    if (close_button is None or
+        bottom_banner_center is None or
+        bottom_banner_left is None):
+        sys.exit(1)
+
+    digital_clock.            grid(row=0, column=1, sticky="e")
+
+    carolina_label.           grid(row=1, column=0, columnspan=2, sticky='ew')
+
+    session_start_time_label. grid(row=2, column=1, sticky="w")
+
+    close_button.             grid(row=3, column=1, sticky="w")
+
+    sessions_treeview.        grid(row=4, column=1, rowspan=1, sticky="nsw")
+    player_name_listbox.      grid(row=4, column=0, rowspan=1, sticky="nse")
+
+    bottom_banner_center.     grid(row=5, column=0, columnspan=2, sticky="nsew")
+
+    bottom_banner_left.       grid(row=6, column=0, sticky="nsw")
+
 
     root.mainloop()
-
-
-def close_window():
-    digital_clock.cancel_updating()
-    root.destroy()
 
 
 if __name__ == "__main__":
