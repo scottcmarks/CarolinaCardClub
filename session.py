@@ -25,48 +25,6 @@ class ClockResolution(Enum):
 
 digital_clock_resolution = ClockResolution.SECONDS
 
-PLAYER_DATA_QUERY = """
-SELECT p.Player_ID,
-       p.Played_Super_Bowl,
-       IFNULL(p.NickName, p.Name),
-       p.Name,
-       p.Email_address,
-       p.Phone_number,
-       p.Other_phone_number_1,
-       p.Other_phone_number_2,
-       p.Other_phone_number_3,
-       p.Flag,
-       c.Name,
-       c.Hourly_Rate
-FROM Player as p
-       INNER JOIN
-     Player_Category as c
-       WHERE p.Player_Category_ID = c.ID
-"""
-
-
-NON_FLAGGED_PLAYER_DATA_QUERY = """
-SELECT p.Player_ID,
-       p.Played_Super_Bowl,
-       IFNULL(p.NickName, p.Name),
-       p.Name,
-       p.Email_address,
-       p.Phone_number,
-       p.Other_phone_number_1,
-       p.Other_phone_number_2,
-       p.Other_phone_number_3,
-       p.Flag,
-       c.Name,
-       c.Hourly_Rate
-FROM Player as p
-       INNER JOIN
-     Player_Category as c
-       WHERE p.Player_Category_ID = c.ID
-         AND p.Flag IS NULL
-"""
-
-
-
 
 root = tk.Tk()
 
@@ -323,13 +281,8 @@ class PlayerNameListbox(tk.Listbox):
         self.bind('<<ListboxSelect>>', self.on_player_name_select)
 
         self.player_name_query = """
-SELECT p.Player_ID,
-       IFNULL(p.NickName, p.Name)
-FROM Player as p
-       INNER JOIN
-     Player_Category as c
-       WHERE p.Player_Category_ID = c.Player_Category_ID
-         AND p.Flag IS NULL
+SELECT Player_ID, Name
+FROM Player_Selection_View
 """
     def refresh_id_and_name_list(self):
         """
@@ -377,38 +330,17 @@ class SessionsTreeview(ttk.Treeview):
     """
     sessions_query="""
 SELECT
-    s.Session_ID
-        as "Session_ID",
-
-    s.Player_ID
-        as "Player_ID",
-
-    IFNULL(p.NickName,p.Name)
-	as "Name",
-
-    s.Start_Time,
-
-    s.Stop_Time,
-
-    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
-        as "Session_Seat_Fee",
-
-    c.Name
-        as "Category",
-
-    c.Hourly_Rate
-        as "Hourly_Rate"
+    Session_ID,
+    Player_ID,
+    Name,
+    Start_Time,
+    Stop_Time,
+    Session_Seat_Fee,
+    Category,
+    Hourly_Rate
 
 FROM
-       Player as p
-   INNER JOIN
-       Player_Category as c
-   INNER JOIN
-       Session as s
-   ON
-       p.Player_ID = s.Player_ID
-   AND
-       p.Player_Category_ID = c.Player_Category_ID;
+    Session_List_View;
 
 """
 
@@ -553,7 +485,7 @@ def show_session_panel():
 
     root.title("Carolina Card Club Session")
     root['bg']=CAROLINA_BLUE_HEX
-    root.geometry('800x600')
+    root.geometry('600x800')
 
 
     root.grid_columnconfigure(0, weight=1)  # Column 0 expands
