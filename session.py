@@ -18,6 +18,12 @@ import sys
 #https://cs111.wellesley.edu/archive/cs111_fall14/public_html/labs/lab12/tkintercolor.html
 CAROLINA_BLUE_HEX = "#4B9CD3"
 
+
+root = tk.Tk()
+
+exit_code = 0
+
+
 class ClockResolution(Enum):
     """ Enum for selecting clock resolution """
     SECONDS = 1000
@@ -27,9 +33,108 @@ digital_clock_resolution = ClockResolution.SECONDS
 
 HICKORY_CLICKABLE_CLOCK = False
 
+class DigitalClock(tk.Label):
+    """
+       Label specialized to show time
+       and allow interaction to reset clock
+    """
+
+    def __init__(self, resolution, bgcolor):
+        super().__init__(root,
+                         font=('Arial', 20), background=bgcolor, foreground='light gray',
+                         cursor="hand2" if HICKORY_CLICKABLE_CLOCK else
+#                                 "watch"
+                                "arrow"
+                         )
+
+        if resolution is ClockResolution.SECONDS :
+            self.digital_clock_time_format = '%H:%M:%S'
+        elif resolution is ClockResolution.MINUTES:
+            self.digital_clock_time_format = '%H:%M'
+        else:
+            print("Unrecognized digital clock resolution", resolution)
+            exit_code = 1
+            root.destroy()
 
 
-root = tk.Tk()
+        self.resolution = resolution
+        if HICKORY_CLICKABLE_CLOCK:
+            self.bind("<Button-1>", self.reset_clock)
+        self.clock_offset = 0
+        self.update_time()
+
+    def update_time(self):
+        """
+        Updates the digital_clock label with the current time.
+        """
+
+        # Get the current time and format it
+
+        string_time = time.strftime(self.digital_clock_time_format)  # Example: 15:03:00
+        self.config(text=string_time)  # Update the label's text
+
+        one_millisecond_in_microseconds = 1000
+        one_second_in_milliseconds = 1000
+
+
+        # Get the current datetime object
+        current_datetime = datetime.datetime.now()
+
+        # Extract the microseconds
+        current_time_in_microseconds = current_datetime.microsecond
+
+        # Round to milliseconds
+        current_time_in_milliseconds = ( ( current_time_in_microseconds
+                                           + (one_millisecond_in_microseconds // 2) )
+                                         // one_millisecond_in_microseconds )
+
+        # Compute the next tick
+        next_tick_time_in_seconds    = ( ( current_time_in_milliseconds
+                                           + one_second_in_milliseconds)
+                                         // one_second_in_milliseconds )
+
+        # Delay for that in milliseconds
+        delay_in_milliseconds = ( ( next_tick_time_in_seconds * one_second_in_milliseconds )
+                                  -  current_time_in_milliseconds )
+
+        # Schedule the update_time function to run again after 1000 milliseconds (1 second)
+        self.next_update = self.after(delay_in_milliseconds, self.update_time)
+
+    def cancel_updating(self):
+        """
+        Stop the clock updating.
+        Do this before stopping the program to avoid a messy error on sys.exiting.
+        """
+        self.after_cancel(self.next_update)
+
+    def reset_clock(self, event):
+        """
+        Reset the system clock
+        """
+        print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
+        self.update_time()
+
+
+    def now(self):
+        """
+        Get the current time in the current digital clock time format
+        """
+        time_now = datetime.datetime.now()
+        time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
+        return time_string
+
+
+# Create the small digital clock
+digital_clock = DigitalClock(digital_clock_resolution, CAROLINA_BLUE_HEX)
+
+def close_window(ex_cd=0):
+    """
+    Close the main window.
+    Stop the digital clock updating to end the program cleanly.
+    """
+    digital_clock.cancel_updating()
+    exit_code = ex_cd
+    root.destroy()
 
 
 # Set the locale (example for US English)
@@ -124,93 +229,6 @@ def strip_time(time_string):
                              .strftime("%-m/%-d %H:%M"))
 
 
-class DigitalClock(tk.Label):
-    """
-       Label specialized to show time
-       and allow interaction to reset clock
-    """
-
-    def __init__(self, resolution, bgcolor):
-        super().__init__(root,
-                         font=('Arial', 20), background=bgcolor, foreground='light gray',
-                         cursor="hand2" if HICKORY_CLICKABLE_CLOCK else
-#                                 "watch"
-                                "arrow"
-                         )
-
-        if resolution is ClockResolution.SECONDS :
-            self.digital_clock_time_format = '%H:%M:%S'
-        elif resolution is ClockResolution.MINUTES:
-            self.digital_clock_time_format = '%H:%M'
-        else:
-            print("Unrecognized digital clock resolution", resolution)
-            sys.exit( 1 )
-
-        self.resolution = resolution
-        if HICKORY_CLICKABLE_CLOCK:
-            self.bind("<Button-1>", self.reset_clock)
-        self.clock_offset = 0
-        self.update_time()
-
-    def update_time(self):
-        """
-        Updates the digital_clock label with the current time.
-        """
-
-        # Get the current time and format it
-
-        string_time = time.strftime(self.digital_clock_time_format)  # Example: 15:03:00
-        self.config(text=string_time)  # Update the label's text
-
-        one_millisecond_in_microseconds = 1000
-        one_second_in_milliseconds = 1000
-
-
-        # Get the current datetime object
-        current_datetime = datetime.datetime.now()
-
-        # Extract the microseconds
-        current_time_in_microseconds = current_datetime.microsecond
-
-        # Round to milliseconds
-        current_time_in_milliseconds = ( ( current_time_in_microseconds
-                                           + (one_millisecond_in_microseconds // 2) )
-                                         // one_millisecond_in_microseconds )
-
-        # Compute the next tick
-        next_tick_time_in_seconds    = ( ( current_time_in_milliseconds
-                                           + one_second_in_milliseconds)
-                                         // one_second_in_milliseconds )
-
-        # Delay for that in milliseconds
-        delay_in_milliseconds = ( ( next_tick_time_in_seconds * one_second_in_milliseconds )
-                                  -  current_time_in_milliseconds )
-
-        # Schedule the update_time function to run again after 1000 milliseconds (1 second)
-        self.next_update = self.after(delay_in_milliseconds, self.update_time)
-
-    def cancel_updating(self):
-        """
-        Stop the clock updating.
-        Do this before stopping the program to avoid a messy error on sys.exiting.
-        """
-        self.after_cancel(self.next_update)
-
-    def reset_clock(self, event):
-        """
-        Reset the system clock
-        """
-        print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
-        self.update_time()
-
-
-    def now(self):
-        """
-        Get the current time in the current digital clock time format
-        """
-        time_now = datetime.datetime.now()
-        time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
-        return time_string
 
 
 def today_at_1930():
@@ -233,13 +251,6 @@ def today_at_1930():
 
 
 
-
-# Create the small digital clock
-def create_digital_clock():
-    """
-    Create a digital clock instance
-    """
-    return DigitalClock(digital_clock_resolution, CAROLINA_BLUE_HEX)
 
 def get_user_input(label, prompt, default):
     """
@@ -443,12 +454,16 @@ def create_sessions_treeview():
     return sessions_treeview
 
 
+def player_name_selected(player_id, name):
+    print("selected player_id:", player_id, "name:", name)
+
+
 def create_player_name_listbox():
     """
     Create the player name listbox which accesses player-related functions
     """
     def selectedfn(_player_name_listbox, player_id, name):
-        print("selected player_id:", player_id, "name:", name)
+        player_name_selected(player_id, name)
 
     player_name_listbox = PlayerNameListbox(selectedfn)
 
@@ -511,14 +526,7 @@ def show_session_panel():
 
 
 
-    digital_clock=create_digital_clock()
 
-
-    def _get_clock_set_time():
-        """
-        Use the get_user_input popup to set the clock time
-        """
-        return get_user_input("Set Clock Time", "Enter clock time:", digital_clock.now())
 
 
 
@@ -533,16 +541,8 @@ def show_session_panel():
         session_start_time_label is None or
         sessions_treeview is None or
         player_name_listbox is None):
-        sys.exit(1)
+        close_window(1)
 
-    def close_window():
-        """
-        Close the main window.
-        Stop the digital clock updating to end the program cleanly.
-        """
-        digital_clock.cancel_updating()
-        root.destroy()
-        sys.exit(0)
 
     close_button = create_session_close_button(sessions_treeview, close_window)
     bottom_banner_center = create_bottom_banner_center()
@@ -551,7 +551,7 @@ def show_session_panel():
     if (close_button is None or
         bottom_banner_center is None or
         bottom_banner_left is None):
-        sys.exit(1)
+        close_window(1)
 
     digital_clock.            grid(row=0, column=1, sticky="e")
 
@@ -569,10 +569,13 @@ def show_session_panel():
     bottom_banner_left.       grid(row=6, column=0, sticky="nsw")
 
 
+
+if __name__ == "__main__":
+    show_session_panel()
+
     root.mainloop()
 
     digital_clock.cancel_updating()
 
-
-if __name__ == "__main__":
-    show_session_panel()
+    if exit_code != 0:
+        sys.exit(exit_code)
