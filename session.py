@@ -306,16 +306,12 @@ class PlayerNameListbox(tk.Listbox):
         self.selectedfn = selectedfn
         self.bind('<<ListboxSelect>>', self.on_player_name_select)
 
-        self.player_name_query = """
-SELECT Player_ID, Name
-FROM Player_Selection_View
-"""
     def refresh_id_and_name_list(self):
         """
         Fill out the list of players if possible.
         """
         self.delete(0,tk.END)
-        self.id_and_name_list = fetch_data_from_db(self.player_name_query)
+        self.id_and_name_list = fetch_data_from_db("SELECT * FROM Player_Selection_View")
         if not self.id_and_name_list:
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
@@ -332,8 +328,8 @@ FROM Player_Selection_View
         """
         selected_index = self.curselection()
         if selected_index is not None:
-            (selected_player_id, selected_name) = self.id_and_name_list[selected_index[0]]
-            self.selectedfn(self, selected_player_id, selected_name)
+            (player_id, name, balance) = self.id_and_name_list[selected_index[0]]
+            self.selectedfn(self, player_id, name)
 
 
 def create_session_start_time_label(start_time):
@@ -354,21 +350,6 @@ class SessionsTreeview(ttk.Treeview):
        Treeview specialized to show a sessions query result
        and allow interaction with a selected session.
     """
-    sessions_query="""
-SELECT
-    Session_ID,
-    Player_ID,
-    Name,
-    Start_Time,
-    Stop_Time,
-    Session_Seat_Fee,
-    Category,
-    Hourly_Rate
-
-FROM
-    Session_List_View;
-
-"""
 
     def __init__(self, selectedfn):
         super().__init__(root,
@@ -392,7 +373,7 @@ FROM
         Fill out the list of sessions if possible.
         """
         self.delete(*self.get_children())
-        self.session_list = fetch_data_from_db(self.sessions_query)
+        self.session_list = fetch_data_from_db("SELECT * FROM Session_List_View")
         if not self.session_list:
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
