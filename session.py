@@ -25,6 +25,9 @@ class ClockResolution(Enum):
 
 digital_clock_resolution = ClockResolution.SECONDS
 
+HICKORY_CLICKABLE_CLOCK = False
+
+
 
 root = tk.Tk()
 
@@ -93,6 +96,7 @@ class InputPopup(tk.Toplevel):
         The Cancel button picks no input
         """
         self.user_input = None
+        self.unbind('<space>')
         self.destroy()
 
     def on_ok(self):
@@ -100,6 +104,7 @@ class InputPopup(tk.Toplevel):
         The OK button pick the user input
         """
         self.user_input = self.entry.get()
+        self.unbind('<space>')
         self.destroy()
 
     def on_spacebar_press(self, _event):
@@ -107,10 +112,16 @@ class InputPopup(tk.Toplevel):
         Spacebar is an assistive shortcut for button2=OK.
         """
         self.button2.invoke()
+        self.unbind('<space>')
         self.destroy()
 
 
 
+
+
+def strip_time(time_string):
+    return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
+                             .strftime("%-m/%-d %H:%M"))
 
 
 class DigitalClock(tk.Label):
@@ -122,7 +133,10 @@ class DigitalClock(tk.Label):
     def __init__(self, resolution, bgcolor):
         super().__init__(root,
                          font=('Arial', 20), background=bgcolor, foreground='light gray',
-                         cursor="hand2")
+                         cursor="hand2" if HICKORY_CLICKABLE_CLOCK else
+#                                 "watch"
+                                "arrow"
+                         )
 
         if resolution is ClockResolution.SECONDS :
             self.digital_clock_time_format = '%H:%M:%S'
@@ -133,7 +147,8 @@ class DigitalClock(tk.Label):
             sys.exit( 1 )
 
         self.resolution = resolution
-        self.bind("<Button-1>", self.reset_clock)
+        if HICKORY_CLICKABLE_CLOCK:
+            self.bind("<Button-1>", self.reset_clock)
         self.clock_offset = 0
         self.update_time()
 
@@ -371,9 +386,6 @@ FROM
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
 
-        def strip_time(time_string):
-            return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
-                                     .strftime("%-m/%-d %H:%M"))
 
         for (_session_id, _player_id, player_name,
              session_start_time, session_stop_time, session_seat_fee,
@@ -558,6 +570,8 @@ def show_session_panel():
 
 
     root.mainloop()
+
+    digital_clock.cancel_updating()
 
 
 if __name__ == "__main__":
