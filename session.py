@@ -59,7 +59,7 @@ class DigitalClock(tk.Label):
 
         self.resolution = resolution
         if HICKORY_CLICKABLE_CLOCK:
-            self.bind("<Button-1>", self.reset_clock)
+            self.bind('<Button-1>', self.reset_clock)
         self.clock_offset = 0
         self.update_time()
 
@@ -292,6 +292,52 @@ def create_carolina_label(label_text):
 
 
 
+class PlayerNameSelector(tk.Frame):
+    """
+       Frame containing a Listbox set up
+       to show a players selection view
+       and allow interaction with a selected player via
+       either a regular click (usually just to start a session)
+       or a control click (to purchase time or edit player data)
+    """
+
+    def __init__(self, regular_clickedfn, control_clickedfn):
+        super().__init__(root)
+        self['bg'] = CAROLINA_BLUE_HEX
+        self.id_and_name_list = None
+        self.listbox = tk.Listbox(self, selectmode=tk.SINGLE)
+        self.listbox['bg'] = CAROLINA_BLUE_HEX
+        self.regular_clickedfn = regular_clickedfn
+        self.listbox.bind('<Button-1>', lambda event: self.on_player_name_clicked(event, self.regular_clickedfn))
+        self.control_clickedfn = control_clickedfn
+        self.listbox.bind('<Control-Button-1>', lambda event: self.on_player_name_clicked(event, self.control_clickedfn))
+        self.listbox.pack(padx=5,pady=5)
+
+    def refresh_id_and_name_list(self):
+        """
+        Fill out the list of players if possible.
+        """
+        self.listbox.delete(0,tk.END)
+        self.id_and_name_list = fetch_data_from_db("SELECT * FROM Player_Selection_View")
+        if not self.id_and_name_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+        names = [item[1] for item in self.id_and_name_list] # Extract the names into a list
+        for item in names:
+            self.listbox.insert(tk.END, item)
+        self.listbox.selection_clear(0,tk.END)
+        return self
+
+    def on_player_name_clicked(self, event, clickedfn):
+        """
+        Player selected by clicking.
+        """
+        selected_index = self.listbox.nearest(event.y)
+        if selected_index is not None:
+            self.listbox.selection_clear(0,tk.END)
+            self.listbox.selection_set(selected_index) # ctrl-click won't select
+            (player_id, name, balance) = self.id_and_name_list[selected_index]
+            clickedfn(self.listbox, player_id, name, balance)
 
 class PlayerNameListbox(tk.Listbox):
     """
@@ -299,12 +345,12 @@ class PlayerNameListbox(tk.Listbox):
        and allow interaction with a selected player.
     """
 
-    def __init__(self, selectedfn):
+    def __init__(self, clickedfn):
         super().__init__(root, selectmode=tk.SINGLE)
         self['bg'] = CAROLINA_BLUE_HEX
         self.id_and_name_list = None
-        self.selectedfn = selectedfn
-        self.bind('<<ListboxSelect>>', self.on_player_name_select)
+        self.clickedfn = clickedfn
+        self.bind('<Button-1>', self.on_player_name_selectc)
 
     def refresh_id_and_name_list(self):
         """
@@ -315,11 +361,10 @@ class PlayerNameListbox(tk.Listbox):
         if not self.id_and_name_list:
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
-
         names = [item[1] for item in self.id_and_name_list] # Extract the names into a list
         for item in names:
             self.insert(tk.END, item)
-            self.selection_clear(0,tk.END)
+        self.selection_clear(0,tk.END)
         return self
 
     def on_player_name_select(self, _event):
@@ -329,7 +374,7 @@ class PlayerNameListbox(tk.Listbox):
         selected_index = self.curselection()
         if selected_index is not None:
             (player_id, name, balance) = self.id_and_name_list[selected_index[0]]
-            self.selectedfn(self, player_id, name)
+            self.clickedfn(self, player_id, name)
 
 
 def create_session_start_time_label(start_time):
@@ -351,7 +396,7 @@ class SessionsTreeview(ttk.Treeview):
        and allow interaction with a selected session.
     """
 
-    def __init__(self, selectedfn):
+    def __init__(self, clickedfn):
         super().__init__(root,
                          columns=("Column1", "Column2", "Column3", "Column4" ),
                          show="headings")
@@ -364,7 +409,7 @@ class SessionsTreeview(ttk.Treeview):
         self.column("Column4", width=75, stretch=False)
         self.heading("Column4", text="Amount Due")
         self.tag_configure("courier", font=("Courier", 10))
-        self.selectedfn  = selectedfn
+        self.clickedfn  = clickedfn
         self.session_list = None
 
 
@@ -400,7 +445,7 @@ class SessionsTreeview(ttk.Treeview):
     #         (session_id, player_id, player_name,
     #          session_start_time, session_stop_time, session_seat_fee,
     #          _, _) = self.session_list[selected_index[0]]
-    #         self.selectedfn(self, session_id, player_id, player_name,
+    #         self.clickedfn(self, session_id, player_id, player_name,
     #                         session_start_time, session_stop_time, session_seat_fee)
     #     else:
     #         selected_item = None
@@ -423,11 +468,11 @@ def create_sessions_treeview():
     """
     Create the sessions treeview, which accesses session-related functions
     """
-    def selectedfn(_sessions_treeview, session_id, _player_id, player_name,
+    def clickedfn(_sessions_treeview, session_id, _player_id, player_name,
                    _session_start_time, _session_stop_time, _session_seat_fee):
         print("selected session_id:", session_id, "player_name:", player_name)
 
-    sessions_treeview = SessionsTreeview(selectedfn)
+    sessions_treeview = SessionsTreeview(clickedfn)
 
     if sessions_treeview.refresh_id_and_name_list() is None:
         return None
@@ -435,18 +480,26 @@ def create_sessions_treeview():
     return sessions_treeview
 
 
-def player_name_selected(player_id, name):
-    print("selected player_id:", player_id, "name:", name)
+def player_name_regular_clicked(player_id, name, balance):
+    print("regular selected player_id:", player_id, "name:", name, "balance:", balance)
+
+
+def player_name_control_clicked(player_id, name, balance):
+    print("control selected player_id:", player_id, "name:", name, "balance:", balance)
 
 
 def create_player_name_listbox():
     """
     Create the player name listbox which accesses player-related functions
     """
-    def selectedfn(_player_name_listbox, player_id, name):
-        player_name_selected(player_id, name)
+    def regular_clickedfn(_player_name_listbox, player_id, name, balance):
+        player_name_regular_clicked(player_id, name, balance)
 
-    player_name_listbox = PlayerNameListbox(selectedfn)
+    def control_clickedfn(_player_name_listbox, player_id, name, balance):
+        player_name_control_clicked(player_id, name, balance)
+
+#    player_name_listbox = PlayerNameListbox(clickedfn)
+    player_name_listbox = PlayerNameSelector(regular_clickedfn, control_clickedfn)
 
     if player_name_listbox.refresh_id_and_name_list() is None:
         return None
