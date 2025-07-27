@@ -1,188 +1,208 @@
-<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="CarolinaCardClub.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="34"/><column_width id="3" width="3102"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="Session_List_View" custom_title="0" dock_id="14" table="4,17:mainSession_List_View"/><table title="Payment" custom_title="0" dock_id="11" table="4,7:mainPayment"/><table title="Player_Selection_View" custom_title="0" dock_id="10" table="4,21:mainPlayer_Selection_View"/><table title="Player_Total_Payment_View" custom_title="0" dock_id="9" table="4,25:mainPlayer_Total_Payment_View"/><table title="Payment" custom_title="0" dock_id="14" table="4,7:mainPayment"/><table title="Player" custom_title="0" dock_id="15" table="4,6:mainPlayer"/><table title="Player_Category" custom_title="0" dock_id="11" table="4,15:mainPlayer_Category"/><table title="Rate_Interval" custom_title="0" dock_id="13" table="4,13:mainRate_Interval"/><table title="Rate" custom_title="0" dock_id="14" table="4,4:mainRate"/><table title="Session" custom_title="0" dock_id="12" table="4,7:mainSession"/><table title="Player_Total_Session_Amount_View" custom_title="0" dock_id="11" table="4,32:mainPlayer_Total_Session_Amount_View"/><table title="Payment" custom_title="0" dock_id="13" table="4,7:mainPayment"/><dock_state state="000000ff00000000fd00000001000000020000068d000002f8fc0100000004fc00000000000005f60000000000fffffffa000000000100000001fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000000000000000fc000000000000068d0000000000fffffffa000000000100000005fb000000160064006f0063006b00420072006f00770073006500340100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500360100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500350100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500360100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500370100000000ffffffff0000000000000000fc00000000000002910000000000fffffffa000000000100000001fb000000160064006f0063006b00420072006f00770073006500380000000000ffffffff0000000000000000fc000000000000068d0000025000fffffffa00000003020000000efb000000180064006f0063006b00420072006f007700730065003100340100000000ffffffff000000a500fffffffb000000160064006f0063006b00420072006f00770073006500390100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100330100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100300100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100340000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100310100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100320100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100310100000000000002f8000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100310100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100320000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100330100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100340100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100340100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100350100000000ffffffff000000a500ffffff0000068d0000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="Payment" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="0" mode="0"/></sort><column_widths><column index="1" value="87"/><column index="2" value="70"/><column index="3" value="136"/><column index="4" value="59"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Payment2" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="87"/><column index="2" value="72"/><column index="3" value="136"/><column index="4" value="59"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="0" mode="0"/></sort><column_widths><column index="1" value="167"/><column index="2" value="137"/><column index="3" value="121"/><column index="4" value="185"/><column index="5" value="107"/><column index="6" value="163"/><column index="7" value="166"/><column index="8" value="166"/><column index="9" value="136"/><column index="10" value="97"/><column index="11" value="152"/></column_widths><filter_values><column index="0" value="3"/></filter_values><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Balance_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="63"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Category" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="0" mode="0"/></sort><column_widths><column index="1" value="136"/><column index="2" value="102"/><column index="3" value="117"/><column index="4" value="110"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Selection_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="112"/><column index="3" value="60"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Total_Payment_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="105"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Total_Session_Amount_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="97"/><column index="3" value="99"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Rate" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="59"/><column index="2" value="38"/><column index="3" value="83"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Rate_Interval" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="117"/><column index="2" value="135"/><column index="3" value="135"/><column index="4" value="59"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="72"/><column index="3" value="135"/><column index="4" value="136"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session_Amount_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="139"/><column index="3" value="136"/><column index="4" value="148"/><column index="5" value="70"/><column index="6" value="97"/><column index="7" value="68"/><column index="8" value="38"/><column index="9" value="120"/><column index="10" value="59"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session_List_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="70"/><column index="3" value="97"/><column index="4" value="135"/><column index="5" value="136"/><column index="6" value="128"/><column index="7" value="102"/><column index="8" value="88"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session_Rate_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="70"/><column index="3" value="139"/><column index="4" value="136"/><column index="5" value="201"/><column index="6" value="97"/><column index="7" value="68"/><column index="8" value="135"/><column index="9" value="135"/><column index="10" value="38"/><column index="11" value="120"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="Edit View Player_Total_Amount_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Total_Amount_View&quot;;
-DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Total_Session_Amount_View&quot;;
-CREATE VIEW &quot;Player_Total_Session_Amount_View&quot; AS SELECT 
-	a.Player_ID,
-	a.Name,
-	SUM(a.Amount) as Amount
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="CarolinaCardClub.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser query" current="2"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="34"/><column_width id="3" width="3599"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="Rate_Interval_View" custom_title="0" dock_id="22" table="4,18:mainRate_Interval_View"/><table title="Purchased_Seconds_View" custom_title="0" dock_id="15" table="4,22:mainPurchased_Seconds_View"/><table title="Payment_Rate_Interval_ID_View" custom_title="0" dock_id="23" table="4,29:mainPayment_Rate_Interval_ID_View"/><table title="Payment" custom_title="0" dock_id="21" table="4,7:mainPayment"/><table title="Rate" custom_title="0" dock_id="20" table="4,4:mainRate"/><table title="Player_Info" custom_title="0" dock_id="19" table="4,11:mainPlayer_Info"/><table title="Player_Category" custom_title="0" dock_id="18" table="4,15:mainPlayer_Category"/><table title="Player" custom_title="0" dock_id="17" table="4,6:mainPlayer"/><table title="Payment" custom_title="0" dock_id="16" table="4,7:mainPayment"/><table title="Payment" custom_title="0" dock_id="14" table="4,7:mainPayment"/><dock_state state="000000ff00000000fd0000000100000002000007930000031bfc0100000004fc00000000000005f60000000000fffffffa000000000100000001fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000000000000000fc000000000000068d0000000000fffffffa000000000100000005fb000000160064006f0063006b00420072006f00770073006500340100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500360100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500350100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500360100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500370100000000ffffffff0000000000000000fc00000000000002910000000000fffffffa000000000100000001fb000000160064006f0063006b00420072006f00770073006500380000000000ffffffff0000000000000000fc0000000000000793000001c000fffffffa0000000d0200000016fb000000180064006f0063006b00420072006f007700730065003100340000000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500390000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100330000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100300000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100340000000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100310000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100320000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100310000000000000002f80000000000000000fb000000180064006f0063006b00420072006f007700730065003100310000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100320000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100330000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100340000000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100340100000000ffffffff0000000000000000fb000000180064006f0063006b00420072006f007700730065003100350100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100360100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100370100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100380100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003100390100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003200300100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003200310100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003200320100000000ffffffff000000a500fffffffb000000180064006f0063006b00420072006f007700730065003200330100000000ffffffff000000a500ffffff000007930000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="Payment" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="0" mode="0"/></sort><column_widths><column index="1" value="87"/><column index="2" value="70"/><column index="3" value="49"/><column index="4" value="129"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Payment_Rate_Interval_ID_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="100"/><column index="3" value="112"/><column index="4" value="76"/><column index="5" value="117"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Payment_Rate_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="109"/><column index="3" value="59"/><column index="4" value="117"/><column index="5" value="88"/><column index="6" value="120"/><column index="7" value="141"/><column index="8" value="110"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="0" mode="0"/></sort><column_widths><column index="1" value="167"/><column index="2" value="137"/><column index="3" value="121"/><column index="4" value="185"/><column index="5" value="107"/><column index="6" value="163"/><column index="7" value="166"/><column index="8" value="166"/><column index="9" value="136"/><column index="10" value="97"/><column index="11" value="152"/></column_widths><filter_values><column index="0" value="3"/></filter_values><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Balance_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="63"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Category" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="0" mode="0"/></sort><column_widths><column index="1" value="136"/><column index="2" value="102"/><column index="3" value="117"/><column index="4" value="110"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Category_Rate_Interval_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="136"/><column index="2" value="102"/><column index="3" value="135"/><column index="4" value="135"/><column index="5" value="38"/><column index="6" value="83"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Info" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="121"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Selection_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="112"/><column index="3" value="60"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Total_Payment_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="105"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Player_Total_Session_Amount_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="97"/><column index="3" value="99"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Purchased_Seconds_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="70"/><column index="2" value="97"/><column index="3" value="116"/><column index="4" value="59"/><column index="5" value="55"/><column index="6" value="117"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Rate" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="59"/><column index="2" value="38"/><column index="3" value="83"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Rate_Interval" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="117"/><column index="2" value="135"/><column index="3" value="135"/><column index="4" value="59"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Rate_Interval_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="113"/><column index="2" value="119"/><column index="3" value="122"/><column index="4" value="55"/><column index="5" value="83"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="72"/><column index="3" value="135"/><column index="4" value="136"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session_Amount_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="139"/><column index="3" value="136"/><column index="4" value="148"/><column index="5" value="70"/><column index="6" value="97"/><column index="7" value="68"/><column index="8" value="38"/><column index="9" value="120"/><column index="10" value="59"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session_List_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="70"/><column index="3" value="97"/><column index="4" value="135"/><column index="5" value="136"/><column index="6" value="128"/><column index="7" value="102"/><column index="8" value="88"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="Session_Rate_View" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="70"/><column index="3" value="139"/><column index="4" value="136"/><column index="5" value="201"/><column index="6" value="97"/><column index="7" value="68"/><column index="8" value="135"/><column index="9" value="135"/><column index="10" value="38"/><column index="11" value="120"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1">SELECT 
+pmt.Player_ID as Player_ID,
+pmt.Time as Payment_Time, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID
+
 FROM
-Session_Amount_View as a
-GROUP BY a.Player_ID</sql><sql name="Edit View Player_Total_Payment_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Total_Payment_View&quot;;
-CREATE VIEW &quot;Player_Total_Payment_View&quot; AS 
-SELECT p.Player_ID, IFNULL(SUM(pmt.Amount),0) as Total_Payment
-FROM  Player as p LEFT JOIN Payment as pmt ON p.Player_ID == pmt.Player_ID
-GROUP BY p.Player_ID</sql><sql name="Edit View Player_Total_Session_Amount_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Total_Session_Amount_View&quot;;
-CREATE VIEW &quot;Player_Total_Session_Amount_View&quot; AS SELECT 
-	a.Player_ID,
-	a.Name,
-	SUM(a.Amount) as Total_Amount
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID
+</sql><sql name="Edit View Payment_Rate_Interval_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_Interval_View&quot;;
+CREATE VIEW &quot;Payment_Rate_Interval_View&quot; AS
+SELECT 
+pmt.Player_ID as Player_ID,
+pmt.Time as Payment_Time, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID
 FROM
-Session_Amount_View as a
-GROUP BY a.Player_ID</sql><sql name="Edit View Player_Balance_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Balance_View&quot;;
-CREATE VIEW &quot;Player_Balance_View&quot; AS SELECT p.Player_ID, p.Total_Payment - IFNULL(sa.Total_Amount,0.00) as Balance
-FROM Player_Total_Payment_View as p LEFT JOIN Player_Total_Session_Amount_View as sa ON p.Player_ID == sa.Player_ID</sql><sql name="Edit View Player_Selection_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Selection_View&quot;;
-CREATE VIEW &quot;Player_Selection_View&quot; AS 
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID
+</sql><sql name="Edit View Payment_Rate_Interval_View">-- DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_Interval_View&quot;;
+-- CREATE VIEW &quot;Payment_Rate_Interval_ID_View&quot; AS
+SELECT 
+pmt.Player_ID as Player_ID,
+pmt.Time as Payment_Time, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID
+FROM
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID</sql><sql name="Edit View Payment_Rate_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_View&quot;;
+CREATE VIEW &quot;Payment_Rate_View&quot; AS 
 SELECT
-  p.Player_ID,
-  IFNULL(p.NickName, p.Name) as Name,
-  IFNULL(b.Balance,0.00) as Balance
- FROM
-   Player as p
+pmt.Player_ID as Player_ID,
+pmt.Time as Payment_Time, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID,
+r.Rate as Hourly_Rate, r.Description as Rate_Description,
+pmt.Amount*3600/r.Rate as Purchased_Seconds,
+CAST(pmt.Amount*3600/r.Rate / 3600 AS TEXT) || ':' ||
+    PRINTF('%02d', (pmt.Amount*3600/r.Rate % 3600) / 60) AS formatted_time
+FROM
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+JOIN
+Rate_Interval as ri
+JOIN
+Rate as r
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID
+AND c.Rate_Interval_ID == ri.Rate_Interval_ID AND unixepoch(ri.Start) &lt;= unixepoch(pmt.Time) AND unixepoch(pmt.Time) &lt;= unixepoch(ri.Stop)
+AND ri.Rate_ID == r.Rate_ID</sql><sql name="SQL 6">SELECT 
+pidv.Player_ID, pidv.Player_Name, strftime('%Y-%m-%d %I:%M %P', pidv.Payment_Time) as Purchase_Time , PRINTF('$%d',pidv.Amount) as Amount, 
+PRINTF('$%0.02f/hr',  riv.Rate) as Rate, pidv.Amount * 3600 / riv.Rate as Purchased_Secs
+FROM
+Payment_Rate_Interval_ID_View as pidv
+LEFT JOIN
+Rate_Interval_View riv
+ON pidv.Rate_Interval_ID == riv.Rate_Interval_ID
+ORDER BY Purchase_Time ASC</sql><sql name="Edit View Rate_Interval_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Rate_Interval_View&quot;;
+CREATE VIEW &quot;Rate_Interval_View&quot; AS SELECT
+    Rate_Interval.Rate_Interval_ID, Rate_Interval.Start, Rate_Interval.Stop, Rate.Rate, Rate.Description
+  FROM
+    Rate_Interval
   LEFT JOIN
-  Session as s
-  ON p.Player_ID == s.Player_ID
- LEFT JOIN
-   Player_Balance_View as b
-ON p.Player_ID == b.Player_ID
-WHERE p.Phone_number is NOT NULL AND p.Phone_number != '***MISSING***' and p.Flag is  NULL
-ORDER by DATE(s.Start_Time) DESC, p.Player_Category_ID ASC, Name ASC</sql><sql name="Edit View Session_List_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Session_List_View&quot;;
-CREATE VIEW &quot;Session_List_View&quot; AS 
-SELECT
-    s.Session_ID
-        as &quot;Session_ID&quot;,
-
-    s.Player_ID
-        as &quot;Player_ID&quot;,
-
-    IFNULL(p.NickName,p.Name)
-	as &quot;Name&quot;,
-
-    s.Start_Time,
-
-    s.Stop_Time,
-
-    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
-        as &quot;Session_Seat_Fee&quot;,
-
-    c.Name
-        as &quot;Category&quot;,
-
-    c.Hourly_Rate
-        as &quot;Hourly_Rate&quot;
-
+     Rate
+WHERE
+    Rate_Interval.Rate_ID == Rate.Rate_ID</sql><sql name="Edit View Payment_Rate_Interval_ID_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_Interval_ID_View&quot;;
+CREATE VIEW &quot;Payment_Rate_Interval_ID_View&quot; AS
+SELECT 
+pmt.Player_ID as Player_ID,
+IFNULL(p.NickName, p.Name) as Player_Name,
+pmt.Time as Payment_Time, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID
 FROM
-       Player as p
-   INNER JOIN
-       Player_Category as c
-   INNER JOIN
-       Session as s
-   ON
-       p.Player_ID = s.Player_ID
-   AND
-       p.Player_Category_ID = c.Player_Category_ID
-ORDER BY unixepoch(s.Start_Time) ASC,
-                       c.Player_Category_ID ASC,
-                        IFNULL(p.NickName,p.Name) ASC
-</sql><sql name="SQL 11">WITH RECURSIVE counter(x) AS (
-    SELECT 1
-    UNION ALL
-    SELECT x + 1 FROM counter WHERE x &lt; 100
-)
-SELECT * FROM counter;</sql><sql name="SQL 12">SELECT
-    s.Session_ID
-        as &quot;Session_ID&quot;,
-
-    s.Player_ID
-        as &quot;Player_ID&quot;,
-
-    IFNULL(p.NickName,p.Name)
-	as &quot;Name&quot;,
-
-    s.Start_Time,
-
-    s.Stop_Time,
-
-    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*c.Hourly_Rate)
-        as &quot;Session_Seat_Fee&quot;,
-
-    c.Name
-        as &quot;Category&quot;,
-
-    c.Hourly_Rate
-        as &quot;Hourly_Rate&quot;
-
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID</sql><sql name="SQL 9">ALTER TABLE Rate_Interval
+DROP COLUMN Stop
+</sql><sql name="Edit View Payment_Rate_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_View&quot;;
+CREATE VIEW &quot;Payment_Rate_View&quot; AS SELECT
+pmt.Player_ID as Player_ID,
+pmt.Epoch as Payment_Epoch, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID,
+r.Rate as Hourly_Rate, r.Description as Rate_Description,
+pmt.Amount*3600/r.Rate as Purchased_Seconds,
+CAST(pmt.Amount*3600/r.Rate / 3600 AS TEXT) || ':' ||
+    PRINTF('%02d', (pmt.Amount*3600/r.Rate % 3600) / 60) AS formatted_time
 FROM
-       Player as p
-   INNER JOIN
-       Player_Category as c
-   INNER JOIN
-       Session as s
-   ON
-       p.Player_ID = s.Player_ID
-   AND
-       p.Player_Category_ID = c.Player_Category_ID
-ORDER BY unixepoch(s.Start_Time) ASC,
-                       c.Player_Category_ID ASC,
-                        IFNULL(p.NickName,p.Name) ASC
-</sql><sql name="SQL 9">UPDATE Player
-SET Player_Category_ID = 5
-WHERE Player_Category_ID == 2
-</sql><sql name="SQL 10">ALTER TABLE  Player_Category
-DROP Hourly_Rate
-</sql><sql name="Edit View Session_List_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Session_List_View&quot;;
-CREATE VIEW &quot;Session_List_View&quot; AS 
-SELECT
-    s.Session_ID
-        as &quot;Session_ID&quot;,
-
-    s.Player_ID
-        as &quot;Player_ID&quot;,
-
-    IFNULL(p.NickName,p.Name)
-	as &quot;Name&quot;,
-
-    s.Start_Time,
-
-    s.Stop_Time,
-
-    ROUND((unixepoch(s.Stop_Time)-unixepoch(s.Start_Time))/3600.0*r.Rate)
-        as &quot;Session_Seat_Fee&quot;,
-
-    c.Name
-        as &quot;Category&quot;,
-
-    r.Rate
-        as &quot;Hourly_Rate&quot;
-
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+JOIN
+Rate_Interval as ri
+JOIN
+Rate as r
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID
+AND c.Rate_Interval_ID == ri.Rate_Interval_ID AND(pmt.Epoch BETWEEN unixepoch(ri.Start)  AND  unixepoch(ri.Stop))
+AND ri.Rate_ID == r.Rate_ID</sql><sql name="Edit View Payment_Rate_Interval_ID_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_Interval_ID_View&quot;;
+CREATE VIEW &quot;Payment_Rate_Interval_ID_View&quot; AS
+SELECT 
+pmt.Player_ID as Player_ID,
+IFNULL(p.NickName, p.Name) as Player_Name,
+pmt.Epoch as Payment_Epoch, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID
 FROM
-       Player as p
-   INNER JOIN
-       Player_Category as c
-   INNER JOIN
-       Session as s
-	INNER JOIN
-	   Rate as r
-   ON
-       p.Player_ID = s.Player_ID
-   AND
-       p.Player_Category_ID = c.Player_Category_ID
-	AND
-	   c.Hourly_Rate_ID == r.Rate_ID
-ORDER BY unixepoch(s.Start_Time) ASC,
-                       c.Player_Category_ID ASC,
-                        IFNULL(p.NickName,p.Name) ASC</sql><sql name="SQL 12*">CREATE TABLE &quot;Player2&quot; (
-	&quot;Player_ID&quot;	INTEGER NOT NULL UNIQUE,
-	&quot;Played_Super_Bowl&quot;	INTEGER NOT NULL DEFAULT 0,
-	&quot;Name&quot;	TEXT NOT NULL DEFAULT &quot;Name?&quot;,
-	&quot;Email_address&quot;	TEXT NOT NULL DEFAULT &quot;Email Address?&quot;,
-	&quot;Phone_number&quot;	TEXT,
-	&quot;Other_phone_number_1&quot;	TEXT,
-	&quot;Other_phone_number_2&quot;	TEXT,
-	&quot;Other_phone_number_3&quot;	TEXT,
-	&quot;Player_Category_ID&quot;	INTEGER NOT NULL DEFAULT 5,
-	&quot;NickName&quot;	TEXT,
-	&quot;Flag&quot;	TEXT,
-	PRIMARY KEY(&quot;Player_ID&quot; AUTOINCREMENT),
-	FOREIGN KEY(&quot;Player_Category_ID&quot;) REFERENCES &quot;Player_Category&quot;
-);</sql><sql name="SQL 13*">PRAGMA foreign_keys = OFF</sql><sql name="SQL 14*">
-DROP TABLE main.Payment;
-CREATE TABLE &quot;Payment&quot; (
-	&quot;Payment_ID&quot;	INTEGER NOT NULL UNIQUE,
-	&quot;Player_ID&quot;	INTEGER NOT NULL DEFAULT 1,
-	&quot;Time&quot;	TEXT NOT NULL DEFAULT '2001-01-01 00:00:00.000',
-	&quot;Amount&quot;	NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-	PRIMARY KEY(&quot;Payment_ID&quot; AUTOINCREMENT),
-	FOREIGN KEY(&quot;Player_ID&quot;) REFERENCES &quot;Player&quot;(&quot;Player_ID&quot;)
-);
-INSERT INTO Payment
-SELECT * FROM Payment2;
-</sql><current_tab id="13"/></tab_sql></sqlb_project>
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID</sql><sql name="Edit View Purchased_Seconds_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Purchased_Seconds_View&quot;;
+CREATE VIEW &quot;Purchased_Seconds_View&quot; AS SELECT 
+pidv.Player_ID, pidv.Player_Name, strftime('%Y-%m-%d %I:%M %P', datetime(pidv.Payment_Epoch, 'unixepoch')) as Purchase_Time , PRINTF('$%d',pidv.Amount) as Amount, 
+PRINTF('$%0.02f/hr',  riv.Rate) as Rate, pidv.Amount * 3600 / riv.Rate as Purchased_Secs
+FROM
+Payment_Rate_Interval_ID_View as pidv
+LEFT JOIN
+Rate_Interval_View riv
+ON pidv.Rate_Interval_ID == riv.Rate_Interval_ID
+ORDER BY Purchase_Time ASC</sql><sql name="Edit View Player_Category_Rate_Interval_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Player_Category_Rate_Interval_View&quot;;
+CREATE VIEW &quot;Player_Category_Rate_Interval_View&quot; AS SELECT cat.Player_Category_ID, cat.Name, riv.Start, riv.Stop, riv.Rate, riv.Description
+FROM Player_Category as cat, Rate_Interval_View as riv
+WHERE cat.Rate_Interval_ID == riv.Rate_Interval_ID</sql><sql name="Edit View Purchased_Seconds_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Purchased_Seconds_View&quot;;
+CREATE VIEW &quot;Purchased_Seconds_View&quot; AS SELECT 
+pidv.Player_ID, pidv.Player_Name, strftime('%Y-%m-%d %I:%M %P', datetime(pidv.Payment_Epoch, 'unixepoch')) as Purchase_Time , PRINTF('$%d',pidv.Amount) as Amount, 
+PRINTF('$%0.02f/hr',  riv.Rate) as Rate, pidv.Amount * 3600 / riv.Rate as Purchased_Secs
+FROM
+Payment_Rate_Interval_ID_View as pidv
+LEFT JOIN
+Rate_Interval_View riv
+ON pidv.Rate_Interval_ID == riv.Rate_Interval_ID
+ORDER BY Purchase_Time ASC</sql><sql name="Edit View Payment_Rate_Interval_ID_View">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Payment_Rate_Interval_ID_View&quot;;
+CREATE VIEW &quot;Payment_Rate_Interval_ID_View&quot; AS
+SELECT 
+pmt.Player_ID as Player_ID,
+IFNULL(p.NickName, p.Name) as Player_Name,
+pmt.Epoch as Payment_Epoch, pmt.Amount,
+c.Rate_Interval_ID as Rate_Interval_ID
+FROM
+Payment as pmt
+JOIN
+Player as p
+JOIN
+Player_Category as c
+WHERE
+pmt.Player_ID == p.Player_ID
+AND
+p.Player_Category_ID == c.Player_Category_ID</sql><sql name="Edit View Rate_Interval_View*">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Rate_Interval_View&quot;;
+CREATE VIEW &quot;Rate_Interval_View&quot; AS SELECT
+    Rate_Interval.Rate_Interval_ID, Rate_Interval.Start_Epoch, Rate_Interval.Stop_Epoch, Rate.Rate, Rate.Description
+  FROM
+    Rate_Interval
+  LEFT JOIN
+     Rate
+WHERE
+    Rate_Interval.Rate_ID == Rate.Rate_ID</sql><sql name="Edit View Purchased_Seconds_View*">DROP VIEW IF EXISTS &quot;main&quot;.&quot;Purchased_Seconds_View&quot;;
+CREATE VIEW &quot;Purchased_Seconds_View&quot; AS SELECT 
+pidv.Player_ID, pidv.Player_Name, strftime('%Y-%m-%d %I:%M %P', datetime(pidv.Payment_Epoch, 'unixepoch')) as Purchase_Time , PRINTF('$%d',pidv.Amount) as Amount, 
+PRINTF('$%0.02f/hr',  riv.Rate) as Rate, pidv.Amount * 3600 / riv.Rate as Purchased_Secs
+FROM
+Payment_Rate_Interval_ID_View as pidv
+LEFT JOIN
+Rate_Interval_View riv
+ON pidv.Rate_Interval_ID == riv.Rate_Interval_ID
+ORDER BY Purchase_Time ASC</sql><sql name="Edit View Rate_Interval_View*">SELECT 
+ psv.Player_ID as Player_ID,
+  psv. Player_Name as Name,
+  psv.Purchase_TIme as Time_of_Purchase,
+  psv.Amount as Amount,
+  psv.Rate as Rate,
+  psv.Purchased_Secs as Purchased_Seconds,
+  PRINTF('%dh%02dm', (psv.Purchased_Secs / 3600), (psv.Purchased_Secs % 3600) / 60) AS Purchased_Time
+  FROM Purchased_Seconds_View as psv</sql><current_tab id="16"/></tab_sql></sqlb_project>
