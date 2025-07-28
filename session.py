@@ -41,7 +41,8 @@ class DigitalClock(tk.Label):
 
     def __init__(self, resolution, bgcolor):
         super().__init__(root,
-                         font=('Arial', 20), background=bgcolor, foreground='light gray',
+                         font=('Arial', 20),
+                         background=bgcolor, foreground='light gray',
                          cursor="hand2" if HICKORY_CLICKABLE_CLOCK else
 #                                 "watch"
                                 "arrow"
@@ -201,22 +202,26 @@ class InputPopup(tk.Toplevel):
         The Cancel button picks no input
         """
         self.user_input = None
-        self.unbind('<space>')
-        self.destroy()
+        self.done()
 
     def on_ok(self):
         """
         The OK button pick the user input
         """
         self.user_input = self.entry.get()
-        self.unbind('<space>')
-        self.destroy()
+        self.done()
 
     def on_spacebar_press(self, _event):
         """
         Spacebar is an assistive shortcut for button2=OK.
         """
         self.button2.invoke()
+        self.done()
+
+    def done(self):
+        """
+        Clean up this instance.
+        """
         self.unbind('<space>')
         self.destroy()
 
@@ -229,6 +234,12 @@ def strip_time(time_string):
                              .strftime("%-m/%-d %H:%M"))
 
 
+def local_time(epoch):
+    dt_object_local = datetime.datetime.fromtimestamp(epoch)
+    # Format the datetime object into a human-readable string
+    # Customize the format using strftime codes (similar to SQLite)
+    formatted_time = dt_object_local.strftime('%-m/%-d %H:%M')
+    return formatted_time
 
 
 def today_at_1930():
@@ -311,7 +322,7 @@ class PlayerNameSelector(tk.Frame):
         self.listbox.bind('<Button-1>', lambda event: self.on_player_name_clicked(event, self.regular_clickedfn))
         self.control_clickedfn = control_clickedfn
         self.listbox.bind('<Control-Button-1>', lambda event: self.on_player_name_clicked(event, self.control_clickedfn))
-        self.listbox.pack(padx=5,pady=5)
+        self.listbox.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
 
     def refresh_id_and_name_list(self):
         """
@@ -339,43 +350,6 @@ class PlayerNameSelector(tk.Frame):
             (player_id, name, balance) = self.id_and_name_list[selected_index]
             clickedfn(self.listbox, player_id, name, balance)
 
-class PlayerNameListbox(tk.Listbox):
-    """
-       Listbox specialized to show a players query result
-       and allow interaction with a selected player.
-    """
-
-    def __init__(self, clickedfn):
-        super().__init__(root, selectmode=tk.SINGLE)
-        self['bg'] = CAROLINA_BLUE_HEX
-        self.id_and_name_list = None
-        self.clickedfn = clickedfn
-        self.bind('<Button-1>', self.on_player_name_selectc)
-
-    def refresh_id_and_name_list(self):
-        """
-        Fill out the list of players if possible.
-        """
-        self.delete(0,tk.END)
-        self.id_and_name_list = fetch_data_from_db("SELECT * FROM Player_Selection_View")
-        if not self.id_and_name_list:
-            messagebox.showinfo("No Data", "No items found in the database.")
-            return None
-        names = [item[1] for item in self.id_and_name_list] # Extract the names into a list
-        for item in names:
-            self.insert(tk.END, item)
-        self.selection_clear(0,tk.END)
-        return self
-
-    def on_player_name_select(self, _event):
-        """
-        Player selected by clicking.
-        """
-        selected_index = self.curselection()
-        if selected_index is not None:
-            (player_id, name, balance) = self.id_and_name_list[selected_index[0]]
-            self.clickedfn(self, player_id, name)
-
 
 def create_session_start_time_label(start_time):
     """
@@ -398,7 +372,11 @@ class SessionsTreeview(ttk.Treeview):
 
     def __init__(self, clickedfn):
         super().__init__(root,
-                         columns=("Column1", "Column2", "Column3", "Column4" ),
+                         columns=("Column1",
+                                  "Column2",
+                                  "Column3",
+                                  "Column4",
+                                  "Column5" ),
                          show="headings")
         self.column("Column1", width=160, stretch=False)
         self.heading("Column1", text="Name")
@@ -407,7 +385,9 @@ class SessionsTreeview(ttk.Treeview):
         self.column("Column3", width=80, stretch=False)
         self.heading("Column3", text="Stop Time")
         self.column("Column4", width=75, stretch=False)
-        self.heading("Column4", text="Amount Due")
+        self.heading("Column4", text="Duration")
+        self.column("Column5", width=75, stretch=False)
+        self.heading("Column5", text="Amount Due")
         self.tag_configure("courier", font=("Courier", 10))
         self.clickedfn  = clickedfn
         self.session_list = None
@@ -425,12 +405,14 @@ class SessionsTreeview(ttk.Treeview):
 
 
         for (_session_id, _player_id, player_name,
-             session_start_time, session_stop_time, session_seat_fee,
-             _, _) in self.session_list:
+             session_start_epoch, effective_session_stop_epoch,
+             session_duration, session_seat_fee,
+             _category, _hourly_rate) in self.session_list:
             self.insert("", "end",
                         values=(player_name,
-                                strip_time(session_start_time),
-                                strip_time(session_stop_time),
+                                local_time(session_start_epoch),
+                                local_time(effective_session_stop_epoch),
+                                session_duration.rjust(8),
                                 locale.currency(session_seat_fee, grouping=True).rjust(8)),
                         tags=("courier",))
 
@@ -469,7 +451,8 @@ def create_sessions_treeview():
     Create the sessions treeview, which accesses session-related functions
     """
     def clickedfn(_sessions_treeview, session_id, _player_id, player_name,
-                   _session_start_time, _session_stop_time, _session_seat_fee):
+                   _session_start_time, _session_stop_time,
+                  _session_duration, _session_seat_fee):
         print("selected session_id:", session_id, "player_name:", player_name)
 
     sessions_treeview = SessionsTreeview(clickedfn)
@@ -546,7 +529,7 @@ def show_session_panel():
 
     root.title("Carolina Card Club Session")
     root['bg']=CAROLINA_BLUE_HEX
-    root.geometry('600x800')
+    root.geometry('680x800')
 
 
     root.grid_columnconfigure(0, weight=1)  # Column 0 expands
@@ -557,9 +540,6 @@ def show_session_panel():
     root.rowconfigure(3, weight=0) # Row 3 expands
     root.rowconfigure(4, weight=1) # Row 3 expands
     root.rowconfigure(5, weight=0) # Row 3 expands
-
-
-
 
 
 
