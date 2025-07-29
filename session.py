@@ -10,6 +10,7 @@ import tkinter.font as tkFont # Import the font module for custom fonts
 import sqlite3
 import datetime
 from datetime import timezone
+from zoneinfo import ZoneInfo
 import time
 from enum import Enum
 import locale
@@ -24,6 +25,7 @@ root = tk.Tk()
 
 exit_code = 0
 
+local_tz = ZoneInfo("America/New_York")
 
 class ClockResolution(Enum):
     """ Enum for selecting clock resolution """
@@ -80,7 +82,7 @@ class DigitalClock(tk.Label):
 
 
         # Get the current datetime object
-        current_datetime = datetime.datetime.now()
+        current_datetime = datetime.datetime.now(local_tz)
 
         # Extract the microseconds
         current_time_in_microseconds = current_datetime.microsecond
@@ -121,7 +123,7 @@ class DigitalClock(tk.Label):
         """
         Get the current time in the current digital clock time format
         """
-        time_now = datetime.datetime.now()
+        time_now = datetime.datetime.now(local_tz)
         time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
         return time_string
 
@@ -135,6 +137,7 @@ def close_window(ex_cd=0):
     Stop the digital clock updating to end the program cleanly.
     """
     digital_clock.cancel_updating()
+    sessions_treeview.cancel_updating()
     exit_code = ex_cd
     root.destroy()
 
@@ -267,7 +270,7 @@ def today_at_1930():
     Compute the time for today at 7:30 PM for the default session start time
     """
     # Get today's date
-    today = datetime.date.today()
+    today = datetime.datetime.now(local_tz).date()
 
     # Create a time object for 7:30 PM
     time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
@@ -295,7 +298,18 @@ def get_session_start_time():
     """
     Use the get_user_input popup to set the session start time
     """
-    return get_user_input("Session Start Time", "Enter start time:", today_at_1930())
+    try:
+        time_input = get_user_input("Session Start Time", "Enter start time:", today_at_1930())
+        if time_input is None or time_input == '':
+            return None
+        naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d %H:%M")
+        local_aware_time = naive_time.replace(tzinfo=local_tz)
+        unix_epoch=local_aware_time.timestamp()
+        return int(unix_epoch)
+    except tk.TclError:
+        return None
+
+
 
 
 def create_carolina_font():
@@ -377,7 +391,9 @@ def create_session_start_time_label(start_time):
     """
     if start_time is None:
         return None
-    label_text = "Session Start Time " + start_time
+    start_datetime = datetime.datetime.fromtimestamp(start_time)
+    label_text = start_datetime.strftime("Session Start Time %Y-%m-%d %H:%m")
+
     return tk.Label(root, text=label_text, font=('Arial', 12),
                     background=CAROLINA_BLUE_HEX, fg="light gray")
 
@@ -415,6 +431,7 @@ class SessionsView(tk.Frame):
         self.next_update=None
 
         self.clickedfn  = clickedfn
+        self.selected_session_id = None
         self.session_list = None
 
 
@@ -429,8 +446,9 @@ class SessionsView(tk.Frame):
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
 
+        selected_tree_id = None
 
-        for (_session_id, _player_id, player_name,
+        for (session_id, _player_id, player_name,
              session_start_epoch, session_stop_epoch,
              _category, hourly_rate) in self.session_list:
             if session_stop_epoch is not None:
@@ -442,7 +460,7 @@ class SessionsView(tk.Frame):
             seconds = effective_session_stop_epoch - session_start_epoch
             session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
             session_seat_fee = round(hourly_rate * seconds / 3600)
-            self.treeview.insert("", "end",
+            tree_id = self.treeview.insert("", "end",
                                  text=player_name,
                                  values=(player_name,
                                          local_time(session_start_epoch),
@@ -450,8 +468,12 @@ class SessionsView(tk.Frame):
                                          session_duration.rjust(8),
                                          locale.currency(session_seat_fee, grouping=True).rjust(8)),
                                  tags=tags)
+            if session_id == self.selected_session_id:
+                selected_tree_id = tree_id
 
         self.treeview.selection_clear()
+        if selected_tree_id is not None:
+            self.treeview.selection_set(selected_tree_id)
 
         self.next_update = self.after(1000, self.refresh_id_and_name_list)
 
@@ -480,6 +502,7 @@ class SessionsView(tk.Frame):
         """
         Session selected by player_id, if running.
         """
+        self.selected_session_id = None
         self.refresh_id_and_name_list()
         self.cancel_updating()
         found=False
@@ -501,7 +524,7 @@ class SessionsView(tk.Frame):
 # session_rate: {session_rate}
 # )""")
             if player_id == session_player_id and session_stop_epoch is None:
-                self.treeview.selection_set(item_id)
+                self.selected_session_id = session_id
                 found = True
                 break
 
@@ -630,6 +653,8 @@ def show_session_panel():
 
     carolina_label=create_carolina_label("Carolina Card Club")
     session_start_time = get_session_start_time()
+    if session_start_time is None:
+        close_window(1)
     session_start_time_label = create_session_start_time_label(session_start_time)
     sessions_treeview = create_sessions_treeview()
     player_name_listbox=create_player_name_listbox(sessions_treeview)
