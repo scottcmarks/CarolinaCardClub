@@ -362,6 +362,70 @@ def create_session_start_time_label(start_time):
                     background=CAROLINA_BLUE_HEX, fg="light gray")
 
 
+class SessionsView(tk.Frame):
+    """
+    Frame specialized to hold a treeview to show a sessions query result
+    and allow interaction with a selected session.
+    """
+    def __init__(self, clickedfn):
+        super().__init__(root)
+        self.treeview = ttk.Treeview(self,
+                         columns=("Column1",
+                                  "Column2",
+                                  "Column3",
+                                  "Column4",
+                                  "Column5" ),
+                         show="headings")
+        self.treeview.column("Column1", width=160, stretch=False)
+        self.treeview.heading("Column1", text="Name")
+        self.treeview.column("Column2", width=80, stretch=False)
+        self.treeview.heading("Column2", text="Start Time")
+        self.treeview.column("Column3", width=80, stretch=False)
+        self.treeview.heading("Column3", text="Stop Time")
+        self.treeview.column("Column4", width=75, stretch=False)
+        self.treeview.heading("Column4", text="Duration")
+        self.treeview.column("Column5", width=75, stretch=False)
+        self.treeview.heading("Column5", text="Amount Due")
+        self.treeview.tag_configure("courier", font=("Courier", 10))
+        self.treeview.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
+
+        self.clickedfn  = clickedfn
+        self.session_list = None
+
+
+    def refresh_id_and_name_list(self):
+        """
+        Fill out the list of sessions if possible.
+        """
+
+        self.treeview.delete(*self.treeview.get_children())
+        self.session_list = fetch_data_from_db("SELECT * FROM Session_List_View")
+        if not self.session_list:
+            messagebox.showinfo("No Data", "No items found in the database.")
+            return None
+
+
+        for (_session_id, _player_id, player_name,
+             session_start_epoch, effective_session_stop_epoch,
+             session_duration, session_seat_fee,
+             _category, _hourly_rate) in self.session_list:
+            self.treeview.insert("", "end",
+                        values=(player_name,
+                                local_time(session_start_epoch),
+                                local_time(effective_session_stop_epoch),
+                                session_duration.rjust(8),
+                                locale.currency(session_seat_fee, grouping=True).rjust(8)),
+                        tags=("courier",))
+
+        self.treeview.selection_clear()
+
+        return self
+
+    def on_session_select(self, _event):
+        """
+        Session selected by clicking.
+        """
+        pass
 
 
 class SessionsTreeview(ttk.Treeview):
@@ -455,7 +519,7 @@ def create_sessions_treeview():
                   _session_duration, _session_seat_fee):
         print("selected session_id:", session_id, "player_name:", player_name)
 
-    sessions_treeview = SessionsTreeview(clickedfn)
+    sessions_treeview = SessionsView(clickedfn)
 
     if sessions_treeview.refresh_id_and_name_list() is None:
         return None
