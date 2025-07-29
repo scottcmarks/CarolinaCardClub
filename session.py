@@ -412,6 +412,8 @@ class SessionsView(tk.Frame):
         self.treeview.tag_configure("bold_text", font=('Courier', 10, 'bold')) # You can apply other styling like bolding
         self.treeview.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
 
+        self.next_update=None
+
         self.clickedfn  = clickedfn
         self.session_list = None
 
@@ -435,22 +437,31 @@ class SessionsView(tk.Frame):
                 tags=("courier",)
                 effective_session_stop_epoch = session_stop_epoch
             else:
-                tags=("courier", "greem_item")
+                tags=("courier", "green_item")
                 effective_session_stop_epoch = int(datetime.datetime.now(timezone.utc).timestamp())
             seconds = effective_session_stop_epoch - session_start_epoch
             session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
             session_seat_fee = round(hourly_rate * seconds / 3600)
             self.treeview.insert("", "end",
-                        values=(player_name,
-                                local_time(session_start_epoch),
-                                local_time(effective_session_stop_epoch),
-                                session_duration.rjust(8),
-                                locale.currency(session_seat_fee, grouping=True).rjust(8)),
-                        tags=tags)
+                                 text=player_name,
+                                 values=(player_name,
+                                         local_time(session_start_epoch),
+                                         local_time(effective_session_stop_epoch),
+                                         session_duration.rjust(8),
+                                         locale.currency(session_seat_fee, grouping=True).rjust(8)),
+                                 tags=tags)
 
         self.treeview.selection_clear()
 
+        self.next_update = self.after(1000, self.refresh_id_and_name_list)
+
         return self
+
+    def cancel_updating(self):
+        """
+        Cancel auto-updating.
+        """
+        self.after_cancel(self.next_update)
 
     def on_session_select(self, _event):
         """
@@ -464,6 +475,38 @@ class SessionsView(tk.Frame):
                 print(f"Selected item values: {item_data['values']}")  # Access the 'values' key
         else:
             print("No item selected.")
+
+    def switch_to_running_session(self, player_id):
+        """
+        Session selected by player_id, if running.
+        """
+        self.refresh_id_and_name_list()
+        self.cancel_updating()
+        found=False
+
+        for (item_id, session) in zip(self.treeview.get_children(), self.session_list):
+            item_data = self.treeview.item(item_id)
+#            print(f"Item ID: {item_id}, Text: {item_data['text']}, Values: {item_data['values']}")
+            (item_player_name,
+             session_start_epoch_string,
+             effective_session_stop_epoch_string,
+             session_duration_string,
+             session_seat_fee_string) = item_data['values']
+            (session_id, session_player_id, session_player_name, session_start_epoch, session_stop_epoch, session_player_category_name, session_rate) = session
+#             print(f"""Item player name: {item_player_name} session: (
+# session_id: {session_id} player_id: {player_id},
+# session_player_name: {session_player_name}, session_start_epoch: {session_start_epoch},
+# session_stop_epoch: {session_stop_epoch},
+# session_player_category_name: {session_player_category_name},
+# session_rate: {session_rate}
+# )""")
+            if player_id == session_player_id and session_stop_epoch is None:
+                self.treeview.selection_set(item_id)
+                found = True
+                break
+
+        self.refresh_id_and_name_list()
+        return found
 
 
 
@@ -488,12 +531,15 @@ def start_session(player_id, sessions_treeview):
     start_epoch=int(datetime.datetime.now(timezone.utc).timestamp())
     send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
                     (player_id,start_epoch))
-    sessions_treeview.refresh_id_and_name_list()
+    sessions_treeview.switch_to_running_session(player_id)
+
 
 
 def player_name_regular_clicked(player_id, name, balance, sessions_treeview):
     print("regular selected player_id:", player_id, "name:", name, "balance:", balance)
-    if (0 <= balance):
+    if sessions_treeview.switch_to_running_session(player_id):
+        return
+    elif 0 <= balance:
         start_session(player_id, sessions_treeview)
     else:
         request_payment()
@@ -628,6 +674,7 @@ if __name__ == "__main__":
     root.mainloop()
 
     digital_clock.cancel_updating()
+    sessions_treeview.cancel_updating()
 
     if exit_code != 0:
         sys.exit(exit_code)
