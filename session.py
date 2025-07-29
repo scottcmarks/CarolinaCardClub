@@ -34,7 +34,7 @@ class ClockResolution(Enum):
 
 digital_clock_resolution = ClockResolution.SECONDS
 
-HICKORY_CLICKABLE_CLOCK = False
+HICKORY_CLICKABLE_CLOCK = True
 
 class DigitalClock(tk.Label):
     """
@@ -74,8 +74,7 @@ class DigitalClock(tk.Label):
 
         # Get the current time and format it
 
-        string_time = time.strftime(self.digital_clock_time_format)  # Example: 15:03:00
-        self.config(text=string_time)  # Update the label's text
+        self.config(text=self.now())  # Update the label's text
 
         one_millisecond_in_microseconds = 1000
         one_second_in_milliseconds = 1000
@@ -116,16 +115,29 @@ class DigitalClock(tk.Label):
         Reset the system clock
         """
         print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
+        self.clock_offset = get_clock_time() - int(datetime.datetime.now(local_tz).timestamp())
         self.update_time()
+
+
+    def now_datetime(self):
+        """
+        Get the current time in the current digital clock time format
+        """
+        return datetime.datetime.now(local_tz)+datetime.timedelta(seconds=self.clock_offset)
+
+
+    def now_epoch(self):
+        """
+        Get the current time in the current digital clock time format
+        """
+        return int(self.now_datetime().timestamp())
 
 
     def now(self):
         """
         Get the current time in the current digital clock time format
         """
-        time_now = datetime.datetime.now(local_tz)
-        time_string = time_now.strftime("%Y-%m-%d "+self.digital_clock_time_format)
-        return time_string
+        return self.now_datetime().strftime("%Y-%m-%d "+self.digital_clock_time_format)
 
 
 # Create the small digital clock
@@ -137,7 +149,6 @@ def close_window(ex_cd=0):
     Stop the digital clock updating to end the program cleanly.
     """
     digital_clock.cancel_updating()
-    sessions_treeview.cancel_updating()
     exit_code = ex_cd
     root.destroy()
 
@@ -270,7 +281,7 @@ def today_at_1930():
     Compute the time for today at 7:30 PM for the default session start time
     """
     # Get today's date
-    today = datetime.datetime.now(local_tz).date()
+    today = digital_clock.now_datetime()
 
     # Create a time object for 7:30 PM
     time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
@@ -303,6 +314,21 @@ def get_session_start_time():
         if time_input is None or time_input == '':
             return None
         naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d %H:%M")
+        local_aware_time = naive_time.replace(tzinfo=local_tz)
+        unix_epoch=local_aware_time.timestamp()
+        return int(unix_epoch)
+    except tk.TclError:
+        return None
+
+def get_clock_time():
+    """
+    Use the get_user_input popup to set the clock time
+    """
+    try:
+        time_input = get_user_input("Set Clock Time", "Enter clock time:", digital_clock.now())
+        if time_input is None or time_input == '':
+            return None
+        naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d " + digital_clock.digital_clock_time_format )
         local_aware_time = naive_time.replace(tzinfo=local_tz)
         unix_epoch=local_aware_time.timestamp()
         return int(unix_epoch)
@@ -353,9 +379,9 @@ class PlayerNameSelector(tk.Frame):
         self.listbox = tk.Listbox(self, selectmode=tk.SINGLE)
         self.listbox['bg'] = CAROLINA_BLUE_HEX
         self.regular_clickedfn = regular_clickedfn
-        self.listbox.bind('<Button-1>', lambda event: self.on_player_name_clicked(event, self.regular_clickedfn))
+        self.listbox.bind('<Button-1>', self.on_player_name_clicked_lambda(self.regular_clickedfn))
         self.control_clickedfn = control_clickedfn
-        self.listbox.bind('<Control-Button-1>', lambda event: self.on_player_name_clicked(event, self.control_clickedfn))
+        self.listbox.bind('<Control-Button-1>', self.on_player_name_clicked_lambda(self.control_clickedfn))
         self.listbox.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
 
     def refresh_id_and_name_list(self):
@@ -384,6 +410,12 @@ class PlayerNameSelector(tk.Frame):
             (player_id, name, balance) = self.id_and_name_list[selected_index]
             clickedfn(self.listbox, player_id, name, balance)
 
+    def on_player_name_clicked_lambda(self, clickedfn):
+        """
+        Player selected by clicking.
+        """
+        return lambda event: self.on_player_name_clicked(event,clickedfn)
+
 
 def create_session_start_time_label(start_time):
     """
@@ -392,7 +424,7 @@ def create_session_start_time_label(start_time):
     if start_time is None:
         return None
     start_datetime = datetime.datetime.fromtimestamp(start_time)
-    label_text = start_datetime.strftime("Session Start Time %Y-%m-%d %H:%m")
+    label_text = start_datetime.strftime("Session Start Time %Y-%m-%d %H:%M")
 
     return tk.Label(root, text=label_text, font=('Arial', 12),
                     background=CAROLINA_BLUE_HEX, fg="light gray")
@@ -430,9 +462,41 @@ class SessionsView(tk.Frame):
 
         self.next_update=None
 
-        self.clickedfn  = clickedfn
+        self.regular_clickedfn = clickedfn
+        self.treeview.bind('<ButtonRelease-1>', self.on_session_clicked_lambda(self.regular_clickedfn))
+        self.control_clickedfn = clickedfn
+        self.treeview.bind('<Control-ButtonRelease-1>', self.on_session_clicked_lambda(self.control_clickedfn))
+
         self.selected_session_id = None
         self.session_list = None
+
+    def on_session_clicked(self, event, clickedfn):
+        """
+        Session selected by clicking.
+        """
+        selected_index = self.treeview.identify_row(event.y)
+        if selected_index is not None:
+            for (tree_id, session) in zip(self.treeview.get_children(), self.session_list):
+                if tree_id == selected_index:
+                    self.treeview.selection_clear()
+                    self.treeview.selection_set(selected_index) # ctrl-click won't select
+                    item_data = self.treeview.item(tree_id)
+                    (item_player_name,
+                         session_start_epoch_string,
+                         effective_session_stop_epoch_string,
+                         session_duration_string,
+                         session_seat_fee_string) = item_data['values']
+                    (session_id, session_player_id, session_player_name, session_start_epoch, session_stop_epoch, session_player_category_name, session_rate) = session
+                    self.selected_session_id = session_id
+                    clickedfn(self, session_id, session_player_id, session_player_name,
+                              session_start_epoch, session_stop_epoch,
+                              session_duration_string, session_seat_fee_string)
+
+    def on_session_clicked_lambda(self, clickedfn):
+        """
+        Player selected by clicking.
+        """
+        return lambda event: self.on_session_clicked(event,clickedfn)
 
 
     def refresh_id_and_name_list(self):
@@ -457,7 +521,7 @@ class SessionsView(tk.Frame):
             else:
                 tags=("courier", "green_item")
                 effective_session_stop_epoch = int(datetime.datetime.now(timezone.utc).timestamp())
-            seconds = effective_session_stop_epoch - session_start_epoch
+            seconds = max(effective_session_stop_epoch - session_start_epoch, 0)
             session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
             session_seat_fee = round(hourly_rate * seconds / 3600)
             tree_id = self.treeview.insert("", "end",
@@ -491,10 +555,19 @@ class SessionsView(tk.Frame):
         """
         selected_items = self.treeview.selection()  # Get the IDs of selected items
         if selected_items is not None:
-            for item_id in selected_items:
-                item_data = self.treeview.item(item_id)  # Get the item's data dictionary
-                print(f"Selected item text: {item_data['text']}")  # Access the 'text' key
-                print(f"Selected item values: {item_data['values']}")  # Access the 'values' key
+            for selected_item_id in selected_items:
+                for (item_id, session) in zip(self.treeview.get_children(), self.session_list):
+                    if item_id == selected_item_id:
+                        item_data = self.treeview.item(item_id)  # Get the item's data dictionary
+                        print(f"Selected item text: {item_data['text']}")  # Access the 'text' key
+                        print(f"Selected item values: {item_data['values']}")  # Access the 'values' key
+                        (item_player_name,
+                         session_start_epoch_string,
+                         effective_session_stop_epoch_string,
+                         session_duration_string,
+                         session_seat_fee_string) = item_data['values']
+                        (session_id, session_player_id, session_player_name, session_start_epoch, session_stop_epoch, session_player_category_name, session_rate) = session
+                        self.selected_session_id = session_id
         else:
             print("No item selected.")
 
@@ -531,18 +604,22 @@ class SessionsView(tk.Frame):
         self.refresh_id_and_name_list()
         return found
 
+def session_clickedfn(session_treeview, session_id, _player_id, player_name,
+                      session_start_time_epoch, session_stop_time_epoch,
+                      _session_duration, _session_seat_fee):
+    print("selected session_id:", session_id, "player_name:", player_name)
+    if session_stop_time_epoch is None:
+        if True:
+            print("Stopping session selected session_id:", session_id, "player_name:", player_name)
+            stop_session(session_treeview, session_id)
 
 
 def create_sessions_treeview():
     """
     Create the sessions treeview, which accesses session-related functions
     """
-    def clickedfn(_sessions_treeview, session_id, _player_id, player_name,
-                   _session_start_time, _session_stop_time,
-                  _session_duration, _session_seat_fee):
-        print("selected session_id:", session_id, "player_name:", player_name)
 
-    sessions_treeview = SessionsView(clickedfn)
+    sessions_treeview = SessionsView(session_clickedfn)
 
     if sessions_treeview.refresh_id_and_name_list() is None:
         return None
@@ -550,20 +627,29 @@ def create_sessions_treeview():
     return sessions_treeview
 
 
-def start_session(player_id, sessions_treeview):
-    start_epoch=int(datetime.datetime.now(timezone.utc).timestamp())
+def start_session(player_id, session_start_time, sessions_treeview):
+    start_epoch=((digital_clock.now_epoch()+ 59) // 60) * 60
+    start = max(start_epoch, session_start_time)
     send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
-                    (player_id,start_epoch))
+                    (player_id,start))
     sessions_treeview.switch_to_running_session(player_id)
 
 
 
-def player_name_regular_clicked(player_id, name, balance, sessions_treeview):
+def stop_session(sessions_treeview, session_id):
+    stop_epoch = (digital_clock.now_epoch() // 60) * 60
+    send_data_to_db("UPDATE Session SET Stop_Epoch = ? WHERE Session_ID == ?",
+                    (stop_epoch, session_id))
+    sessions_treeview.refresh_id_and_name_list()
+
+
+
+def player_name_regular_clicked(player_id, name, balance, session_start_time, sessions_treeview):
     print("regular selected player_id:", player_id, "name:", name, "balance:", balance)
     if sessions_treeview.switch_to_running_session(player_id):
         return
     elif 0 <= balance:
-        start_session(player_id, sessions_treeview)
+        start_session(player_id, session_start_time, sessions_treeview)
     else:
         request_payment()
 
@@ -573,17 +659,12 @@ def player_name_control_clicked(player_id, name, balance):
 
 
 
-
-
-
-
-
-def create_player_name_listbox(sessions_treeview):
+def create_player_name_listbox(session_start_time, sessions_treeview):
     """
     Create the player name listbox which accesses player-related functions
     """
     def regular_clickedfn(_player_name_listbox, player_id, name, balance):
-        player_name_regular_clicked(player_id, name, balance, sessions_treeview)
+        player_name_regular_clicked(player_id, name, balance, session_start_time, sessions_treeview)
 
     def control_clickedfn(_player_name_listbox, player_id, name, balance):
         player_name_control_clicked(player_id, name, balance)
@@ -657,7 +738,7 @@ def show_session_panel():
         close_window(1)
     session_start_time_label = create_session_start_time_label(session_start_time)
     sessions_treeview = create_sessions_treeview()
-    player_name_listbox=create_player_name_listbox(sessions_treeview)
+    player_name_listbox=create_player_name_listbox(session_start_time, sessions_treeview)
 
     if (digital_clock is None or
         carolina_label is None or
@@ -699,7 +780,6 @@ if __name__ == "__main__":
     root.mainloop()
 
     digital_clock.cancel_updating()
-    sessions_treeview.cancel_updating()
 
     if exit_code != 0:
         sys.exit(exit_code)
