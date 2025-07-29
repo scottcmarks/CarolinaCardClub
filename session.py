@@ -9,6 +9,7 @@ from tkinter import messagebox, ttk
 import tkinter.font as tkFont # Import the font module for custom fonts
 import sqlite3
 import datetime
+from datetime import timezone
 import time
 from enum import Enum
 import locale
@@ -158,6 +159,25 @@ def fetch_data_from_db(query):
     finally:
         if conn:
             conn.close()
+
+def send_data_to_db(query,data):
+    """
+    Sends data to the Carolina Card Club database.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect('CarolinaCardClub.db')
+        cursor = conn.cursor()
+        cursor.execute(query, data)
+        conn.commit()
+    except sqlite3.Error as e:
+        messagebox.showerror("Database Error", f"Error sending data: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 
 class InputPopup(tk.Toplevel):
     """
@@ -376,17 +396,20 @@ class SessionsView(tk.Frame):
                                   "Column4",
                                   "Column5" ),
                          show="headings")
-        self.treeview.column("Column1", width=160, stretch=False)
+        self.treeview.column("Column1", width=140, stretch=False)
         self.treeview.heading("Column1", text="Name")
-        self.treeview.column("Column2", width=80, stretch=False)
+        self.treeview.column("Column2", width=90, stretch=False)
         self.treeview.heading("Column2", text="Start Time")
-        self.treeview.column("Column3", width=80, stretch=False)
+        self.treeview.column("Column3", width=90, stretch=False)
         self.treeview.heading("Column3", text="Stop Time")
         self.treeview.column("Column4", width=75, stretch=False)
         self.treeview.heading("Column4", text="Duration")
         self.treeview.column("Column5", width=75, stretch=False)
         self.treeview.heading("Column5", text="Amount Due")
         self.treeview.tag_configure("courier", font=("Courier", 10))
+        self.treeview.tag_configure("red_item", background="red", foreground="white")  # Red background, white text
+        self.treeview.tag_configure("green_item", background="green", foreground="black") # Green background, black text
+        self.treeview.tag_configure("bold_text", font=('Courier', 10, 'bold')) # You can apply other styling like bolding
         self.treeview.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
 
         self.clickedfn  = clickedfn
@@ -406,16 +429,24 @@ class SessionsView(tk.Frame):
 
 
         for (_session_id, _player_id, player_name,
-             session_start_epoch, effective_session_stop_epoch,
-             session_duration, session_seat_fee,
-             _category, _hourly_rate) in self.session_list:
+             session_start_epoch, session_stop_epoch,
+             _category, hourly_rate) in self.session_list:
+            if session_stop_epoch is not None:
+                tags=("courier",)
+                effective_session_stop_epoch = session_stop_epoch
+            else:
+                tags=("courier", "greem_item")
+                effective_session_stop_epoch = int(datetime.datetime.now(timezone.utc).timestamp())
+            seconds = effective_session_stop_epoch - session_start_epoch
+            session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
+            session_seat_fee = round(hourly_rate * seconds / 3600)
             self.treeview.insert("", "end",
                         values=(player_name,
                                 local_time(session_start_epoch),
                                 local_time(effective_session_stop_epoch),
                                 session_duration.rjust(8),
                                 locale.currency(session_seat_fee, grouping=True).rjust(8)),
-                        tags=("courier",))
+                        tags=tags)
 
         self.treeview.selection_clear()
 
@@ -425,89 +456,15 @@ class SessionsView(tk.Frame):
         """
         Session selected by clicking.
         """
-        pass
-
-
-class SessionsTreeview(ttk.Treeview):
-    """
-       Treeview specialized to show a sessions query result
-       and allow interaction with a selected session.
-    """
-
-    def __init__(self, clickedfn):
-        super().__init__(root,
-                         columns=("Column1",
-                                  "Column2",
-                                  "Column3",
-                                  "Column4",
-                                  "Column5" ),
-                         show="headings")
-        self.column("Column1", width=160, stretch=False)
-        self.heading("Column1", text="Name")
-        self.column("Column2", width=80, stretch=False)
-        self.heading("Column2", text="Start Time")
-        self.column("Column3", width=80, stretch=False)
-        self.heading("Column3", text="Stop Time")
-        self.column("Column4", width=75, stretch=False)
-        self.heading("Column4", text="Duration")
-        self.column("Column5", width=75, stretch=False)
-        self.heading("Column5", text="Amount Due")
-        self.tag_configure("courier", font=("Courier", 10))
-        self.clickedfn  = clickedfn
-        self.session_list = None
-
-
-    def refresh_id_and_name_list(self):
-        """
-        Fill out the list of sessions if possible.
-        """
-        self.delete(*self.get_children())
-        self.session_list = fetch_data_from_db("SELECT * FROM Session_List_View")
-        if not self.session_list:
-            messagebox.showinfo("No Data", "No items found in the database.")
-            return None
-
-
-        for (_session_id, _player_id, player_name,
-             session_start_epoch, effective_session_stop_epoch,
-             session_duration, session_seat_fee,
-             _category, _hourly_rate) in self.session_list:
-            self.insert("", "end",
-                        values=(player_name,
-                                local_time(session_start_epoch),
-                                local_time(effective_session_stop_epoch),
-                                session_duration.rjust(8),
-                                locale.currency(session_seat_fee, grouping=True).rjust(8)),
-                        tags=("courier",))
-
-        self.selection_clear()
-
-        return self
-
-    # def on_session_select(self, event):
-    #     selected_index = self.curselection()
-    #     if selected_index is not None:
-    #         selected_session = self.get(selected_index[0])
-    #         (session_id, player_id, player_name,
-    #          session_start_time, session_stop_time, session_seat_fee,
-    #          _, _) = self.session_list[selected_index[0]]
-    #         self.clickedfn(self, session_id, player_id, player_name,
-    #                         session_start_time, session_stop_time, session_seat_fee)
-    #     else:
-    #         selected_item = None
-
-    def on_session_select(self, _event):
-        """
-        Session selected by clicking.
-        """
-        selected_items = self.selection()  # Get the IDs of selected items
+        selected_items = self.treeview.selection()  # Get the IDs of selected items
         if selected_items is not None:
             for item_id in selected_items:
-                item_data = self.item(item_id)  # Get the item's data dictionary
+                item_data = self.treeview.item(item_id)  # Get the item's data dictionary
                 print(f"Selected item text: {item_data['text']}")  # Access the 'text' key
                 print(f"Selected item values: {item_data['values']}")  # Access the 'values' key
         else:
             print("No item selected.")
+
 
 
 def create_sessions_treeview():
@@ -527,20 +484,37 @@ def create_sessions_treeview():
     return sessions_treeview
 
 
-def player_name_regular_clicked(player_id, name, balance):
+def start_session(player_id, sessions_treeview):
+    start_epoch=int(datetime.datetime.now(timezone.utc).timestamp())
+    send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
+                    (player_id,start_epoch))
+    sessions_treeview.refresh_id_and_name_list()
+
+
+def player_name_regular_clicked(player_id, name, balance, sessions_treeview):
     print("regular selected player_id:", player_id, "name:", name, "balance:", balance)
+    if (0 <= balance):
+        start_session(player_id, sessions_treeview)
+    else:
+        request_payment()
 
 
 def player_name_control_clicked(player_id, name, balance):
     print("control selected player_id:", player_id, "name:", name, "balance:", balance)
 
 
-def create_player_name_listbox():
+
+
+
+
+
+
+def create_player_name_listbox(sessions_treeview):
     """
     Create the player name listbox which accesses player-related functions
     """
     def regular_clickedfn(_player_name_listbox, player_id, name, balance):
-        player_name_regular_clicked(player_id, name, balance)
+        player_name_regular_clicked(player_id, name, balance, sessions_treeview)
 
     def control_clickedfn(_player_name_listbox, player_id, name, balance):
         player_name_control_clicked(player_id, name, balance)
@@ -612,7 +586,7 @@ def show_session_panel():
     session_start_time = get_session_start_time()
     session_start_time_label = create_session_start_time_label(session_start_time)
     sessions_treeview = create_sessions_treeview()
-    player_name_listbox=create_player_name_listbox()
+    player_name_listbox=create_player_name_listbox(sessions_treeview)
 
     if (digital_clock is None or
         carolina_label is None or
