@@ -65,6 +65,7 @@ class DigitalClock(tk.Label):
         if HICKORY_CLICKABLE_CLOCK:
             self.bind('<Button-1>', self.reset_clock)
         self.clock_offset = 0
+        self.running = False
         self.update_time()
 
     def update_time(self):
@@ -97,25 +98,42 @@ class DigitalClock(tk.Label):
                                          // one_second_in_milliseconds )
 
         # Delay for that in milliseconds
-        delay_in_milliseconds = ( ( next_tick_time_in_seconds * one_second_in_milliseconds )
-                                  -  current_time_in_milliseconds )
+        delay_in_milliseconds = max ( ( next_tick_time_in_seconds * one_second_in_milliseconds )
+                                         -  current_time_in_milliseconds ,
+                                      1 )
 
         # Schedule the update_time function to run again after 1000 milliseconds (1 second)
-        self.next_update = self.after(delay_in_milliseconds, self.update_time)
+        if self.running:
+            if self.next_update:
+                self.after_cancel(self.next_update)
+            self.next_update = self.after(delay_in_milliseconds, self.update_time)
+        else:
+            self.next_update = None
+
+    def start(self):
+        """
+        Start the clock running
+        """
+        self.running = True
+        self.update_time()
 
     def cancel_updating(self):
         """
         Stop the clock updating.
         Do this before stopping the program to avoid a messy error on sys.exiting.
         """
-        self.after_cancel(self.next_update)
+        self.running = False
+        if self.next_update:
+            self.after_cancel(self.next_update)
+            self.next_update = None
 
     def reset_clock(self, event):
         """
         Reset the system clock
         """
-        print("RESET CLOCK", event, self.resolution, self.digital_clock_time_format)
-        self.clock_offset = get_clock_time() - int(datetime.datetime.now(local_tz).timestamp())
+        clock_time_from_user = get_clock_time()
+        actual_local_clock_time = int(datetime.datetime.now(local_tz).timestamp())
+        self.clock_offset = clock_time_from_user - actual_local_clock_time
         self.update_time()
 
 
@@ -146,10 +164,12 @@ digital_clock = DigitalClock(digital_clock_resolution, CAROLINA_BLUE_HEX)
 def close_window(ex_cd=0):
     """
     Close the main window.
-    Stop the digital clock updating to end the program cleanly.
+    Stop the updating to end the program cleanly.
     """
     digital_clock.cancel_updating()
+    session_view.cancel_updating()
     exit_code = ex_cd
+    root.update_idletasks()
     root.destroy()
 
 
@@ -186,7 +206,6 @@ def send_data_to_db(query,data):
         conn.commit()
     except sqlite3.Error as e:
         messagebox.showerror("Database Error", f"Error sending data: {e}")
-        return []
     finally:
         if conn:
             conn.close()
@@ -430,7 +449,7 @@ def create_session_start_time_label(start_time):
                     background=CAROLINA_BLUE_HEX, fg="light gray")
 
 
-class SessionsView(tk.Frame):
+class SessionView(tk.Frame):
     """
     Frame specialized to hold a treeview to show a sessions query result
     and allow interaction with a selected session.
@@ -460,7 +479,8 @@ class SessionsView(tk.Frame):
         self.treeview.tag_configure("bold_text", font=('Courier', 10, 'bold')) # You can apply other styling like bolding
         self.treeview.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
 
-        self.next_update=None
+        self.next_update = None
+        self.updating = True
 
         self.regular_clickedfn = clickedfn
         self.treeview.bind('<ButtonRelease-1>', self.on_session_clicked_lambda(self.regular_clickedfn))
@@ -475,22 +495,31 @@ class SessionsView(tk.Frame):
         Session selected by clicking.
         """
         selected_index = self.treeview.identify_row(event.y)
-        if selected_index is not None:
-            for (tree_id, session) in zip(self.treeview.get_children(), self.session_list):
-                if tree_id == selected_index:
-                    self.treeview.selection_clear()
-                    self.treeview.selection_set(selected_index) # ctrl-click won't select
-                    item_data = self.treeview.item(tree_id)
-                    (item_player_name,
-                         session_start_epoch_string,
-                         effective_session_stop_epoch_string,
-                         session_duration_string,
-                         session_seat_fee_string) = item_data['values']
-                    (session_id, session_player_id, session_player_name, session_start_epoch, session_stop_epoch, session_player_category_name, session_rate) = session
-                    self.selected_session_id = session_id
-                    clickedfn(self, session_id, session_player_id, session_player_name,
-                              session_start_epoch, session_stop_epoch,
-                              session_duration_string, session_seat_fee_string)
+        if selected_index is  None:
+            return
+
+        tree_ids = self.treeview.get_children()
+        if tree_ids is None or self.session_list is None:
+            return
+
+        for (tree_id, session) in zip(tree_ids, self.session_list):
+            if tree_id == selected_index:
+                self.treeview.selection_clear()
+                self.treeview.selection_set(selected_index) # ctrl-click won't select
+                item_data = self.treeview.item(tree_id)
+                (_item_player_name,
+                 _session_start_epoch_string,
+                 _effective_session_stop_epoch_string,
+                 session_duration_string,
+                 session_seat_fee_string) = item_data['values']
+                (session_id, session_player_id, session_player_name,
+                 session_start_epoch, session_stop_epoch,
+                 _session_player_category_name, _session_rate) = session
+                self.selected_session_id = session_id
+                clickedfn(self,
+                          session_id, session_player_id, session_player_name,
+                          session_start_epoch, session_stop_epoch,
+                          session_duration_string, session_seat_fee_string)
 
     def on_session_clicked_lambda(self, clickedfn):
         """
@@ -499,7 +528,7 @@ class SessionsView(tk.Frame):
         return lambda event: self.on_session_clicked(event,clickedfn)
 
 
-    def refresh_id_and_name_list(self):
+    def refresh_session_list(self):
         """
         Fill out the list of sessions if possible.
         """
@@ -507,7 +536,6 @@ class SessionsView(tk.Frame):
         self.treeview.delete(*self.treeview.get_children())
         self.session_list = fetch_data_from_db("SELECT * FROM Session_List_View")
         if not self.session_list:
-            messagebox.showinfo("No Data", "No items found in the database.")
             return None
 
         selected_tree_id = None
@@ -520,7 +548,7 @@ class SessionsView(tk.Frame):
                 effective_session_stop_epoch = session_stop_epoch
             else:
                 tags=("courier", "green_item")
-                effective_session_stop_epoch = int(datetime.datetime.now(timezone.utc).timestamp())
+                effective_session_stop_epoch = digital_clock.now_epoch()
             seconds = max(effective_session_stop_epoch - session_start_epoch, 0)
             session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
             session_seat_fee = round(hourly_rate * seconds / 3600)
@@ -539,15 +567,22 @@ class SessionsView(tk.Frame):
         if selected_tree_id is not None:
             self.treeview.selection_set(selected_tree_id)
 
-        self.next_update = self.after(1000, self.refresh_id_and_name_list)
-
+        if self.updating:
+            if self.next_update:
+                self.after_cancel(self.next_update)
+            self.next_update = self.after(1000, self.refresh_session_list)
+        else:
+            self.next_update = None
         return self
 
     def cancel_updating(self):
         """
         Cancel auto-updating.
         """
-        self.after_cancel(self.next_update)
+        self.updating = False
+        if self.next_update:
+            self.after_cancel(self.next_update)
+            self.next_update = None
 
     def on_session_select(self, _event):
         """
@@ -576,7 +611,7 @@ class SessionsView(tk.Frame):
         Session selected by player_id, if running.
         """
         self.selected_session_id = None
-        self.refresh_id_and_name_list()
+        self.refresh_session_list()
         self.cancel_updating()
         found=False
 
@@ -601,55 +636,44 @@ class SessionsView(tk.Frame):
                 found = True
                 break
 
-        self.refresh_id_and_name_list()
+        self.refresh_session_list()
         return found
 
-def session_clickedfn(session_treeview, session_id, _player_id, player_name,
+
+
+    def start_session(self, player_id, session_start_time):
+        start_epoch=((digital_clock.now_epoch()+ 59) // 60) * 60
+        start = max(start_epoch, session_start_time)
+        send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
+                        (player_id,start))
+        self.switch_to_running_session(player_id)
+
+
+
+    def stop_session(self, session_id):
+        stop_epoch = (digital_clock.now_epoch() // 60) * 60
+        send_data_to_db("UPDATE Session SET Stop_Epoch = ? WHERE Session_ID == ?",
+                        (stop_epoch, session_id))
+        self.refresh_session_list()
+
+
+
+def session_clickedfn(session_view, session_id, _player_id, player_name,
                       session_start_time_epoch, session_stop_time_epoch,
                       _session_duration, _session_seat_fee):
     print("selected session_id:", session_id, "player_name:", player_name)
     if session_stop_time_epoch is None:
         if True:
             print("Stopping session selected session_id:", session_id, "player_name:", player_name)
-            stop_session(session_treeview, session_id)
+            session_view.stop_session(session_id)
 
 
-def create_sessions_treeview():
-    """
-    Create the sessions treeview, which accesses session-related functions
-    """
-
-    sessions_treeview = SessionsView(session_clickedfn)
-
-    if sessions_treeview.refresh_id_and_name_list() is None:
-        return None
-
-    return sessions_treeview
-
-
-def start_session(player_id, session_start_time, sessions_treeview):
-    start_epoch=((digital_clock.now_epoch()+ 59) // 60) * 60
-    start = max(start_epoch, session_start_time)
-    send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
-                    (player_id,start))
-    sessions_treeview.switch_to_running_session(player_id)
-
-
-
-def stop_session(sessions_treeview, session_id):
-    stop_epoch = (digital_clock.now_epoch() // 60) * 60
-    send_data_to_db("UPDATE Session SET Stop_Epoch = ? WHERE Session_ID == ?",
-                    (stop_epoch, session_id))
-    sessions_treeview.refresh_id_and_name_list()
-
-
-
-def player_name_regular_clicked(player_id, name, balance, session_start_time, sessions_treeview):
+def player_name_regular_clicked(player_id, name, balance, session_start_time, session_view):
     print("regular selected player_id:", player_id, "name:", name, "balance:", balance)
-    if sessions_treeview.switch_to_running_session(player_id):
+    if session_view.switch_to_running_session(player_id):
         return
     elif 0 <= balance:
-        start_session(player_id, session_start_time, sessions_treeview)
+        session_view.start_session(player_id, session_start_time)
     else:
         request_payment()
 
@@ -659,12 +683,12 @@ def player_name_control_clicked(player_id, name, balance):
 
 
 
-def create_player_name_listbox(session_start_time, sessions_treeview):
+def create_player_name_listbox(session_start_time, session_view):
     """
     Create the player name listbox which accesses player-related functions
     """
     def regular_clickedfn(_player_name_listbox, player_id, name, balance):
-        player_name_regular_clicked(player_id, name, balance, session_start_time, sessions_treeview)
+        player_name_regular_clicked(player_id, name, balance, session_start_time, session_view)
 
     def control_clickedfn(_player_name_listbox, player_id, name, balance):
         player_name_control_clicked(player_id, name, balance)
@@ -708,6 +732,11 @@ carolina_font = create_carolina_font()
 if carolina_font is None:
     sys.exit(1)
 
+"""
+Create the sessions treeview, which accesses session-related functions
+"""
+session_view = SessionView(session_clickedfn)
+
 
 def show_session_panel():
     """
@@ -736,19 +765,21 @@ def show_session_panel():
     session_start_time = get_session_start_time()
     if session_start_time is None:
         close_window(1)
+        return
+
     session_start_time_label = create_session_start_time_label(session_start_time)
-    sessions_treeview = create_sessions_treeview()
-    player_name_listbox=create_player_name_listbox(session_start_time, sessions_treeview)
+    player_name_listbox=create_player_name_listbox(session_start_time, session_view)
 
     if (digital_clock is None or
         carolina_label is None or
         session_start_time_label is None or
-        sessions_treeview is None or
+        session_view is None or
         player_name_listbox is None):
         close_window(1)
+        return
 
 
-    close_button = create_session_close_button(sessions_treeview, close_window)
+    close_button = create_session_close_button(session_view, close_window)
     bottom_banner_center = create_bottom_banner_center()
     bottom_banner_left = create_bottom_banner_left()
 
@@ -756,6 +787,7 @@ def show_session_panel():
         bottom_banner_center is None or
         bottom_banner_left is None):
         close_window(1)
+        return
 
     digital_clock.            grid(row=0, column=1, sticky="e")
 
@@ -765,14 +797,15 @@ def show_session_panel():
 
     close_button.             grid(row=3, column=1, sticky="w")
 
-    sessions_treeview.        grid(row=4, column=1, rowspan=1, sticky="nsw")
+    session_view.             grid(row=4, column=1, rowspan=1, sticky="nsw")
     player_name_listbox.      grid(row=4, column=0, rowspan=1, sticky="nse")
 
     bottom_banner_center.     grid(row=5, column=0, columnspan=2, sticky="nsew")
 
     bottom_banner_left.       grid(row=6, column=0, sticky="nsw")
 
-
+    digital_clock.start()
+    session_view.refresh_session_list()
 
 if __name__ == "__main__":
     show_session_panel()
@@ -780,6 +813,8 @@ if __name__ == "__main__":
     root.mainloop()
 
     digital_clock.cancel_updating()
+
+    session_view.cancel_updating()
 
     if exit_code != 0:
         sys.exit(exit_code)
