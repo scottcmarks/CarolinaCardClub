@@ -42,8 +42,8 @@ class DigitalClock(tk.Label):
        and allow interaction to reset clock
     """
 
-    def __init__(self, resolution, bgcolor):
-        super().__init__(root,
+    def __init__(self, parent, resolution, bgcolor):
+        super().__init__(parent,
                          font=('Arial', 20),
                          background=bgcolor, foreground='light gray',
                          cursor="hand2" if HICKORY_CLICKABLE_CLOCK else
@@ -131,11 +131,25 @@ class DigitalClock(tk.Label):
         """
         Reset the system clock
         """
-        clock_time_from_user = get_clock_time()
+        clock_time_from_user = self.get_clock_time()
         actual_local_clock_time = int(datetime.datetime.now(local_tz).timestamp())
         self.clock_offset = clock_time_from_user - actual_local_clock_time
         self.update_time()
 
+    def get_clock_time(self):
+        """
+        Use the get_user_input popup to set the clock time
+        """
+        try:
+            time_input = get_user_input("Set Clock Time", "Enter clock time:", self.now())
+            if time_input is None or time_input == '':
+                return None
+            naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d " + self.digital_clock_time_format )
+            local_aware_time = naive_time.replace(tzinfo=local_tz)
+            unix_epoch=local_aware_time.timestamp()
+            return int(unix_epoch)
+        except tk.TclError:
+            return None
 
     def now_datetime(self):
         """
@@ -158,19 +172,23 @@ class DigitalClock(tk.Label):
         return self.now_datetime().strftime("%Y-%m-%d "+self.digital_clock_time_format)
 
 
-# Create the small digital clock
-digital_clock = DigitalClock(digital_clock_resolution, CAROLINA_BLUE_HEX)
+    def today_at_1930(self):
+        """
+        Compute the time for today at 7:30 PM for the default session start time
+        """
+        # Get today's date
+        today = self.now_datetime()
 
-def close_window(ex_cd=0):
-    """
-    Close the main window.
-    Stop the updating to end the program cleanly.
-    """
-    digital_clock.cancel_updating()
-    session_view.cancel_updating()
-    exit_code = ex_cd
-    root.update_idletasks()
-    root.destroy()
+        # Create a time object for 7:30 PM
+        time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
+
+        # Combine the date and time into a datetime object
+        datetime_730pm = datetime.datetime.combine(today, time_730pm)
+
+        # Format the datetime object as a string
+        # %I for 12-hour clock, %M for minutes, %p for AM/PM
+        time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
+        return time_string
 
 
 # Set the locale (example for US English)
@@ -295,26 +313,6 @@ def local_time(epoch):
     return formatted_time
 
 
-def today_at_1930():
-    """
-    Compute the time for today at 7:30 PM for the default session start time
-    """
-    # Get today's date
-    today = digital_clock.now_datetime()
-
-    # Create a time object for 7:30 PM
-    time_730pm = datetime.time(19, 30)  # Use 24-hour format for the time object
-
-    # Combine the date and time into a datetime object
-    datetime_730pm = datetime.datetime.combine(today, time_730pm)
-
-    # Format the datetime object as a string
-    # %I for 12-hour clock, %M for minutes, %p for AM/PM
-    time_string = datetime_730pm.strftime("%Y-%m-%d %H:%M")
-    return time_string
-
-
-
 
 def get_user_input(label, prompt, default):
     """
@@ -324,35 +322,7 @@ def get_user_input(label, prompt, default):
     root.wait_window(popup) # Wait for the popup window to close
     return popup.user_input
 
-def get_session_start_time():
-    """
-    Use the get_user_input popup to set the session start time
-    """
-    try:
-        time_input = get_user_input("Session Start Time", "Enter start time:", today_at_1930())
-        if time_input is None or time_input == '':
-            return None
-        naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d %H:%M")
-        local_aware_time = naive_time.replace(tzinfo=local_tz)
-        unix_epoch=local_aware_time.timestamp()
-        return int(unix_epoch)
-    except tk.TclError:
-        return None
 
-def get_clock_time():
-    """
-    Use the get_user_input popup to set the clock time
-    """
-    try:
-        time_input = get_user_input("Set Clock Time", "Enter clock time:", digital_clock.now())
-        if time_input is None or time_input == '':
-            return None
-        naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d " + digital_clock.digital_clock_time_format )
-        local_aware_time = naive_time.replace(tzinfo=local_tz)
-        unix_epoch=local_aware_time.timestamp()
-        return int(unix_epoch)
-    except tk.TclError:
-        return None
 
 
 
@@ -368,17 +338,7 @@ def create_carolina_font():
         print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.")
         return tkFont.Font(family="Arial, size=48, weight=bold")
 
-def create_carolina_label(label_text):
-    """
-    Create the Carolina Card Club label at the top
-    """
-    # Create a custom font for the label
-        # Replace "Old English Text MT" with an available font on your system
-        # You might need to experiment or use a font like "Blackletter"
-        # You can also adjust the size as needed
-    # Create the big label
-    return tk.Label(root, text=label_text, font=carolina_font,
-                              bg=CAROLINA_BLUE_HEX, fg="white")
+
 
 
 
@@ -391,8 +351,8 @@ class PlayerNameSelector(tk.Frame):
        or a control click (to purchase time or edit player data)
     """
 
-    def __init__(self, regular_clickedfn, control_clickedfn):
-        super().__init__(root)
+    def __init__(self, parent, regular_clickedfn, control_clickedfn):
+        super().__init__(parent)
         self['bg'] = CAROLINA_BLUE_HEX
         self.id_and_name_list = None
         self.listbox = tk.Listbox(self, selectmode=tk.SINGLE)
@@ -436,26 +396,14 @@ class PlayerNameSelector(tk.Frame):
         return lambda event: self.on_player_name_clicked(event,clickedfn)
 
 
-def create_session_start_time_label(start_time):
-    """
-    Create the start time label
-    """
-    if start_time is None:
-        return None
-    start_datetime = datetime.datetime.fromtimestamp(start_time)
-    label_text = start_datetime.strftime("Session Start Time %Y-%m-%d %H:%M")
-
-    return tk.Label(root, text=label_text, font=('Arial', 12),
-                    background=CAROLINA_BLUE_HEX, fg="light gray")
-
-
 class SessionView(tk.Frame):
     """
     Frame specialized to hold a treeview to show a sessions query result
     and allow interaction with a selected session.
     """
-    def __init__(self, clickedfn):
-        super().__init__(root)
+    def __init__(self, parent, digital_clock):
+        super().__init__(parent)
+        self.digital_clock = digital_clock
         self.treeview = ttk.Treeview(self,
                          columns=("Column1",
                                   "Column2",
@@ -482,13 +430,15 @@ class SessionView(tk.Frame):
         self.next_update = None
         self.updating = True
 
-        self.regular_clickedfn = clickedfn
+        self.regular_clickedfn = self.session_clickedfn
         self.treeview.bind('<ButtonRelease-1>', self.on_session_clicked_lambda(self.regular_clickedfn))
-        self.control_clickedfn = clickedfn
+        self.control_clickedfn = self.session_clickedfn
         self.treeview.bind('<Control-ButtonRelease-1>', self.on_session_clicked_lambda(self.control_clickedfn))
 
         self.selected_session_id = None
         self.session_list = None
+
+
 
     def on_session_clicked(self, event, clickedfn):
         """
@@ -548,7 +498,7 @@ class SessionView(tk.Frame):
                 effective_session_stop_epoch = session_stop_epoch
             else:
                 tags=("courier", "green_item")
-                effective_session_stop_epoch = digital_clock.now_epoch()
+                effective_session_stop_epoch = self.digital_clock.now_epoch()
             seconds = max(effective_session_stop_epoch - session_start_epoch, 0)
             session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
             session_seat_fee = round(hourly_rate * seconds / 3600)
@@ -640,6 +590,17 @@ class SessionView(tk.Frame):
         return found
 
 
+    def session_clickedfn(self,
+                          session_id, _player_id, player_name,
+                          session_start_time_epoch, session_stop_time_epoch,
+                          _session_duration, _session_seat_fee):
+        print("selected session_id:", session_id, "player_name:", player_name)
+        if session_stop_time_epoch is None:
+            if True: # TODO: Ask first!  Also, prompt for session payout.
+                print("Stopping session selected session_id:", session_id, "player_name:", player_name)
+                session_view.stop_session(session_id)
+
+
 
     def start_session(self, player_id, session_start_time):
         start_epoch=((digital_clock.now_epoch()+ 59) // 60) * 60
@@ -658,16 +619,6 @@ class SessionView(tk.Frame):
 
 
 
-def session_clickedfn(session_view, session_id, _player_id, player_name,
-                      session_start_time_epoch, session_stop_time_epoch,
-                      _session_duration, _session_seat_fee):
-    print("selected session_id:", session_id, "player_name:", player_name)
-    if session_stop_time_epoch is None:
-        if True:
-            print("Stopping session selected session_id:", session_id, "player_name:", player_name)
-            session_view.stop_session(session_id)
-
-
 def player_name_regular_clicked(player_id, name, balance, session_start_time, session_view):
     print("regular selected player_id:", player_id, "name:", name, "balance:", balance)
     if session_view.switch_to_running_session(player_id):
@@ -675,67 +626,207 @@ def player_name_regular_clicked(player_id, name, balance, session_start_time, se
     elif 0 <= balance:
         session_view.start_session(player_id, session_start_time)
     else:
-        request_payment()
+        session_view.request_payment()
 
 
-def player_name_control_clicked(player_id, name, balance):
+def player_name_control_clicked(player_id, name, balance, session_view):
     print("control selected player_id:", player_id, "name:", name, "balance:", balance)
 
 
 
-def create_player_name_listbox(session_start_time, session_view):
-    """
-    Create the player name listbox which accesses player-related functions
-    """
-    def regular_clickedfn(_player_name_listbox, player_id, name, balance):
-        player_name_regular_clicked(player_id, name, balance, session_start_time, session_view)
-
-    def control_clickedfn(_player_name_listbox, player_id, name, balance):
-        player_name_control_clicked(player_id, name, balance)
-
-#    player_name_listbox = PlayerNameListbox(clickedfn)
-    player_name_listbox = PlayerNameSelector(regular_clickedfn, control_clickedfn)
-
-    if player_name_listbox.refresh_id_and_name_list() is None:
-        return None
-
-    return player_name_listbox
 
 
-def create_session_close_button(treeview, close_window):
-    """
-    Create the session close button, which kills the app cleanly by invoking close_window
-    """
-    if treeview is None:
-        return None
-    root.update_idletasks()
-    treeview_width = treeview.winfo_width()
-    return tk.Button(root, text="Close Session",
-                     width=round(treeview_width/10), command=close_window)
-
-
-def create_bottom_banner_left():
-    """
-    Create the bottom banner copyright
-    """
-    return tk.Label(root, text='Copyright (c) 2025 Scott Marks',
-                    bg=CAROLINA_BLUE_HEX, fg="black", font=("Arial",8))
-
-def create_bottom_banner_center():
-    """
-    Create the bottom banner centerpiece, for decoration and spacing
-    """
-    return tk.Label(root, text='♠️♥️♦️♣️', bg=CAROLINA_BLUE_HEX, fg="white", font=(None,16))
 
 
 carolina_font = create_carolina_font()
 if carolina_font is None:
     sys.exit(1)
 
-"""
-Create the sessions treeview, which accesses session-related functions
-"""
-session_view = SessionView(session_clickedfn)
+
+class SessionPanel(tk.Frame):
+    """
+    Frame specialize to lay out the session app
+    """
+    def __init__(self, master):
+        super().__init__(master)
+        self['bg']=CAROLINA_BLUE_HEX
+
+        self.digital_clock = DigitalClock(self,digital_clock_resolution, CAROLINA_BLUE_HEX)
+
+        self.carolina_label = self.create_carolina_label("Carolina Card Club")
+        self.session_start_time = self.get_session_start_time()
+        if self.session_start_time is None:
+            self.close_window(1)
+            return
+
+        self.session_start_time_label = \
+            self.create_session_start_time_label(self.session_start_time)
+        self.session_view = SessionView(self, self.digital_clock)
+        self.player_name_listbox=self.create_player_name_listbox(self.session_start_time,
+                                                                 self.session_view)
+
+        if (self.digital_clock is None or
+            self.carolina_label is None or
+            self.session_start_time_label is None or
+            self.session_view is None or
+            self.player_name_listbox is None):
+            self.close_window(1)
+            return
+
+        self.close_button = self.create_session_close_button(self.session_view)
+        self.bottom_banner_center = self.create_bottom_banner_center()
+        self.bottom_banner_left = self.create_bottom_banner_left()
+
+        if (self.close_button is None or
+            self.bottom_banner_center is None or
+            self.bottom_banner_left is None):
+            self.close_window(1)
+            return
+
+
+
+        self.grid_columnconfigure(0, weight=1)  # Column 0 expands
+        self.grid_columnconfigure(1, weight=1)  # Column 1 expands
+        self.rowconfigure(0, weight=0) # Row 3 expands
+        self.rowconfigure(1, weight=0) # Row 3 expands
+        self.rowconfigure(2, weight=0) # Row 3 expands
+        self.rowconfigure(3, weight=0) # Row 3 expands
+        self.rowconfigure(4, weight=1) # Row 3 expands
+        self.rowconfigure(5, weight=0) # Row 3 expands
+        self.rowconfigure(6, weight=0) # Row 3 expands
+
+
+        self.digital_clock.            grid(row=0, column=1, sticky="e")
+
+        self.carolina_label.           grid(row=1, column=0, columnspan=2, sticky='ew')
+
+        self.session_start_time_label. grid(row=2, column=1, sticky="w")
+
+        self.close_button.             grid(row=3, column=1, sticky="w")
+
+        self.player_name_listbox.      grid(row=4, column=0, rowspan=1, sticky="nse")
+        self.session_view.             grid(row=4, column=1, rowspan=1, sticky="nsw")
+
+        self.bottom_banner_center.     grid(row=5, column=0, columnspan=2, sticky="ew")
+
+        self.bottom_banner_left.       grid(row=6, column=0, sticky="w")
+
+        self.digital_clock.start()
+        self.session_view.refresh_session_list()
+
+
+
+
+    def create_carolina_label(self, label_text):
+        """
+        Create the Carolina Card Club label at the top
+        """
+        # Create a custom font for the label
+        # Replace "Old English Text MT" with an available font on your system
+        # You might need to experiment or use a font like "Blackletter"
+        # You can also adjust the size as needed
+        # Create the big label
+        return tk.Label(self, text=label_text, font=carolina_font,
+                        bg=CAROLINA_BLUE_HEX, fg="white")
+
+    def get_session_start_time(self):
+        """
+        Use the get_user_input popup to set the session start time
+        """
+        try:
+            time_input = get_user_input("Session Start Time", "Enter start time:",
+                                        self.digital_clock.today_at_1930())
+            if time_input is None or time_input == '':
+                return None
+            naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d %H:%M")
+            local_aware_time = naive_time.replace(tzinfo=local_tz)
+            unix_epoch=local_aware_time.timestamp()
+            return int(unix_epoch)
+        except tk.TclError:
+            return None
+
+
+    def create_session_start_time_label(self, start_time):
+        """
+        Create the start time label
+        """
+        if start_time is None:
+            return None
+        start_datetime = datetime.datetime.fromtimestamp(start_time)
+        label_text = start_datetime.strftime("Session Start Time %Y-%m-%d %H:%M")
+
+        return tk.Label(self, text=label_text, font=('Arial', 12),
+                        background=CAROLINA_BLUE_HEX, fg="light gray")
+
+
+
+
+    def create_player_name_listbox(self, session_start_time, session_view):
+        """
+        Create the player name listbox which accesses player-related functions
+        """
+        def regular_clickedfn(_player_name_listbox, player_id, name, balance):
+            player_name_regular_clicked(player_id, name, balance, session_start_time, session_view)
+
+        def control_clickedfn(_player_name_listbox, player_id, name, balance):
+            player_name_control_clicked(player_id, name, balance, session_view)
+
+    #    player_name_listbox = PlayerNameListbox(clickedfn)
+        player_name_listbox = PlayerNameSelector(self, regular_clickedfn, control_clickedfn)
+
+        if player_name_listbox.refresh_id_and_name_list() is None:
+            return None
+
+        return player_name_listbox
+
+
+    def create_session_close_button(self, treeview):
+        """
+        Create the session close button, which kills the app cleanly by invoking close_window
+        """
+        if treeview is None:
+            return None
+        self.update_idletasks()
+        treeview_width = treeview.winfo_width()
+        return tk.Button(self, text="Close Session",
+                         width=round(treeview_width/10), command=self.close_window)
+
+
+
+    def create_bottom_banner_center(self):
+        """
+        Create the bottom banner centerpiece, for decoration and spacing
+        """
+        return tk.Label(self, text='♠️♥️♦️♣️', bg=CAROLINA_BLUE_HEX, fg="white", font=(None,16))
+
+
+    def create_bottom_banner_left(self):
+        """
+        Create the bottom banner copyright
+        """
+        return tk.Label(self, text='Copyright (c) 2025 Scott Marks',
+                        bg=CAROLINA_BLUE_HEX, fg="black", font=("Arial",8))
+
+
+    def stop_updating(self):
+        """
+        Stop things that are updating
+        from updating for clean exit
+        """
+        self.digital_clock.cancel_updating()
+        self.session_view.cancel_updating()
+
+
+    def close_window(self, ex_cd=0):
+        """
+        Close the main window.
+        Stop the updating to end the program cleanly.
+        """
+        self.stop_updating()
+        exit_code = ex_cd
+        root.update_idletasks()
+        root.destroy()
+
 
 
 def show_session_panel():
@@ -747,74 +838,20 @@ def show_session_panel():
     root.title("Carolina Card Club Session")
     root['bg']=CAROLINA_BLUE_HEX
     root.geometry('680x800')
+    root.grid_rowconfigure(0, weight=1)  # Make row 0 expand vertically
+    root.grid_columnconfigure(0, weight=1) # Make column 0 expand horizontally
 
+    session_panel = SessionPanel(root)
+    session_panel.grid(row=0, column=0, sticky="nsew")
 
-    root.grid_columnconfigure(0, weight=1)  # Column 0 expands
-    root.grid_columnconfigure(1, weight=1)  # Column 1 expands
-    root.rowconfigure(0, weight=0) # Row 3 expands
-    root.rowconfigure(1, weight=0) # Row 3 expands
-    root.rowconfigure(2, weight=0) # Row 3 expands
-    root.rowconfigure(3, weight=0) # Row 3 expands
-    root.rowconfigure(4, weight=1) # Row 3 expands
-    root.rowconfigure(5, weight=0) # Row 3 expands
-
-
-
-
-    carolina_label=create_carolina_label("Carolina Card Club")
-    session_start_time = get_session_start_time()
-    if session_start_time is None:
-        close_window(1)
-        return
-
-    session_start_time_label = create_session_start_time_label(session_start_time)
-    player_name_listbox=create_player_name_listbox(session_start_time, session_view)
-
-    if (digital_clock is None or
-        carolina_label is None or
-        session_start_time_label is None or
-        session_view is None or
-        player_name_listbox is None):
-        close_window(1)
-        return
-
-
-    close_button = create_session_close_button(session_view, close_window)
-    bottom_banner_center = create_bottom_banner_center()
-    bottom_banner_left = create_bottom_banner_left()
-
-    if (close_button is None or
-        bottom_banner_center is None or
-        bottom_banner_left is None):
-        close_window(1)
-        return
-
-    digital_clock.            grid(row=0, column=1, sticky="e")
-
-    carolina_label.           grid(row=1, column=0, columnspan=2, sticky='ew')
-
-    session_start_time_label. grid(row=2, column=1, sticky="w")
-
-    close_button.             grid(row=3, column=1, sticky="w")
-
-    session_view.             grid(row=4, column=1, rowspan=1, sticky="nsw")
-    player_name_listbox.      grid(row=4, column=0, rowspan=1, sticky="nse")
-
-    bottom_banner_center.     grid(row=5, column=0, columnspan=2, sticky="nsew")
-
-    bottom_banner_left.       grid(row=6, column=0, sticky="nsw")
-
-    digital_clock.start()
-    session_view.refresh_session_list()
+    return session_panel
 
 if __name__ == "__main__":
-    show_session_panel()
+    session_panel = show_session_panel()
 
     root.mainloop()
 
-    digital_clock.cancel_updating()
-
-    session_view.cancel_updating()
+    session_panel.stop_updating()
 
     if exit_code != 0:
         sys.exit(exit_code)
