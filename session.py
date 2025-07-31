@@ -466,8 +466,7 @@ class SessionView(tk.Frame):
                  session_start_epoch, session_stop_epoch,
                  _session_player_category_name, _session_rate) = session
                 self.selected_session_id = session_id
-                clickedfn(self,
-                          session_id, session_player_id, session_player_name,
+                clickedfn(session_id, session_player_id, session_player_name,
                           session_start_epoch, session_stop_epoch,
                           session_duration_string, session_seat_fee_string)
 
@@ -598,12 +597,12 @@ class SessionView(tk.Frame):
         if session_stop_time_epoch is None:
             if True: # TODO: Ask first!  Also, prompt for session payout.
                 print("Stopping session selected session_id:", session_id, "player_name:", player_name)
-                session_view.stop_session(session_id)
+                self.stop_session(session_id)
 
 
 
     def start_session(self, player_id, session_start_time):
-        start_epoch=((digital_clock.now_epoch()+ 59) // 60) * 60
+        start_epoch=((self.digital_clock.now_epoch()+ 59) // 60) * 60
         start = max(start_epoch, session_start_time)
         send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
                         (player_id,start))
@@ -612,7 +611,7 @@ class SessionView(tk.Frame):
 
 
     def stop_session(self, session_id):
-        stop_epoch = (digital_clock.now_epoch() // 60) * 60
+        stop_epoch = (self.digital_clock.now_epoch() // 60) * 60
         send_data_to_db("UPDATE Session SET Stop_Epoch = ? WHERE Session_ID == ?",
                         (stop_epoch, session_id))
         self.refresh_session_list()
