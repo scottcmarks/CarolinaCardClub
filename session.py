@@ -236,13 +236,17 @@ class InputPopup(tk.Toplevel):
     a Cancel Button and an OK Button
     """
     def __init__(self, parent, title, prompt, default=None):
-        super().__init__(parent)
+#debug        super().__init__(parent)
+        super().__init__(root)
         self.title(title)
+        # Next two lines essential to work on macOS 11.7, not necessary on current macOS
+        self.lift() # Bring it to the front
+        self.attributes('-topmost', True) # Keep it on top
+        ttk.Label(self, text=prompt).pack(padx=10)
         self.grab_set()  # Make the popup modal
 
         self.user_input = None
 
-        ttk.Label(self, text=prompt).pack(padx=10)
         self.entry = ttk.Entry(self)
         self.entry.pack(padx=10)
         self.entry.focus_set()  # Set focus to the entry field
@@ -267,6 +271,10 @@ class InputPopup(tk.Toplevel):
         self.button2.pack(side=tk.LEFT, padx=5) # Place Button 2 to the left (next to Button 1)
          # Bind the spacebar event to the Toplevel window
         self.bind('<space>', self.on_spacebar_press)
+         # Bind the Enter/Return event to the Toplevel window
+        self.bind('<Return>', self.on_enter_press)
+        self.bind('<Escape>', self.on_escape_press)
+
 
     def on_cancel(self):
         """
@@ -286,13 +294,30 @@ class InputPopup(tk.Toplevel):
         """
         Spacebar is an assistive shortcut for button2=OK.
         """
+        current_content =self.entry.get()
+        # Check if the string is not empty and its last character is a space
+        if current_content and current_content[-1] == ' ':
+            self.entry.delete(self.entry.index(tk.END) - 1) # Delete the character at the position just before the end
         self.button2.invoke()
-        self.done()
+
+    def on_enter_press(self, _event):
+        """
+        Enter is an assistive shortcut for button2=OK.
+        """
+        self.button2.invoke()
+
+    def on_escape_press(self, _event):
+        """
+        Escape is an assistive shortcut for button1=Cancel.
+        """
+        self.button1.invoke()
 
     def done(self):
         """
         Clean up this instance.
         """
+        self.unbind('<Escape>')
+        self.unbind('<Return>')
         self.unbind('<space>')
         self.destroy()
 
@@ -323,10 +348,6 @@ def get_user_input(label, prompt, default):
     return popup.user_input
 
 
-
-
-
-
 def create_carolina_font():
     """
     Create the font used by the Carolina Card Club label
@@ -337,9 +358,6 @@ def create_carolina_font():
         # Fallback to a different font if Old English is not available
         print("Warning: 'Academy Engraved LET' not found, using Arial (bold) as a fallback.")
         return tkFont.Font(family="Arial, size=48, weight=bold")
-
-
-
 
 
 class PlayerNameSelector(tk.Frame):
@@ -567,12 +585,15 @@ class SessionView(tk.Frame):
         for (item_id, session) in zip(self.treeview.get_children(), self.session_list):
             item_data = self.treeview.item(item_id)
 #            print(f"Item ID: {item_id}, Text: {item_data['text']}, Values: {item_data['values']}")
-            (item_player_name,
-             session_start_epoch_string,
-             effective_session_stop_epoch_string,
-             session_duration_string,
-             session_seat_fee_string) = item_data['values']
-            (session_id, session_player_id, session_player_name, session_start_epoch, session_stop_epoch, session_player_category_name, session_rate) = session
+            (_item_player_name,
+             _session_start_epoch_string,
+             _effective_session_stop_epoch_string,
+             _session_duration_string,
+             _session_seat_fee_string) = item_data['values']
+            (session_id,
+             session_player_id, _session_player_name,
+             _session_start_epoch, session_stop_epoch,
+             _session_player_category_name, _session_rate) = session
 #             print(f"""Item player name: {item_player_name} session: (
 # session_id: {session_id} player_id: {player_id},
 # session_player_name: {session_player_name}, session_start_epoch: {session_start_epoch},
@@ -596,7 +617,8 @@ class SessionView(tk.Frame):
         print("selected session_id:", session_id, "player_name:", player_name)
         if session_stop_time_epoch is None:
             if True: # TODO: Ask first!  Also, prompt for session payout.
-                print("Stopping session selected session_id:", session_id, "player_name:", player_name)
+                print("Stopping session selected session_id:", session_id,
+                      "player_name:", player_name)
                 self.stop_session(session_id)
 
 
@@ -647,16 +669,27 @@ class SessionPanel(tk.Frame):
     Frame specialize to lay out the session app
     """
     def __init__(self, master):
+        """
+        Simple initialization
+        """
         super().__init__(master)
         self['bg']=CAROLINA_BLUE_HEX
+        self.session_view = None
+        self.digital_clock = None
 
+
+
+    def populate(self):
+        """
+        Actual filling-out of the panel, that might fail along the way.
+        """
         self.digital_clock = DigitalClock(self,digital_clock_resolution, CAROLINA_BLUE_HEX)
 
         self.carolina_label = self.create_carolina_label("Carolina Card Club")
         self.session_start_time = self.get_session_start_time()
         if self.session_start_time is None:
             self.close_window(1)
-            return
+            return False
 
         self.session_start_time_label = \
             self.create_session_start_time_label(self.session_start_time)
@@ -670,7 +703,7 @@ class SessionPanel(tk.Frame):
             self.session_view is None or
             self.player_name_listbox is None):
             self.close_window(1)
-            return
+            return False
 
         self.close_button = self.create_session_close_button(self.session_view)
         self.bottom_banner_center = self.create_bottom_banner_center()
@@ -680,8 +713,7 @@ class SessionPanel(tk.Frame):
             self.bottom_banner_center is None or
             self.bottom_banner_left is None):
             self.close_window(1)
-            return
-
+            return False
 
 
         self.grid_columnconfigure(0, weight=1)  # Column 0 expands
@@ -713,7 +745,7 @@ class SessionPanel(tk.Frame):
         self.digital_clock.start()
         self.session_view.refresh_session_list()
 
-
+        return True
 
 
     def create_carolina_label(self, label_text):
@@ -758,8 +790,6 @@ class SessionPanel(tk.Frame):
                         background=CAROLINA_BLUE_HEX, fg="light gray")
 
 
-
-
     def create_player_name_listbox(self, session_start_time, session_view):
         """
         Create the player name listbox which accesses player-related functions
@@ -770,7 +800,6 @@ class SessionPanel(tk.Frame):
         def control_clickedfn(_player_name_listbox, player_id, name, balance):
             player_name_control_clicked(player_id, name, balance, session_view)
 
-    #    player_name_listbox = PlayerNameListbox(clickedfn)
         player_name_listbox = PlayerNameSelector(self, regular_clickedfn, control_clickedfn)
 
         if player_name_listbox.refresh_id_and_name_list() is None:
@@ -812,8 +841,11 @@ class SessionPanel(tk.Frame):
         Stop things that are updating
         from updating for clean exit
         """
-        self.digital_clock.cancel_updating()
-        self.session_view.cancel_updating()
+        if self.digital_clock:
+            self.digital_clock.cancel_updating()
+        if self.session_view:
+            self.session_view.cancel_updating()
+
 
 
     def close_window(self, ex_cd=0):
@@ -841,8 +873,8 @@ def show_session_panel():
     root.grid_columnconfigure(0, weight=1) # Make column 0 expand horizontally
 
     session_panel = SessionPanel(root)
-    session_panel.grid(row=0, column=0, sticky="nsew")
-
+    if session_panel.populate():
+        session_panel.grid(row=0, column=0, sticky="nsew")
     return session_panel
 
 if __name__ == "__main__":
