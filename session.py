@@ -15,6 +15,7 @@ import time
 from enum import Enum
 import locale
 import sys
+from inputpopup import *
 
 #Useful color chart at
 #https://cs111.wellesley.edu/archive/cs111_fall14/public_html/labs/lab12/tkintercolor.html
@@ -141,7 +142,7 @@ class DigitalClock(tk.Label):
         Use the get_user_input popup to set the clock time
         """
         try:
-            time_input = get_user_input("Set Clock Time", "Enter clock time:", self.now())
+            time_input = get_user_input(self, "Set Clock Time", "Enter clock time:", self.now())
             if time_input is None or time_input == '':
                 return None
             naive_time = datetime.datetime.strptime(time_input, "%Y-%m-%d " + self.digital_clock_time_format )
@@ -228,103 +229,6 @@ def send_data_to_db(query,data):
         if conn:
             conn.close()
 
-
-
-class InputPopup(tk.Toplevel):
-    """
-    Specialize TopLevel to package a user Entry with
-    a Cancel Button and an OK Button
-    """
-    def __init__(self, parent, title, prompt, default=None):
-#debug        super().__init__(parent)
-        super().__init__(root)
-        self.title(title)
-        # Next two lines essential to work on macOS 11.7, not necessary on current macOS
-        self.lift() # Bring it to the front
-        self.attributes('-topmost', True) # Keep it on top
-        ttk.Label(self, text=prompt).pack(padx=10)
-        self.grab_set()  # Make the popup modal
-
-        self.user_input = None
-
-        self.entry = ttk.Entry(self)
-        self.entry.pack(padx=10)
-        self.entry.focus_set()  # Set focus to the entry field
-        if default is not None:
-            self.entry.insert(0,default)
-
-        # Center the popup over the parent window (if available)
-        if parent:
-            parent.update_idletasks() # Ensure parent geometry is calculated
-            x = parent.winfo_x() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
-            y = parent.winfo_y() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
-            self.geometry(f"+{x}+{y}")
-            self.transient(parent)  # Keep popup on top of the parent window
-
-        button_frame = ttk.Frame(self)
-        button_frame.pack(pady=10) # Pack the frame in the popup
-
-        # Create the buttons and pack them into the frame
-        self.button1 = ttk.Button(button_frame, text="Cancel", command=self.on_cancel)
-        self.button2 = ttk.Button(button_frame, text="OK",     command=self.on_ok, default='active')
-        self.button1.pack(side=tk.LEFT, padx=5) # Place Button 1 to the left
-        self.button2.pack(side=tk.LEFT, padx=5) # Place Button 2 to the left (next to Button 1)
-         # Bind the spacebar event to the Toplevel window
-        self.bind('<space>', self.on_spacebar_press)
-         # Bind the Enter/Return event to the Toplevel window
-        self.bind('<Return>', self.on_enter_press)
-        self.bind('<Escape>', self.on_escape_press)
-
-
-    def on_cancel(self):
-        """
-        The Cancel button picks no input
-        """
-        self.user_input = None
-        self.done()
-
-    def on_ok(self):
-        """
-        The OK button pick the user input
-        """
-        self.user_input = self.entry.get()
-        self.done()
-
-    def on_spacebar_press(self, _event):
-        """
-        Spacebar is an assistive shortcut for button2=OK.
-        """
-        current_content =self.entry.get()
-        # Check if the string is not empty and its last character is a space
-        if current_content and current_content[-1] == ' ':
-            self.entry.delete(self.entry.index(tk.END) - 1) # Delete the character at the position just before the end
-        self.button2.invoke()
-
-    def on_enter_press(self, _event):
-        """
-        Enter is an assistive shortcut for button2=OK.
-        """
-        self.button2.invoke()
-
-    def on_escape_press(self, _event):
-        """
-        Escape is an assistive shortcut for button1=Cancel.
-        """
-        self.button1.invoke()
-
-    def done(self):
-        """
-        Clean up this instance.
-        """
-        self.unbind('<Escape>')
-        self.unbind('<Return>')
-        self.unbind('<space>')
-        self.destroy()
-
-
-
-
-
 def strip_time(time_string):
     return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
                              .strftime("%-m/%-d %H:%M"))
@@ -336,17 +240,6 @@ def local_time(epoch):
     # Customize the format using strftime codes (similar to SQLite)
     formatted_time = dt_object_local.strftime('%-m/%-d %H:%M')
     return formatted_time
-
-
-
-def get_user_input(label, prompt, default):
-    """
-    Use an InputPopup to get a user input
-    """
-    popup = InputPopup(root, label, prompt, default)
-    root.wait_window(popup) # Wait for the popup window to close
-    return popup.user_input
-
 
 def create_carolina_font():
     """
@@ -765,7 +658,7 @@ class SessionPanel(tk.Frame):
         Use the get_user_input popup to set the session start time
         """
         try:
-            time_input = get_user_input("Session Start Time", "Enter start time:",
+            time_input = get_user_input(root, "Session Start Time", "Enter start time:",
                                         self.digital_clock.today_at_1930())
             if time_input is None or time_input == '':
                 return None
