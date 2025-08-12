@@ -156,22 +156,25 @@ class SessionView(tk.Frame):
                                   "Column2",
                                   "Column3",
                                   "Column4",
-                                  "Column5" ),
+                                  "Column5",
+                                  "Column6" ),
                          show="headings")
-        self.treeview.column("Column1", width=140, stretch=False)
+        self.treeview.column("Column1", width=200, stretch=False)
         self.treeview.heading("Column1", text="Name")
-        self.treeview.column("Column2", width=90, stretch=False)
+        self.treeview.column("Column2", width=126, stretch=False)
         self.treeview.heading("Column2", text="Start Time")
-        self.treeview.column("Column3", width=90, stretch=False)
+        self.treeview.column("Column3", width=126, stretch=False)
         self.treeview.heading("Column3", text="Stop Time")
-        self.treeview.column("Column4", width=75, stretch=False)
+        self.treeview.column("Column4", width=105, stretch=False)
         self.treeview.heading("Column4", text="Duration")
-        self.treeview.column("Column5", width=75, stretch=False)
-        self.treeview.heading("Column5", text="Amount Due")
-        self.treeview.tag_configure("courier", font=("Courier", 10))
+        self.treeview.column("Column5", width=105, stretch=False)
+        self.treeview.heading("Column5", text="Amount")
+        self.treeview.column("Column6", width=105, stretch=False)
+        self.treeview.heading("Column6", text="Balance Due")
+        self.treeview.tag_configure("courier", font=("Courier", 14))
         self.treeview.tag_configure("red_item", background="red", foreground="white")  # Red background, white text
         self.treeview.tag_configure("green_item", background="green", foreground="black") # Green background, black text
-        self.treeview.tag_configure("bold_text", font=('Courier', 10, 'bold')) # You can apply other styling like bolding
+        self.treeview.tag_configure("bold_text", font=('Courier', 14, 'bold')) # You can apply other styling like bolding
         self.treeview.pack(padx=5,pady=5, fill=tk.BOTH, expand=True)
 
         self.next_update = None
@@ -208,14 +211,16 @@ class SessionView(tk.Frame):
                  _session_start_epoch_string,
                  _effective_session_stop_epoch_string,
                  session_duration_string,
-                 session_seat_fee_string) = item_data['values']
+                 session_amount_string,
+                 session_balance_string) = item_data['values']
                 (session_id, session_player_id, session_player_name,
                  session_start_epoch, session_stop_epoch,
-                 _session_player_category_name, _session_rate) = session
+                 session_duration_in_seconds, session_amount, session_balance) = session
                 self.selected_session_id = session_id
                 clickedfn(session_id, session_player_id, session_player_name,
                           session_start_epoch, session_stop_epoch,
-                          session_duration_string, session_seat_fee_string)
+                          session_duration_string, session_amount_string,
+                          session_balance)
 
     def on_session_clicked_lambda(self, clickedfn):
         """
@@ -230,7 +235,7 @@ class SessionView(tk.Frame):
         """
 
         self.treeview.delete(*self.treeview.get_children())
-        self.session_list = fetch_data_from_db("SELECT * FROM Session_List_View")
+        self.session_list = fetch_data_from_db("SELECT * FROM Session_Panel_View")
         if not self.session_list:
             return None
 
@@ -238,23 +243,25 @@ class SessionView(tk.Frame):
 
         for (session_id, _player_id, player_name,
              session_start_epoch, session_stop_epoch,
-             _category, hourly_rate) in self.session_list:
+             duration, amount, balance) in self.session_list:
             if session_stop_epoch is not None:
                 tags=("courier",)
                 effective_session_stop_epoch = session_stop_epoch
             else:
                 tags=("courier", "green_item")
                 effective_session_stop_epoch = self.digital_clock.now_epoch()
-            seconds = max(effective_session_stop_epoch - session_start_epoch, 0)
-            session_duration = f"{seconds//3600:d}h {(seconds%3600)//60:02d}m"
-            session_seat_fee = round(hourly_rate * seconds / 3600)
             tree_id = self.treeview.insert("", "end",
                                  text=player_name,
                                  values=(player_name,
                                          local_time(session_start_epoch),
                                          local_time(effective_session_stop_epoch),
-                                         session_duration.rjust(8),
-                                         locale.currency(session_seat_fee, grouping=True).rjust(8)),
+
+#                                         f"{duration:>{8}}",
+
+                                         f"{duration//3600}h{((duration%3600)//60):02d}m".rjust(8),
+
+                                         locale.currency(amount, grouping=True).rjust(8),
+                                         locale.currency(balance, grouping=True).rjust(8)),
                                  tags=tags)
             if session_id == self.selected_session_id:
                 selected_tree_id = tree_id
@@ -349,7 +356,7 @@ class SessionView(tk.Frame):
     def session_clickedfn(self,
                           session_id, _player_id, player_name,
                           session_start_time_epoch, session_stop_time_epoch,
-                          _session_duration, _session_seat_fee):
+                          _session_duration, _session_amount, _player_balance):
         print("selected session_id:", session_id, "player_name:", player_name)
         if session_stop_time_epoch is None:
             if True: # TODO: Ask first!  Also, prompt for session payout.
@@ -604,7 +611,7 @@ def show_session_panel():
 
     root.title("Carolina Card Club Session")
     root['bg']=CAROLINA_BLUE_HEX
-    root.geometry('680x800')
+    root.geometry('1024x640')
     root.grid_rowconfigure(0, weight=1)  # Make row 0 expand vertically
     root.grid_columnconfigure(0, weight=1) # Make column 0 expand horizontally
 

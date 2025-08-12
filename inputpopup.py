@@ -8,20 +8,37 @@ Responds to Enter/Return as OK and Escape as Cancel
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-class InputPopup(tk.Toplevel):
+class Popup(tk.Toplevel):
+    """
+    Specialize TopLevel to popup correctly even in macOS 11
+    """
+    def __init__(self, parent, title=None):
+#debug        super().__init__(parent)
+        super().__init__(parent)
+        if title:
+            self.title(title)
+        # Next two lines essential to work on macOS 11.7, not necessary on current macOS
+        self.lift() # Bring it to the front
+        self.attributes('-topmost', True) # Keep it on top
+        self.grab_set()  # Make the popup modal
+        # Center the popup over the parent window (if available)
+        if parent:
+            parent.update_idletasks() # Ensure parent geometry is calculated
+            x = parent.winfo_x() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
+            y = parent.winfo_y() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
+            self.geometry(f"+{x}+{y}")
+            self.transient(parent)  # Keep popup on top of the parent window
+
+
+class InputPopup(Popup):
     """
     Specialize TopLevel to package a user Entry with
     a Cancel Button and an OK Button
     """
     def __init__(self, parent, title, prompt, default=None):
 #debug        super().__init__(parent)
-        super().__init__(parent)
-        self.title(title)
-        # Next two lines essential to work on macOS 11.7, not necessary on current macOS
-        self.lift() # Bring it to the front
-        self.attributes('-topmost', True) # Keep it on top
+        super().__init__(parent, title)
         ttk.Label(self, text=prompt).pack(padx=10)
-        self.grab_set()  # Make the popup modal
 
         self.user_input = None
 
@@ -31,18 +48,10 @@ class InputPopup(tk.Toplevel):
         if default is not None:
             self.entry.insert(0,default)
 
-        # Center the popup over the parent window (if available)
-        if parent:
-            parent.update_idletasks() # Ensure parent geometry is calculated
-            x = parent.winfo_x() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
-            y = parent.winfo_y() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
-            self.geometry(f"+{x}+{y}")
-            self.transient(parent)  # Keep popup on top of the parent window
-
+        # Create the buttons and pack them into the frame
         button_frame = ttk.Frame(self)
         button_frame.pack(pady=10) # Pack the frame in the popup
 
-        # Create the buttons and pack them into the frame
         self.button1 = ttk.Button(button_frame, text="Cancel", command=self.on_cancel)
         self.button2 = ttk.Button(button_frame, text="OK",     command=self.on_ok, default='active')
         self.button1.pack(side=tk.LEFT, padx=5) # Place Button 1 to the left
