@@ -117,9 +117,10 @@ class DigitalClock(tk.Label):
         Reset the system clock
         """
         clock_time_from_user = self.get_clock_time()
-        actual_local_clock_time = int(datetime.datetime.now(local_tz).timestamp())
-        self.clock_offset = clock_time_from_user - actual_local_clock_time
-        self.update_time()
+        if clock_time_from_user is not None:
+            actual_local_clock_time = int(datetime.datetime.now(local_tz).timestamp())
+            self.clock_offset = clock_time_from_user - actual_local_clock_time
+            self.update_time()
 
     def get_clock_time(self):
         """
@@ -133,7 +134,7 @@ class DigitalClock(tk.Label):
             local_aware_time = naive_time.replace(tzinfo=local_tz)
             unix_epoch=local_aware_time.timestamp()
             return int(unix_epoch)
-        except tk.TclError:
+        except (tk.TclError, ValueError):
             return None
 
     def now_datetime(self):

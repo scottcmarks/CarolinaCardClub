@@ -1,50 +1,16 @@
-# CarolinaCardClub
-Database and access thereto  
-Copyright 2025 Scott Marks  
-All rights reserved
+# carolina_card_club
 
-## Carolina Card House Objects
+A new Flutter project.
 
-A session has
-- A session ID
-- A player ID
-- A start time
-- (Volatile) Maybe a stop time
-- (Derived) Some payment IDs
-- (Derived) Prepaid time remaining
+## Getting Started
 
-A payment has
-- A payment ID
-- An amount
-- A session ID
+This project is a starting point for a Flutter application.
 
-A player has
-- A player ID
-- First Name
-- Last Name
-- Nickname (defaults to Name)
-- Email address
-- Phone number
-- (Volatile) Prepaid balance
-- (Derived) Some session IDs
-- (Derived) maybe current session ID
-- (Derived) finished sessions unpaid balance
-- (Derived, volatile) maybe current session prepaid time remaining
+A few resources to get you started if this is your first Flutter project:
 
-Player ID list is
-- Some player IDs
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-Player list is
-- (Derived) some (Name, Email address, Phone Number) for each player
-
-
-## Toolchain
-[DB Browser for SQLite](https://sqlitebrowser.org/dl/)
-
-
-## Session GUI
-- Initialize Session start time
-- Start individual player Session objects (clock in)
-    -  Search sort order for players: (Category, Most recent Session clock out/in, NickName/Name)
-- Stop individual player Session objects (clock out, compute payoff, enter payoff)
-- Stop Session -- closing out open individual player Sessions as unpaid
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
