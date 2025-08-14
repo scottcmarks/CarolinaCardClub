@@ -370,7 +370,7 @@ class SessionView(tk.Frame):
     def start_session(self, player_id, session_start_time):
         start_epoch=((self.digital_clock.now_epoch()+ 59) // 60) * 60
         start = max(start_epoch, session_start_time)
-        send_data_to_db("INSERT INTO Session (Player_ID, Start_Epoch) VALUES (?, ?)",
+        send_data_to_db("INSERT INTO Session (Player_Id, Start_Epoch) VALUES (?, ?)",
                         (player_id,start))
         self.switch_to_running_session(player_id)
 
@@ -378,7 +378,7 @@ class SessionView(tk.Frame):
 
     def stop_session(self, session_id):
         stop_epoch = (self.digital_clock.now_epoch() // 60) * 60
-        send_data_to_db("UPDATE Session SET Stop_Epoch = ? WHERE Session_ID == ?",
+        send_data_to_db("UPDATE Session SET Stop_Epoch = ? WHERE Session_Id == ?",
                         (stop_epoch, session_id))
         self.refresh_session_list()
 
