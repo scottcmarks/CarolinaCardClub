@@ -115,7 +115,7 @@ class PlayerNameSelector(tk.Frame):
         Fill out the list of players if possible.
         """
         self.listbox.delete(0,tk.END)
-        self.id_and_name_list = fetch_data_from_db("SELECT * FROM Player_Selection_View")
+        self.id_and_name_list = fetch_data_from_db("SELECT * FROM Player_Selection_List")
         if not self.id_and_name_list:
             messagebox.showinfo("No Data", "No items found in the database.")
             return None
@@ -235,7 +235,7 @@ class SessionView(tk.Frame):
         """
 
         self.treeview.delete(*self.treeview.get_children())
-        self.session_list = fetch_data_from_db("SELECT * FROM Session_Panel_View")
+        self.session_list = fetch_data_from_db("SELECT * FROM Session_Panel_List")
         if not self.session_list:
             return None
 
@@ -329,14 +329,15 @@ class SessionView(tk.Frame):
             item_data = self.treeview.item(item_id)
 #            print(f"Item ID: {item_id}, Text: {item_data['text']}, Values: {item_data['values']}")
             (_item_player_name,
-             _session_start_epoch_string,
+             _item_start_epoch_string,
              _effective_session_stop_epoch_string,
-             _session_duration_string,
-             _session_seat_fee_string) = item_data['values']
+             _item_duration_string,
+             _item_seat_fee_string,
+             _item_player_balance) = item_data['values']
             (session_id,
              session_player_id, _session_player_name,
              _session_start_epoch, session_stop_epoch,
-             _session_player_category_name, _session_rate) = session
+             _session_duration, _session_amount, _session_player_balance) = session
 #             print(f"""Item player name: {item_player_name} session: (
 # session_id: {session_id} player_id: {player_id},
 # session_player_name: {session_player_name}, session_start_epoch: {session_start_epoch},
