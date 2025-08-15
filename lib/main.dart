@@ -92,21 +92,27 @@ class MyApp extends StatelessWidget {
               bodyMedium: const TextStyle(fontSize: 14.0),
             ),
       ),
-      home: const MainSplitViewPage(),
+      home: MainSplitViewPage(
+          sessionStartTime: DateTime.now()
+      ),
     );
   }
 }
 
 class MainSplitViewPage extends StatefulWidget {
-  const MainSplitViewPage({Key? key}) : super(key: key);
+  final DateTime sessionStartTime;
 
-  @override
+//  const MainSplitViewPage({Key? key}) : super(key: key);
+  MainSplitViewPage({required this.sessionStartTime});
+
+@override
   State<MainSplitViewPage> createState() => _MainSplitViewPageState();
 }
 
 class _MainSplitViewPageState extends State<MainSplitViewPage> {
   late Future<List<Map<String, dynamic>>> _playerListData;
   late Future<List<Map<String, dynamic>>> _sessionPanelListData;
+  late DateTime _currentSessionStartTime;
   int? _selectedPlayerId;
 
   @override
@@ -114,6 +120,27 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
     super.initState();
     _playerListData = AppDatabase().fetchPlayerSelectionList();
     _sessionPanelListData = AppDatabase().fetchSessionPanelList();
+    _currentSessionStartTime = widget.sessionStartTime;
+  }
+
+  Future<void> _showStartTimeDialog(BuildContext context) async {
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_currentSessionStartTime), // Default to current time
+      helpText: 'Select Session Start Time',
+    );
+
+    if (pickedTime != null) {
+      setState(() {
+        _currentSessionStartTime = DateTime(
+          _currentSessionStartTime.year,
+          _currentSessionStartTime.month,
+          _currentSessionStartTime.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+      });
+    }
   }
 
   void _onPlayerSelected(int playerId) {
@@ -123,15 +150,27 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
     });
   }
 
-  void _onSessionSelected(int sessionId) {
-    print("Session selected!");
+
+  void _onStopSession() {
+    // Implement your logic to stop the session here
+    debugPrint("Stop Session button pressed!");
+    // You'd likely update the session's stop time and refresh the UI
   }
+
+  void _onSessionSelected(int sessionId) {
+    debugPrint("Session $sessionId selected!");
+    // Implement your logic for when a session is selected
+  }
+
 
   @override
   Widget build(BuildContext context) {
+    final String formattedSessionStartTime =
+        DateFormat('HH:mm:ss').format(_currentSessionStartTime);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Carolina Card Club',
+        title: Text('Carolina Card Club Program',
                            // style: GoogleFonts.lato( // Replace with your chosen Google Font
                            //   fontSize: 48,
                            //   fontWeight: FontWeight.w700,
@@ -140,12 +179,22 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                            //     ..strokeWidth = 2 // Adjust the stroke width as needed
                            //     ..color = Color(0xFF4B9CD3), // Adjust the stroke color as needed
                            // )
-                           style: const TextStyle( // Replace with your chosen Google Font
-                             fontSize: 48,
-                             color: Color(0xFF4B9CD3), // Adjust the stroke color as needed
-                           )
-        ),
+                    style: const TextStyle( // Replace with your chosen Google Font
+                                   fontSize: 48,
+                                   color: Color(0xFF4B9CD3), // Adjust the stroke color as needed
+                                 )
+               ),
+        centerTitle: true,
         actions: <Widget>[
+          // Settings Icon
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              // Handle settings icon press
+              debugPrint("Settings icon pressed!");
+            },
+          ),
+          // Clock
           Padding(
             padding: const EdgeInsets.only(right: 16.0), // Add some padding
             child: RealtimeClock(), // Your clock widget
@@ -235,104 +284,136 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
           // Right Pane: Session List
           Expanded(
             flex: 2,
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _sessionPanelListData,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                } else if (snapshot.hasError) {
-                  return const Center(child: Text('Error!'));
-                } else if (snapshot.data == null || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No sessions found for selected player.'));
-                } else {
-                  final data = snapshot.data!;
-                  return ListView.builder(
-                    itemCount: data.length,
-                    itemBuilder: (context, index) {
-                      final item = data[index];
+            child: Column( // Use a Column to stack the header and the list
+              children: [
+                // *** This is your "title bar" for the right pane ***
+                Container(
+                  padding: const EdgeInsets.all(12.0),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200], // A subtle background for the header
+                    border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Session Start Time: $formattedSessionStartTime',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      ElevatedButton(
+                        onPressed: _onStopSession, // Call the stop session method
+                        child: const Text('Stop Session'),
+                      ),
+                    ],
+                  ),
+                ),
+                // End of the right pane's "title bar"
 
-                      final String name = item['Name'] ?? 'Unnamed';
-                      final int? startEpoch = item['StartEpoch'];
-                      final int? stopEpoch = item['Stop_Epoch'];
-                      final double? amount = item['Amount'];
-                      final double? balance = item['Balance'];
+                // The rest of your session list
+                Expanded( // Wrap your FutureBuilder in Expanded to fill the remaining space
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _sessionPanelListData,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      } else if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      } else if (snapshot.data == null || snapshot.data!.isEmpty) {
+                        return const Center(child: Text('No sessions found for selected player.'));
+                      } else {
+                        final data = snapshot.data!;
+                        return ListView.builder(
+                          itemCount: data.length,
+                          itemBuilder: (context, index) {
+                            final item = data[index];
 
-                      final String formattedStartTime = startEpoch != null
-                          ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000))
-                          : 'N/A';
-                      final String formattedStopTime = stopEpoch != null
-                          ? DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(stopEpoch * 1000))
-                          : 'Ongoing';
-                      final String formattedAmount = amount != null ? '\$${amount.toStringAsFixed(2)}' : '\$0.00';
-                      final String formattedBalance = balance != null ? '\$${balance.toStringAsFixed(2)}' : '\$0.00';
+                            final String name = item['Name'] ?? 'Unnamed';
+                            final int? startEpoch = item['StartEpoch'];
+                            final int? stopEpoch = item['Stop_Epoch'];
+                            final double? amount = item['Amount'];
+                            final double? balance = item['Balance'];
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            final String formattedStartTime = startEpoch != null
+                                ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000))
+                                : 'N/A';
+                            final String formattedStopTime = stopEpoch != null
+                                ? DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(stopEpoch * 1000))
+                                : 'Ongoing';
+                            final String formattedAmount = amount != null ? '\$${amount.toStringAsFixed(2)}' : '\$0.00';
+                            final String formattedBalance = balance != null ? '\$${balance.toStringAsFixed(2)}' : '\$0.00';
 
-                        child: MouseRegion(
-                          onHover: (PointerHoverEvent event) {
-                            if (event.synthesized == false && event.buttons == 0) {
-                              if (HardwareKeyboard.instance.isShiftPressed) {
-                                // Shift + hover detected
-                              }
-                            }
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              child: MouseRegion(
+                                onHover: (PointerHoverEvent event) {
+                                  if (event.synthesized == false && event.buttons == 0) {
+                                    if (HardwareKeyboard.instance.isShiftPressed) {
+                                      // Shift + hover detected
+                                      debugPrint("Shift + hover!");
+                                    } else {
+                                      // Hover detected
+                                      // debugPrint("Hover!");
+                                    }
+                                  }
+                                },
+                                child: InkWell(
+                                  onTap: () {
+                                    if (HardwareKeyboard.instance.isShiftPressed) {
+                                      // Shift + left click detected
+                                      debugPrint("Shift + Left click!");
+                                    } else if (HardwareKeyboard.instance.isControlPressed) {
+                                      // Ctrl/Cmd + left click detected
+                                      debugPrint("Ctrl/Cmd + Left click!");
+                                    } else if (HardwareKeyboard.instance.isAltPressed) {
+                                      // Alt + left click detected
+                                      debugPrint("Alt + Left click!");
+                                    } else {
+                                      // Regular left click
+                                      debugPrint("Regular Left click!");
+                                    }
+                                    _onSessionSelected(item['Session_Id']); // Your original logic for session selection
+                                  },
+                                  onSecondaryTap: () {
+                                    // Right-click detected
+                                    debugPrint("Right click!");
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              name,
+                                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                            ),
+                                            Text(
+                                              'Balance: $formattedBalance',
+                                              style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text('$formattedStartTime - $formattedStopTime'),
+                                        Text(
+                                          'Amount: $formattedAmount',
+                                          style: const TextStyle(fontSize: 18.0, color: Colors.green),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              )
+                            );
                           },
-                          child: InkWell(
-                            onTap: () {
-                              if (HardwareKeyboard.instance.isShiftPressed) {
-                                // Shift + left click detected
-                                print("Shift + Left click!");
-                              } else if (HardwareKeyboard.instance.isControlPressed) {
-                                // Ctrl/Cmd + left click detected
-                                print("Ctrl/Cmd + Left click!");
-                              } else if (HardwareKeyboard.instance.isAltPressed) {
-                                // Alt + left click detected
-                                print("Alt + Left click!");
-                              } else {
-                                // Regular left click
-                                print("Regular Left click!");
-                              }
-                              _onSessionSelected(item['Session_Id']); // Your original logic for session selection
-                            },
-                            onSecondaryTap: () {
-                              // Right-click detected
-                              print("Right click!");
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        name,
-                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                      ),
-                                      Text(
-                                        'Balance: $formattedBalance',
-                                        style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text('$formattedStartTime - $formattedStopTime'),
-                                  // Changed text to "Amount:" and removed fontWeight
-                                  Text(
-                                    'Amount: $formattedAmount',
-                                    style: const TextStyle(fontSize: 18.0, color: Colors.green), // Removed fontWeight
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        )
-                      );
+                        );
+                      }
                     },
-                  );
-                }
-              },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
