@@ -1,7 +1,7 @@
 // main.dart
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:typed_data'; // Import for ByteData
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
@@ -9,7 +9,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 
-// AppDatabase (remains the same as before, with the added fetchPlayerSelectionList)
+// AppDatabase (no changes needed)
 class AppDatabase {
   static final AppDatabase _instance = AppDatabase._internal();
   factory AppDatabase() => _instance;
@@ -46,13 +46,11 @@ class AppDatabase {
     return await openDatabase(path, version: 1);
   }
 
-  // Method to fetch data from the "Player_Selection_List" view
   Future<List<Map<String, dynamic>>> fetchPlayerSelectionList() async {
     final db = await database;
     return await db.query('Player_Selection_List');
   }
 
-  // Method to fetch data from the "Session_Panel_List" view, with optional player filtering
   Future<List<Map<String, dynamic>>> fetchSessionPanelList({int? playerId}) async {
     final db = await database;
     if (playerId != null) {
@@ -84,8 +82,12 @@ class MyApp extends StatelessWidget {
       title: 'Carolina Card Club App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        textTheme: Theme.of(context).textTheme.copyWith(
+              bodyLarge: const TextStyle(fontSize: 16.0),
+              bodyMedium: const TextStyle(fontSize: 14.0),
+            ),
       ),
-      home: const MainSplitViewPage(), // Our new main page with two lists
+      home: const MainSplitViewPage(),
     );
   }
 }
@@ -100,16 +102,15 @@ class MainSplitViewPage extends StatefulWidget {
 class _MainSplitViewPageState extends State<MainSplitViewPage> {
   late Future<List<Map<String, dynamic>>> _playerListData;
   late Future<List<Map<String, dynamic>>> _sessionPanelListData;
-  int? _selectedPlayerId; // State variable to hold the selected player's ID
+  int? _selectedPlayerId;
 
   @override
   void initState() {
     super.initState();
     _playerListData = AppDatabase().fetchPlayerSelectionList();
-    _sessionPanelListData = AppDatabase().fetchSessionPanelList(); // Initially load all sessions
+    _sessionPanelListData = AppDatabase().fetchSessionPanelList();
   }
 
-  // Function to refresh the session list when a player is selected
   void _onPlayerSelected(int playerId) {
     setState(() {
       _selectedPlayerId = playerId;
@@ -123,11 +124,11 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
       appBar: AppBar(
         title: const Text('Players & Sessions'),
       ),
-      body: Row( // Use Row to place the two lists side-by-side
+      body: Row(
         children: [
           // Left Pane: Player List
-          Expanded( // Take up available space, but allow other Expanded widgets to share it
-            flex: 1, // Give this pane 1 part of the available space
+          Expanded(
+            flex: 1,
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _playerListData,
               builder: (context, snapshot) {
@@ -143,15 +144,20 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                       final item = data[index];
                       final int playerId = item['Player_Id'];
                       final String playerName = item['Name'] ?? 'Unnamed';
-                      final double? balance = item['Balance'];
+                      final double? playerBalance = item['Balance'];
+
+                      // Determine background color based on balance
+                      Color? cardColor = _selectedPlayerId == playerId ? Colors.blue.shade100 : null;
+                      if (playerBalance != null && playerBalance < 0) {
+                        cardColor = Colors.red.shade100;
+                      }
 
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                        color: _selectedPlayerId == playerId ? Colors.blue.shade100 : null, // Highlight selected player
+                        color: cardColor,
                         child: ListTile(
                           title: Text(playerName),
-                          subtitle: Text('Balance: \$${balance?.toStringAsFixed(2) ?? '0.00'}'),
-                          onTap: () => _onPlayerSelected(playerId), // Update selected player on tap
+                          onTap: () => _onPlayerSelected(playerId),
                         ),
                       );
                     },
@@ -160,11 +166,11 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
               },
             ),
           ),
-          const VerticalDivider(width: 1), // Optional divider between lists
+          const VerticalDivider(width: 1),
 
-          // Right Pane: Session List (filtered by selected player)
-          Expanded( // Take up available space, giving more room to the right list
-            flex: 2, // Give this pane 2 parts of the available space
+          // Right Pane: Session List
+          Expanded(
+            flex: 2,
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _sessionPanelListData,
               builder: (context, snapshot) {
@@ -189,7 +195,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                           ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000))
                           : 'N/A';
                       final String formattedStopTime = stopEpoch != null
-                          ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(stopEpoch * 1000))
+                          ? DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(stopEpoch * 1000))
                           : 'Ongoing';
                       final String formattedAmount = amount != null ? '\$${amount.toStringAsFixed(2)}' : '\$0.00';
                       final String formattedBalance = balance != null ? '\$${balance.toStringAsFixed(2)}' : '\$0.00';
@@ -201,15 +207,26 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                name,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    'Balance: $formattedBalance',
+                                    style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 8),
-                              Text('Start: $formattedStartTime'),
-                              Text('Stop: $formattedStopTime'),
-                              Text('Amount Charged: $formattedAmount'),
-                              Text('Player Balance: $formattedBalance'),
+                              Text('$formattedStartTime - $formattedStopTime'),
+                              // Changed text to "Amount:" and removed fontWeight
+                              Text(
+                                'Amount: $formattedAmount',
+                                style: const TextStyle(fontSize: 18.0, color: Colors.green), // Removed fontWeight
+                              ),
                             ],
                           ),
                         ),
