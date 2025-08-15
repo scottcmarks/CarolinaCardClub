@@ -12,6 +12,8 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'package:carolina_card_club/realtimeclock.dart';
+
 // AppDatabase (no changes needed)
 class AppDatabase {
   static final AppDatabase _instance = AppDatabase._internal();
@@ -143,6 +145,12 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                              color: Color(0xFF4B9CD3), // Adjust the stroke color as needed
                            )
         ),
+        actions: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0), // Add some padding
+            child: RealtimeClock(), // Your clock widget
+          ),
+        ],
       ),
       body: Row(
         children: [
