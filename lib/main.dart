@@ -2,12 +2,15 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data'; // Import for ByteData
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
 
 // AppDatabase (no changes needed)
 class AppDatabase {
@@ -118,11 +121,28 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
     });
   }
 
+  void _onSessionSelected(int sessionId) {
+    print("Session selected!");
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Players & Sessions'),
+        title: Text('Carolina Card Club',
+                           // style: GoogleFonts.lato( // Replace with your chosen Google Font
+                           //   fontSize: 48,
+                           //   fontWeight: FontWeight.w700,
+                           //   foreground: Paint()
+                           //     ..style = PaintingStyle.stroke
+                           //     ..strokeWidth = 2 // Adjust the stroke width as needed
+                           //     ..color = Color(0xFF4B9CD3), // Adjust the stroke color as needed
+                           // )
+                           style: const TextStyle( // Replace with your chosen Google Font
+                             fontSize: 48,
+                             color: Color(0xFF4B9CD3), // Adjust the stroke color as needed
+                           )
+        ),
       ),
       body: Row(
         children: [
@@ -155,10 +175,46 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                         color: cardColor,
-                        child: ListTile(
-                          title: Text(playerName),
-                          onTap: () => _onPlayerSelected(playerId),
-                        ),
+
+                        // child: ListTile(
+                        //   title: Text(playerName),
+                        //   onTap: () => _onPlayerSelected(playerId),
+                        // ),
+
+                        child: MouseRegion(
+                          onHover: (PointerHoverEvent event) {
+                            if (event.synthesized == false && event.buttons == 0) {
+                              if (HardwareKeyboard.instance.isShiftPressed) {
+                                // Shift + hover detected
+                              }
+                            }
+                          },
+                          child: InkWell(
+                            onTap: () {
+                              if (HardwareKeyboard.instance.isShiftPressed) {
+                                // Shift + left click detected
+                                print("Shift + Left click!");
+                              } else if (HardwareKeyboard.instance.isControlPressed) {
+                                // Ctrl/Cmd + left click detected
+                                print("Ctrl/Cmd + Left click!");
+                              } else if (HardwareKeyboard.instance.isAltPressed) {
+                                // Alt + left click detected
+                                print("Alt + Left click!");
+                              } else {
+                                // Regular left click
+                                print("Regular Left click!");
+                              }
+                              _onPlayerSelected(playerId); // Your original logic for player selection
+                            },
+                            onSecondaryTap: () {
+                              // Right-click detected
+                              print("Right click!");
+                            },
+                            child: ListTile(
+                              title: Text(playerName),
+                            ),
+                          ),
+                        )
                       );
                     },
                   );
@@ -176,8 +232,10 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
-                } else if (snapshot.hasError || snapshot.data == null || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No sessions found for selected player or error.'));
+                } else if (snapshot.hasError) {
+                  return const Center(child: Text('Error!'));
+                } else if (snapshot.data == null || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No sessions found for selected player.'));
                 } else {
                   final data = snapshot.data!;
                   return ListView.builder(
@@ -202,34 +260,66 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
 
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                        child: MouseRegion(
+                          onHover: (PointerHoverEvent event) {
+                            if (event.synthesized == false && event.buttons == 0) {
+                              if (HardwareKeyboard.instance.isShiftPressed) {
+                                // Shift + hover detected
+                              }
+                            }
+                          },
+                          child: InkWell(
+                            onTap: () {
+                              if (HardwareKeyboard.instance.isShiftPressed) {
+                                // Shift + left click detected
+                                print("Shift + Left click!");
+                              } else if (HardwareKeyboard.instance.isControlPressed) {
+                                // Ctrl/Cmd + left click detected
+                                print("Ctrl/Cmd + Left click!");
+                              } else if (HardwareKeyboard.instance.isAltPressed) {
+                                // Alt + left click detected
+                                print("Alt + Left click!");
+                              } else {
+                                // Regular left click
+                                print("Regular Left click!");
+                              }
+                              _onSessionSelected(item['Session_Id']); // Your original logic for session selection
+                            },
+                            onSecondaryTap: () {
+                              // Right-click detected
+                              print("Right click!");
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    name,
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        'Balance: $formattedBalance',
+                                        style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 8),
+                                  Text('$formattedStartTime - $formattedStopTime'),
+                                  // Changed text to "Amount:" and removed fontWeight
                                   Text(
-                                    'Balance: $formattedBalance',
-                                    style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                                    'Amount: $formattedAmount',
+                                    style: const TextStyle(fontSize: 18.0, color: Colors.green), // Removed fontWeight
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              Text('$formattedStartTime - $formattedStopTime'),
-                              // Changed text to "Amount:" and removed fontWeight
-                              Text(
-                                'Amount: $formattedAmount',
-                                style: const TextStyle(fontSize: 18.0, color: Colors.green), // Removed fontWeight
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
+                        )
                       );
                     },
                   );
