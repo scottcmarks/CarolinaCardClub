@@ -1,5 +1,7 @@
+
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart'; // For formatting the time
 
 class RealtimeClock extends StatefulWidget {
@@ -36,7 +38,8 @@ class _RealtimeClockState extends State<RealtimeClock> {
 
     return Text(
       formattedTime,
-      style: TextStyle(fontSize: 18, color: Colors.black), // Customize style as needed
+//      style: TextStyle(fontSize: 18, color: Colors.black), // Customize style as needed
+      style: GoogleFonts.robotoMono(fontSize: 18, color: Colors.black), // Customize style as needed
     );
   }
 }
