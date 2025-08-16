@@ -14,7 +14,8 @@ import 'package:carolina_card_club/models/player_category.dart';
 import 'package:carolina_card_club/models/rate.dart';
 import 'package:carolina_card_club/models/rate_interval.dart';
 import 'package:carolina_card_club/models/session.dart';
-import 'package:carolina_card_club/models/player_selection_item.dart'; // Import the new data model
+import 'package:carolina_card_club/models/player_selection_item.dart';
+import 'package:carolina_card_club/models/session_panel_item.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -238,6 +239,25 @@ class DatabaseHelper {
     final List<Map<String, dynamic>> maps = await db.query('Player_Selection_List');
     return List.generate(maps.length, (i) {
       return PlayerSelectionItem.fromMap(maps[i]); // Convert each map to a PlayerSelectionItem
+    });
+  }
+  Future<List<SessionPanelItem>> fetchSessionPanelList({int? playerId}) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps =
+      (playerId != null)
+      ? await db.query(
+        'Session_Panel_List',
+        where: 'Player_Id = ?',
+        whereArgs: [playerId],
+        orderBy: 'Stop_Epoch ASC, Name ASC',
+      )
+      : await db.query(
+        'Session_Panel_List',
+        where: 'Stop_Epoch IS NULL',
+        orderBy: 'Stop_Epoch ASC, Name ASC',
+      );
+    return List.generate(maps.length, (i) {
+      return SessionPanelItem.fromMap(maps[i]); // Convert each map to a SessionPanelItem
     });
   }
 }

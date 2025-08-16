@@ -15,8 +15,9 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:carolina_card_club/realtimeclock.dart';
 
-import 'package:carolina_card_club/database/database_helper.dart'; // Adjust the path as needed
-import 'package:carolina_card_club/models/player_selection_item.dart'; // Adjust the path as needed
+import 'package:carolina_card_club/database/database_helper.dart';
+import 'package:carolina_card_club/models/player_selection_item.dart';
+import 'package:carolina_card_club/models/session_panel_item.dart';
 
 
 // AppDatabase (no changes needed)
@@ -143,10 +144,8 @@ DateTime setTimeToDefaultSessionStartTime(DateTime inputDateTime) {
 
 
 class _MainSplitViewPageState extends State<MainSplitViewPage> {
-  // Change the type of _playerListData
-  // late Future<List<Map<String, dynamic>>> _playerListData;
   late Future<List<PlayerSelectionItem>> _playerListData;
-  late Future<List<Map<String, dynamic>>> _sessionPanelListData;
+  late Future<List<SessionPanelItem>> _sessionPanelListData;
 
   late DateTime _currentSessionStartTime;
   int? _selectedPlayerId;
@@ -154,8 +153,8 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   @override
   void initState() {
     super.initState();
-    _playerListData = DatabaseHelper().fetchPlayerSelectionList();  // AppDatabase().fetchPlayerSelectionList();
-    _sessionPanelListData = AppDatabase().fetchSessionPanelList();
+    _playerListData = DatabaseHelper().fetchPlayerSelectionList();
+    _sessionPanelListData = DatabaseHelper().fetchSessionPanelList();
     _currentSessionStartTime = widget.sessionStartTime;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showStartTimeDialog(context);
@@ -225,7 +224,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   void _onPlayerSelected(int playerId) {
     setState(() {
       _selectedPlayerId = playerId;
-      _sessionPanelListData = AppDatabase().fetchSessionPanelList(playerId: _selectedPlayerId);
+      _sessionPanelListData = DatabaseHelper().fetchSessionPanelList(playerId: _selectedPlayerId);
     });
   }
 
@@ -406,7 +405,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
 
                 // The rest of your session list
                 Expanded( // Wrap your FutureBuilder in Expanded to fill the remaining space
-                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                  child: FutureBuilder<List<SessionPanelItem>>(
                     future: _sessionPanelListData,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -420,17 +419,18 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                           return const Center(child: Text('No sessions found for selected player.'));
                         }
                       } else {
-                        final data = snapshot.data!;
+                        final data = snapshot.data!;  // now 'data' is List<<SessionPanelItem>>
                         return ListView.builder(
                           itemCount: data.length,
                           itemBuilder: (context, index) {
-                            final item = data[index];
+                            final SessionPanelItem item = data[index]; // Directly access the data model object
 
-                            final String name = item['Name'] ?? 'Unnamed';
-                            final int? startEpoch = item['StartEpoch'];
-                            final int? stopEpoch = item['Stop_Epoch'];
-                            final double? amount = item['Amount'];
-                            final double? balance = item['Balance'];
+                            // No need to extract the name, etc. from a map
+                            final String name = item.name;
+                            final int? startEpoch = item.startEpoch;
+                            final int? stopEpoch = item.stopEpoch;
+                            final double? amount = item.amount;
+                            final double? balance = item.balance;
 
                             final String formattedStartTime = startEpoch != null
                                 ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000))
@@ -442,7 +442,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                             final String formattedBalance = balance != null ? '\$${balance.toStringAsFixed(2)}' : '\$0.00';
 
                             return Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                               child: MouseRegion(
                                 onHover: (PointerHoverEvent event) {
                                   if (event.synthesized == false && event.buttons == 0) {
@@ -450,7 +450,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                                       // Shift + hover detected
                                       debugPrint("Shift + hover!");
                                     } else {
-                                      // Hover detected
+                                      // Hover detected.  Don't print, though -- too many! ;)
                                       // debugPrint("Hover!");
                                     }
                                   }
@@ -470,14 +470,14 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                                       // Regular left click
                                       debugPrint("Regular Left click!");
                                     }
-                                    _onSessionSelected(item['Session_Id']); // Your original logic for session selection
+                                    _onSessionSelected(item.sessionId); // Your original logic for session selection
                                   },
                                   onSecondaryTap: () {
                                     // Right-click detected
                                     debugPrint("Right click!");
                                   },
                                   child: Padding(
-                                    padding: const EdgeInsets.all(16.0),
+                                    padding: const EdgeInsets.all(4),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
@@ -490,15 +490,25 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                                             ),
                                             Text(
                                               'Balance: $formattedBalance',
-                                              style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+                                              style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold,
+                                                color:
+                                                  (item.balance == 0.0 ? Colors.grey
+                                                  :item.balance < 0.0 ? Colors.red
+                                                  :Colors.green)
+                                              ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 8),
-                                        Text('$formattedStartTime - $formattedStopTime'),
-                                        Text(
-                                          'Amount: $formattedAmount',
-                                          style: const TextStyle(fontSize: 18.0, color: Colors.green),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Amount: $formattedAmount',
+                                              style: const TextStyle(fontSize: 18.0, color: Colors.green),
+                                            ),
+                                            Text('$formattedStartTime - $formattedStopTime'),
+                                          ],
                                         ),
                                       ],
                                     ),
