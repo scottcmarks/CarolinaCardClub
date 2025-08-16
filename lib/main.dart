@@ -20,75 +20,9 @@ import 'package:carolina_card_club/models/player_selection_item.dart';
 import 'package:carolina_card_club/models/session_panel_item.dart';
 
 
-// AppDatabase (no changes needed)
-class AppDatabase {
-  static final AppDatabase _instance = AppDatabase._internal();
-  factory AppDatabase() => _instance;
-  AppDatabase._internal();
-
-  static Database? _database;
-  static const String _databaseFileName = 'CarolinaCardClub.db';
-
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
-  }
-
-  Future<Database> _initDatabase() async {
-    Directory documentsDirectory = await getApplicationDocumentsDirectory();
-    String path = Path.join(documentsDirectory.path, _databaseFileName);
-
-    bool databaseExists = await File(path).exists();
-
-    if (!databaseExists) {
-      try {
-        ByteData data = await rootBundle.load(Path.join('assets', _databaseFileName));
-        List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-        await File(path).writeAsBytes(bytes, flush: true);
-        print("Database copied from assets to: $path");
-      } catch (e) {
-        print("Error copying database from assets: $e");
-      }
-    } else {
-      print("Database already exists at: $path. Opening existing database.");
-    }
-
-    return await openDatabase(path, version: 1);
-  }
-
-  Future<List<Map<String, dynamic>>> fetchPlayerSelectionList() async {
-    final db = await database;
-    return await db.query('Player_Selection_List');
-  }
-
-  Future<List<Map<String, dynamic>>> fetchSessionPanelList({int? playerId}) async {
-    final db = await database;
-    if (playerId != null) {
-      return await db.query(
-        'Session_Panel_List',
-        where: 'Player_Id = ?',
-        whereArgs: [playerId],
-        orderBy: 'Stop_Epoch ASC, Name ASC',
-      );
-    } else {
-      return await db.query(
-        'Session_Panel_List',
-        where: 'Stop_Epoch IS NULL',
-        orderBy: 'Stop_Epoch ASC, Name ASC',
-      );
-    }
-  }
-}
-
-
-
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final dbHelper = AppDatabase();
-  await dbHelper.database;
   runApp(const MyApp());
 }
 
