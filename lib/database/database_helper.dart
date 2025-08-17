@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
@@ -17,12 +19,22 @@ import 'package:carolina_card_club/models/session.dart';
 import 'package:carolina_card_club/models/player_selection_item.dart';
 import 'package:carolina_card_club/models/session_panel_item.dart';
 
-class DatabaseHelper {
+class DatabaseHelper extends ChangeNotifier {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
 
   final String _databaseName = "CarolinaCardClub.db";
   final String _remoteDbUrl = "http://carolinacardclub.com/CarolinaCardClub.db";
+  bool _showOnlyActiveSessions = true;
+
+  bool showingOnlyActiveSessions () {
+    return _showOnlyActiveSessions;
+  }
+
+  void updateShowingOnlyActiveSessions(bool show) {
+    _showOnlyActiveSessions = show;
+    notifyListeners();
+  }
 
   DatabaseHelper._internal();
 
@@ -244,18 +256,34 @@ class DatabaseHelper {
   Future<List<SessionPanelItem>> fetchSessionPanelList({int? playerId}) async {
     final db = await database;
     final List<Map<String, dynamic>> maps =
-      (playerId != null)
-      ? await db.query(
-        'Session_Panel_List',
-        where: 'Player_Id = ?',
-        whereArgs: [playerId],
-        orderBy: 'Stop_Epoch ASC, Name ASC',
-      )
-      : await db.query(
-        'Session_Panel_List',
-        where: 'Stop_Epoch IS NULL',
-        orderBy: 'Stop_Epoch ASC, Name ASC',
-      );
+      (showingOnlyActiveSessions())
+      ? (
+          (playerId != null)
+          ? await db.query(
+              'Session_Panel_List',
+              where: 'Player_Id = ? AND Stop_Epoch IS NULL',
+              whereArgs: [playerId],
+              orderBy: 'Stop_Epoch ASC, Name ASC',
+            )
+          : await db.query(
+              'Session_Panel_List',
+              where: 'Stop_Epoch IS NULL',
+              orderBy: 'Stop_Epoch ASC, Name ASC',
+            )
+        )
+      : (
+          (playerId != null)
+          ? await db.query(
+              'Session_Panel_List',
+               where: 'Player_Id = ?',
+               whereArgs: [playerId],
+               orderBy: 'Stop_Epoch ASC, Name ASC',
+            )
+          : await db.query(
+              'Session_Panel_List',
+              orderBy: 'Stop_Epoch ASC, Name ASC',
+            )
+         );
     return List.generate(maps.length, (i) {
       return SessionPanelItem.fromMap(maps[i]); // Convert each map to a SessionPanelItem
     });

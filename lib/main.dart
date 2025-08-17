@@ -8,9 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-// import 'package:path/path.dart';
 import 'package:path/path.dart' as Path;
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart'; // Required for Provider
 import 'package:sqflite/sqflite.dart';
 
 import 'package:carolina_card_club/realtimeclock.dart';
@@ -18,14 +18,27 @@ import 'package:carolina_card_club/realtimeclock.dart';
 import 'package:carolina_card_club/database/database_helper.dart';
 import 'package:carolina_card_club/models/player_selection_item.dart';
 import 'package:carolina_card_club/models/session_panel_item.dart';
+import 'package:carolina_card_club/models/settings.dart';
+
+
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart'
+    as picker;
+
 
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => DatabaseHelper(),
+      child: ChangeNotifierProvider(
+        create: (context) => TimeProvider(),
+        child: const MyApp(),
+      ),
+    ),
+  );
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -80,8 +93,9 @@ DateTime setTimeToDefaultSessionStartTime(DateTime inputDateTime) {
 class _MainSplitViewPageState extends State<MainSplitViewPage> {
   late Future<List<PlayerSelectionItem>> _playerListData;
   late Future<List<SessionPanelItem>> _sessionPanelListData;
-
   late DateTime _currentSessionStartTime;
+  late bool _showOnlyActiveSessions = true;
+
   int? _selectedPlayerId;
 
   @override
@@ -96,11 +110,12 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   }
 
 
-  Future<void> _showStartTimeDialog(BuildContext context) async {
+  Future<void> x_showStartTimeDialog(BuildContext context) async {
     // Step 1: Show the date picker
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(), // Sets the initial selected date to today
+      helpText: 'Select Session Start Date',
       firstDate: DateTime(2020),   // The earliest date a user can select
       lastDate: DateTime(2100),    // The latest date a user can select
     );
@@ -110,7 +125,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
       // Step 2: Show the time picker
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.fromDateTime(setTimeToDefaultSessionStartTime(pickedDate)), // Default to picked day at 19:30
+        initialTime: TimeOfDay.fromDateTime(_defaultSessionStartTime), // Default to picked day at 19:30
         helpText: 'Select Session Start Time',
         initialEntryMode: TimePickerEntryMode.input,
       );
@@ -133,31 +148,30 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   }
 
 
-
-  Future<void> x_showStartTimeDialog(BuildContext context) async {
-    final TimeOfDay? pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(setTimeToDefaultSessionStartTime(_currentSessionStartTime)), // Default to current day at 19:30
-      helpText: 'Select Session Start Time',
-      initialEntryMode: TimePickerEntryMode.input,
-    );
-
-    if (pickedTime != null) {
-      setState(() {
-        _currentSessionStartTime = DateTime(
-          _currentSessionStartTime.year,
-          _currentSessionStartTime.month,
-          _currentSessionStartTime.day,
-          pickedTime.hour,
-          pickedTime.minute,
-        );
-      });
-    }
+  Future<void> _showStartTimeDialog(BuildContext context) async {
+    DateTime selectedDateTime = _currentSessionStartTime;
+    picker.DatePicker.showDateTimePicker(context,
+        showTitleActions: true,
+        onConfirm: (date) {
+          selectedDateTime = date;
+          print('Selected Session Start date and time: $selectedDateTime');
+          setState(() {
+            _currentSessionStartTime = selectedDateTime;
+          });
+        },
+        currentTime: setTimeToDefaultSessionStartTime(selectedDateTime));
   }
+
+
+
 
   void _onPlayerSelected(int playerId) {
     setState(() {
-      _selectedPlayerId = playerId;
+      if (_selectedPlayerId == playerId) {
+        _selectedPlayerId = null;
+      } else {
+        _selectedPlayerId = playerId;
+      }
       _sessionPanelListData = DatabaseHelper().fetchSessionPanelList(playerId: _selectedPlayerId);
     });
   }
@@ -174,11 +188,17 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
     // Implement your logic for when a session is selected
   }
 
-
   @override
   Widget build(BuildContext context) {
     final String formattedSessionStartTime =
         DateFormat('HH:mm:ss').format(_currentSessionStartTime);
+
+    // Listen to the DatabaseHelper
+    final databaseHelper = Provider.of<DatabaseHelper>(context);
+
+    // Generate session data based on the filter from the provider
+    _showOnlyActiveSessions = databaseHelper.showingOnlyActiveSessions() ;
+
 
     return Scaffold(
       appBar: AppBar(
@@ -204,6 +224,19 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
             onPressed: () {
               // Handle settings icon press
               debugPrint("Settings icon pressed!");
+              showModalBottomSheet(
+                context: context,
+                useSafeArea: true, //If you are using a keyboard, then it is very important
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                             ),
+                clipBehavior: Clip.antiAliasWithSaveLayer,
+                builder: (context) => SettingsBottomSheet(),
+              );
+              setState((){
+                _showOnlyActiveSessions = databaseHelper.showingOnlyActiveSessions();
+              });
             },
           ),
           // Clock
@@ -365,11 +398,12 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                             final int? stopEpoch = item.stopEpoch;
                             final double? amount = item.amount;
                             final double? balance = item.balance;
+                            final bool ongoing = stopEpoch == null ;
 
                             final String formattedStartTime = startEpoch != null
                                 ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000))
                                 : 'N/A';
-                            final String formattedStopTime = stopEpoch != null
+                            final String formattedStopTime = ! ongoing
                                 ? DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(stopEpoch * 1000))
                                 : 'Ongoing';
                             final String formattedAmount = amount != null ? '\$${amount.toStringAsFixed(2)}' : '\$0.00';
@@ -425,11 +459,16 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                                             Text(
                                               'Balance: $formattedBalance',
                                               style: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold,
-                                                color:
-                                                  (item.balance == 0.0 ? Colors.grey
-                                                  :item.balance < 0.0 ? Colors.red
-                                                  :Colors.green)
-                                              ),
+                                                       color:
+                                                         ( ongoing
+                                                           ? ( balance == null ? Colors.grey
+                                                             : balance == 0.0 ? Colors.grey
+                                                             : balance  < 0.0 ? Colors.red
+                                                             :                  Colors.green
+                                                         )
+                                                       : Theme.of(context).scaffoldBackgroundColor
+                                                       ),
+                                                     ),
                                             ),
                                           ],
                                         ),
@@ -438,8 +477,10 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              'Amount: $formattedAmount',
-                                              style: const TextStyle(fontSize: 18.0, color: Colors.green),
+                                              'Time Fee: $formattedAmount',
+                                              style: TextStyle(fontSize: 18.0,
+                                                       color: (ongoing ? Colors.green : Colors.black)
+                                                     ),
                                             ),
                                             Text('$formattedStartTime - $formattedStopTime'),
                                           ],

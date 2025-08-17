@@ -1,0 +1,71 @@
+import 'package:flutter/material.dart';
+
+import 'package:carolina_card_club/models/pages.dart';
+
+class NestedNavigationBottomSheet extends StatelessWidget {
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>(); // key is necessary to access the NavigatorState
+
+  NestedNavigationBottomSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, // Initially disable system back gestures
+      onPopInvoked: (didPop) async {
+        if (didPop) {
+          return; // Pop already happened, do nothing
+        }
+        final NavigatorState? childNavigator = navigatorKey.currentState;
+        if (childNavigator != null && childNavigator.canPop()) {
+          childNavigator.pop();
+        } else {
+          Navigator.of(context).pop();
+        }
+      },
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.75,
+        child: Column(
+          children: [
+            AppBar(
+              title: const Text('Nested Navigation'),
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  if (navigatorKey.currentState?.canPop() ?? false) {
+                    navigatorKey.currentState?.pop();
+                  } else {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ),
+            Expanded(
+              child: Navigator(
+                key: navigatorKey, // key is necessary to access the NavigatorState
+                onGenerateRoute: (settings) {
+                  return MaterialPageRoute(
+                    builder: (context) => const Page1(),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+void showNestedNavigationBottomSheet(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    useSafeArea: true, //If you are using a keyboard, then it is very important
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    clipBehavior: Clip.antiAliasWithSaveLayer,
+    builder: (context) => NestedNavigationBottomSheet(),
+  );
+}
