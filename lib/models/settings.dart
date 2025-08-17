@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:carolina_card_club/realtimeclock.dart';
-import 'package:carolina_card_club/database/database_helper.dart';
+import 'package:carolina_card_club/time_provider.dart';
+import 'package:carolina_card_club/database/database_provider.dart';
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart'
+    as picker;
+
 
 class SettingsBottomSheet extends StatelessWidget {
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>(); // key is necessary to access the NavigatorState
@@ -97,8 +100,18 @@ class _SettingsPage1State extends State<SettingsPage1> {
         ElevatedButton(
           child: const Text('Set Clock'),
           onPressed: () {
-            // Accessing Provider without listening for changes (good for events)
-            Provider.of<TimeProvider>(context, listen: false).userSetClock(DateTime(2026, 1, 27, 19, 30, 30));
+            DateTime selectedDateTime=DateTime.now();
+            picker.DatePicker.showDateTimePicker(context,
+                showTitleActions: true,
+                onConfirm: (date) {
+                  Provider.of<TimeProvider>(context, listen: false).setTime(date);
+                  setState(() {
+                    selectedDateTime = date;
+                  });
+                  print('Clock set to $selectedDateTime');
+                },
+                currentTime: selectedDateTime,
+              );
           },
         ),
         // By using Consumer, only the SwitchListTile will rebuild
@@ -112,7 +125,9 @@ class _SettingsPage1State extends State<SettingsPage1> {
                 // When newValue changes, update the Provider's state.
                 // Since DatabaseHelper is a ChangeNotifier, it will call notifyListeners(),
                 // and the Consumer will automatically rebuild this SwitchListTile.
-                databaseHelper.updateShowingOnlyActiveSessions(newValue);
+                setState((){
+                  databaseHelper.updateShowingOnlyActiveSessions(newValue);
+                });
               },
             );
           },
