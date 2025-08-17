@@ -19,8 +19,8 @@ import 'package:carolina_card_club/models/session.dart';
 import 'package:carolina_card_club/models/player_selection_item.dart';
 import 'package:carolina_card_club/models/session_panel_item.dart';
 
-class DatabaseHelper with ChangeNotifier {
-  static final DatabaseHelper _instance = DatabaseHelper._internal();
+class DatabaseProvider with ChangeNotifier {
+  static final DatabaseProvider _instance = DatabaseProvider._internal();
   static Database? _database;
 
   final String _databaseName = "CarolinaCardClub.db";
@@ -36,9 +36,9 @@ class DatabaseHelper with ChangeNotifier {
     notifyListeners();
   }
 
-  DatabaseHelper._internal();
+  DatabaseProvider._internal();
 
-  factory DatabaseHelper() => _instance;
+  factory DatabaseProvider() => _instance;
 
   Future<Database> get database async {
     if (_database != null) {

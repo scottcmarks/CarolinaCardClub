@@ -1,0 +1,49 @@
+
+import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart'; // For formatting the time
+import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart'; // Required for ChangeNotifier
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart'
+    as picker;
+
+
+class TimeProvider with ChangeNotifier {
+  DateTime _currentTime = DateTime.now();
+  Duration _offset = Duration();
+  late Timer _timer;
+
+  // Getter to expose the current time
+  DateTime get currentTime => _currentTime;
+
+  TimeProvider() {
+    _startTimer();
+  }
+
+  void _updateAndNotify() {
+    _currentTime = DateTime.now().add(_offset); // Update the current time
+    notifyListeners(); // Notify all listening widgets about the change
+  }
+
+  void _startTimer() {
+    // Timer.periodic creates a repeating timer
+    // It calls the callback function every duration interval
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _updateAndNotify();
+    });
+  }
+
+  // Method to allow external modification of the time (e.g., from settings)
+  void setTime(DateTime newTime) {
+    _offset = newTime.difference(DateTime.now());
+    _updateAndNotify();
+  }
+
+  // Important: Override dispose to cancel the timer when the provider is no longer needed
+  @override
+  void dispose() {
+    _timer.cancel(); // Cancel the timer to prevent memory leaks
+    super.dispose();
+  }
+}
