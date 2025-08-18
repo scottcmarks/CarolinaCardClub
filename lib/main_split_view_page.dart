@@ -2,12 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // If using Provider
 import 'left_panel.dart'; // Import your new panels
-import 'right_panel.dart';
+import 'session_panel.dart';
 import 'settings_page.dart'; // Your SettingsPage1
 import 'session_filter_provider.dart'; // If using Provider
 import 'app_settings.dart';          // Import AppSettings
 import 'app_settings_provider.dart'; // Import AppSettingsProvider
-import 'session_panel.dart';
 
 class MainSplitViewPage extends StatefulWidget {
   const MainSplitViewPage({super.key});
@@ -37,7 +36,16 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
     final appSettings = Provider.of<AppSettingsProvider>(context).currentSettings;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Split View App')),
+      appBar: AppBar(
+//      title: const Text('Carolina Card Club',
+//        )
+        title: Image.asset(
+          'assets/CCCBanner.png',
+          fit: BoxFit.contain,
+          height: kToolbarHeight,
+        ),
+        centerTitle: true,
+      ),
       body: Row(
         children: [
           Expanded(
@@ -47,18 +55,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
           const VerticalDivider(width: 1.0),
           Expanded(
             flex: 2,
-            child: Column(
-              children: [
-                const Text('Right Panel'),
-                // Displaying some settings for feedback
-                Text('Showing Active Sessions Only: ${appSettings.showOnlyActiveSessions ? "Yes" : "No"}'),
-                Text('Preferred Theme: ${appSettings.preferredTheme}'),
-                Expanded(
-                  // Pass the relevant setting down to SessionPanel
-                  child: SessionPanel(showOnlyActiveSessions: appSettings.showOnlyActiveSessions),
-                ),
-              ],
-            ),
+            child: SessionPanel(showOnlyActiveSessions: appSettings.showOnlyActiveSessions),
           ),
         ],
       ),
