@@ -25,16 +25,6 @@ class DatabaseProvider with ChangeNotifier {
 
   final String _databaseName = "CarolinaCardClub.db";
   final String _remoteDbUrl = "http://carolinacardclub.com/CarolinaCardClub.db";
-  bool _showOnlyActiveSessions = true;
-
-  bool showingOnlyActiveSessions () {
-    return _showOnlyActiveSessions;
-  }
-
-  void updateShowingOnlyActiveSessions(bool show) {
-    _showOnlyActiveSessions = show;
-    notifyListeners();
-  }
 
   DatabaseProvider._internal();
 
@@ -253,10 +243,11 @@ class DatabaseProvider with ChangeNotifier {
       return PlayerSelectionItem.fromMap(maps[i]); // Convert each map to a PlayerSelectionItem
     });
   }
-  Future<List<SessionPanelItem>> fetchSessionPanelList({int? playerId}) async {
+  Future<List<SessionPanelItem>> fetchSessionPanelList({bool showingOnlyActiveSessions = true,
+                                                        int? playerId}) async {
     final db = await database;
     final List<Map<String, dynamic>> maps =
-      (showingOnlyActiveSessions())
+      showingOnlyActiveSessions
       ? (
           (playerId != null)
           ? await db.query(
