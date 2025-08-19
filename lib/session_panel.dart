@@ -51,15 +51,19 @@ class SessionPanel extends StatelessWidget {
           padding: const EdgeInsets.all(8.0),
         ),
         Row(
+          mainAxisAlignment: MainAxisAlignment.end, // Aligns all children to the right
           children: [
+            Text(
+              showOnlyActiveSessions ? 'Active' : 'All',
+              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+            ),
             IconButton( // <--- Settings Icon Button
               icon: const Icon(Icons.settings),
               tooltip: 'Open Settings',
               onPressed: onOpenSettings, // <--- Call the passed callback
-            ),
-            Text(
-              showOnlyActiveSessions ? 'Showing Active Sessions' : 'Showing All Sessions',
-              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
             ),
           ],
         ),
