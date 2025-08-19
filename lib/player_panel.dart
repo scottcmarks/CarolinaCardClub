@@ -1,5 +1,8 @@
 // lib/widgets/player_panel.dart
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 // Import your custom files
@@ -49,23 +52,62 @@ class PlayerPanel extends StatelessWidget {
               } else {
                 List<PlayerSelectionItem> players = snapshot.data!;
                 return ListView.builder(
+                  key: const PageStorageKey<String>('PlayerListScrollPosition'),
                   itemCount: players.length,
                   itemBuilder: (context, index) {
                     final player = players[index];
-                    final bool isSelected = player.playerId == selectedPlayerId;
-                    return ListTile(
-                      leading: const Icon(Icons.person), // Placeholder icon
-                      title: Text(player.name),
-                      subtitle: Text('Balance: \$${player.balance.toStringAsFixed(2)}'), // Display balance with 2 decimal places
-                      selected: isSelected,
-                      selectedTileColor: Theme.of(context).colorScheme.primary.withOpacity(0.2), // Light highlight
-                      // You can also customize icon/text color when selected
-                      // selectedColor: Theme.of(context).colorScheme.onPrimary, // For text/icon color
-                                            onTap: () {
-                        final int? newSelection = isSelected ? null : player.playerId;
-                        // Invoke the callback, passing the playerId of the tapped player
-                        onPlayerSelected?.call(newSelection);
-                      },
+                    final int playerId = player.playerId;
+                    final bool isSelected = playerId == selectedPlayerId;
+                    final bool inArrears = player.balance < 0;
+                    // Determine background color based on balance
+                    Color? cardColor =
+                      isSelected
+                      ? inArrears
+                        ? Colors.purple.shade100
+                        : Colors.blue.shade100
+                      : inArrears
+                        ? Colors.red.shade100
+                        : null
+                    ;
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                      color: cardColor,
+
+                      child: MouseRegion(
+                        onHover: (PointerHoverEvent event) {
+                          if (event.synthesized == false && event.buttons == 0) {
+                            if (HardwareKeyboard.instance.isShiftPressed) {
+                              // Shift + hover detected
+                            }
+                          }
+                        },
+                        child: InkWell(
+                          onTap: () {
+                          if (HardwareKeyboard.instance.isShiftPressed) {
+                              print("Shift + Left click!");
+                            } else if (HardwareKeyboard.instance.isControlPressed) {
+                              print("Ctrl/Cmd + Left click!");
+                            } else if (HardwareKeyboard.instance.isAltPressed) {
+                              print("Alt + Left click!");
+                            } else {
+                              print("Regular Left click!");
+                            }
+                            onPlayerSelected?.call(playerId); // Your original logic for player selection
+                          },
+                          onDoubleTap: () {
+                            print("Double-tap!");
+                          },
+                          onLongPress: () {
+                            print("Long press!");
+                          },
+                          onSecondaryTap: () {
+                            print("Right click!");
+                          },
+                          child: ListTile(
+                            title: Text(player.name),
+                          ),
+                        ),
+                      )
                     );
                   },
                 );
