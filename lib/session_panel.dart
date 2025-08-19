@@ -9,11 +9,13 @@ import 'models/session_panel_item.dart'; // Your SessionPanelItem model
 class SessionPanel extends StatelessWidget {
   final bool showOnlyActiveSessions;
   final int? playerId;
+  final VoidCallback? onOpenSettings; // <--- New: Accept the callback
 
   const SessionPanel({
     super.key,
     required this.showOnlyActiveSessions,
     this.playerId,
+    this.onOpenSettings, // <--- New: Accept the callback
   });
 
   Future<List<String>> _getFilteredSessionStrings(BuildContext context) async {
@@ -47,10 +49,19 @@ class SessionPanel extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Text(
-            showOnlyActiveSessions ? 'Showing Active Sessions' : 'Showing All Sessions',
-            style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-          ),
+        ),
+        Row(
+          children: [
+            IconButton( // <--- Settings Icon Button
+              icon: const Icon(Icons.settings),
+              tooltip: 'Open Settings',
+              onPressed: onOpenSettings, // <--- Call the passed callback
+            ),
+            Text(
+              showOnlyActiveSessions ? 'Showing Active Sessions' : 'Showing All Sessions',
+              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+            ),
+          ],
         ),
         const Divider(),
         Expanded(
