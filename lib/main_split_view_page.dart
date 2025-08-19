@@ -1,7 +1,7 @@
 // main_split_view_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // If using Provider
-import 'left_panel.dart'; // Import your new panels
+import 'player_panel.dart'; // Import your new panels
 import 'session_panel.dart';
 import 'settings_page.dart'; // Your SettingsPage1
 import 'session_filter_provider.dart'; // If using Provider
@@ -16,7 +16,7 @@ class MainSplitViewPage extends StatefulWidget {
 }
 
 class _MainSplitViewPageState extends State<MainSplitViewPage> {
-  // Removed _showOnlyActiveSessions, now managed by AppSettingsProvider
+  int? _selectedPlayerId = null;
 
   void _openSettingsBottomSheet() async {
     await showModalBottomSheet<void>( // No need for return value here, as provider handles update
@@ -37,8 +37,6 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
 
     return Scaffold(
       appBar: AppBar(
-//      title: const Text('Carolina Card Club',
-//        )
         title: Image.asset(
           'assets/CCCBanner.png',
           fit: BoxFit.contain,
@@ -50,12 +48,25 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
         children: [
           Expanded(
             flex: 1,
-            child: LeftPanel(onOpenSettings: _openSettingsBottomSheet),
+            child: PlayerPanel(
+              onPlayerSelected: (playerId) {
+                setState(() {
+                  _selectedPlayerId = playerId;
+                  print('Selected Player ID: $_selectedPlayerId');
+                  // Since SessionPanel also takes pId, setting this state
+                  // will automatically trigger SessionPanel to rebuild
+                  // with the new player filter.
+                });
+              },
+              selectedPlayerId: _selectedPlayerId,
+            ),
           ),
           const VerticalDivider(width: 1.0),
           Expanded(
             flex: 2,
-            child: SessionPanel(showOnlyActiveSessions: appSettings.showOnlyActiveSessions),
+            child: SessionPanel(showOnlyActiveSessions: appSettings.showOnlyActiveSessions,
+                                playerId: _selectedPlayerId,
+                                onOpenSettings: _openSettingsBottomSheet ),
           ),
         ],
       ),
