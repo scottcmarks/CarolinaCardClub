@@ -17,6 +17,27 @@ class MainSplitViewPage extends StatefulWidget {
 
 class _MainSplitViewPageState extends State<MainSplitViewPage> {
   int? _selectedPlayerId = null;
+  int? _selectedSessionId = null;
+
+  void _handlePlayerSelected(int? playerId) {
+    print('_handlePlayerSelected($playerId)');
+    setState(() {
+      _selectedPlayerId = _selectedPlayerId == playerId ? null : playerId;
+      if (_selectedPlayerId != null) {
+        print('Selected Player ID: $_selectedPlayerId');
+      } else {
+        print('No selected player');
+        _selectedSessionId = null;
+      }
+    });
+ }
+
+ void _handleSessionSelected(int? sessionId) {
+    print('_handleSessionSelected($sessionId)');
+    setState(() {
+      _selectedSessionId = sessionId;
+    });
+  }
 
   void _openSettingsBottomSheet() async {
     await showModalBottomSheet<void>( // No need for return value here, as provider handles update
@@ -32,14 +53,12 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to the AppSettingsProvider to get the current settings
-    final appSettings = Provider.of<AppSettingsProvider>(context).currentSettings;
 
     return Scaffold(
       appBar: AppBar(
         title: Image.asset(
           'assets/CCCBanner.png',
-          fit: BoxFit.contain,
+          fit: BoxFit.fill,
           height: kToolbarHeight,
         ),
         centerTitle: true,
@@ -49,24 +68,19 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
           Expanded(
             flex: 1,
             child: PlayerPanel(
-              onPlayerSelected: (playerId) {
-                setState(() {
-                  _selectedPlayerId = playerId;
-                  print('Selected Player ID: $_selectedPlayerId');
-                  // Since SessionPanel also takes pId, setting this state
-                  // will automatically trigger SessionPanel to rebuild
-                  // with the new player filter.
-                });
-              },
+              onPlayerSelected: _handlePlayerSelected,
               selectedPlayerId: _selectedPlayerId,
             ),
           ),
           const VerticalDivider(width: 1.0),
           Expanded(
             flex: 2,
-            child: SessionPanel(showOnlyActiveSessions: appSettings.showOnlyActiveSessions,
-                                playerId: _selectedPlayerId,
-                                onOpenSettings: _openSettingsBottomSheet ),
+            child: SessionPanel(
+              onSessionSelected: _handleSessionSelected,
+              onSettingsOpened: _openSettingsBottomSheet,
+              selectedPlayerId: _selectedPlayerId,
+              selectedSessionId: _selectedSessionId,
+            ),
           ),
         ],
       ),

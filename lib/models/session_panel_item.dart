@@ -14,7 +14,7 @@ class SessionPanelItem {
     required this.playerId,
     required this.name,
     required this.startEpoch,
-    this.stopEpoch, // Make optional
+    this.stopEpoch, // Make optional, it will be null?
     required this.durationInSeconds,
     required this.amount,
     required this.balance,
@@ -26,7 +26,7 @@ class SessionPanelItem {
       'Session_Id': sessionId,
       'Player_Id': playerId,
       'Name': name,
-      'StartEpoch': startEpoch,
+      'Start_Epoch': startEpoch,
       'Stop_Epoch': stopEpoch,
       'Duration_In_Seconds': durationInSeconds,
       'Amount': amount,
@@ -40,7 +40,7 @@ class SessionPanelItem {
       sessionId: map['Session_Id'],
       playerId: map['Player_Id'],
       name: map['Name'] ?? 'Unnamed', // Provide a default if name is null
-      startEpoch: map['StartEpoch'],
+      startEpoch: map['Start_Epoch'],
       stopEpoch: map['Stop_Epoch'], // Will be null if it's not set in the DB
       durationInSeconds: map['Duration_In_Seconds'],
       amount: (map['Amount'] is int) ? (map['Amount'] as int).toDouble() : map['Amount'],
