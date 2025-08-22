@@ -12,19 +12,19 @@ import 'dart:typed_data';
 
 import 'package:async/async.dart'; // Import for AsyncMemoizer
 
-// Import your data models
-import 'package:carolina_card_club/models/payment.dart';
-import 'package:carolina_card_club/models/player.dart';
-import 'package:carolina_card_club/models/player_category.dart';
-import 'package:carolina_card_club/models/rate.dart';
-import 'package:carolina_card_club/models/rate_interval.dart';
-import 'package:carolina_card_club/models/session.dart';
-import 'package:carolina_card_club/models/player_selection_item.dart';
-import 'package:carolina_card_club/models/session_panel_item.dart';
 
-// Import AppSettingsProvider and AppSettings
-import 'package:carolina_card_club/app_settings.dart';
-import 'package:carolina_card_club/app_settings_provider.dart';
+import '../models/payment.dart';
+import '../models/player.dart';
+import '../models/player_category.dart';
+import '../models/rate.dart';
+import '../models/rate_interval.dart';
+import '../models/session.dart';
+import '../models/player_selection_item.dart';
+import '../models/session_panel_item.dart';
+import '../models/app_settings.dart';
+
+
+import 'app_settings_provider.dart';
 
 // Define the enum for database loading status
 enum DatabaseLoadStatus {

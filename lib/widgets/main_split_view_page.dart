@@ -1,12 +1,18 @@
 // main_split_view_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // If using Provider
-import 'player_panel.dart'; // Import your new panels
+
+import '../providers/app_settings_provider.dart';
+import '../providers/session_filter_provider.dart';
+
+import '../models/app_settings.dart';
+
+import 'settings_page.dart';
+import 'player_panel.dart';
 import 'session_panel.dart';
-import 'settings_page.dart'; // Your SettingsPage1
-import 'session_filter_provider.dart'; // If using Provider
-import 'app_settings.dart';          // Import AppSettings
-import 'app_settings_provider.dart'; // Import AppSettingsProvider
+import 'realtimeclock.dart';
+
+
 
 class MainSplitViewPage extends StatefulWidget {
   const MainSplitViewPage({super.key});
@@ -44,7 +50,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
       context: context,
       isScrollControlled: true,
       builder: (BuildContext context) {
-        return const SettingsPage1(); // SettingsPage1 manages its own Provider update
+        return const SettingsPage1();
       },
     );
     // UI will rebuild automatically because MainSplitViewPage and SessionPanel
@@ -53,15 +59,26 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: _openSettingsBottomSheet,
+          tooltip: 'Open Settings',
+        ),
         title: Image.asset(
           'assets/CCCBanner.png',
           fit: BoxFit.fill,
           height: kToolbarHeight,
         ),
         centerTitle: true,
+        actions: const [
+          // Place widgets on the right side of the AppBar
+          Padding(
+            padding: EdgeInsets.only(right: 16.0),
+            child: RealtimeClock(),
+          ),
+        ],
       ),
       body: Row(
         children: [
@@ -77,7 +94,6 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
             flex: 2,
             child: SessionPanel(
               onSessionSelected: _handleSessionSelected,
-              onOpenSettings: _openSettingsBottomSheet,
               selectedPlayerId: _selectedPlayerId,
               selectedSessionId: _selectedSessionId,
             ),

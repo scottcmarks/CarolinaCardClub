@@ -1,10 +1,11 @@
 // app_settings_provider.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
-import 'app_settings.dart'; // Import your AppSettings class
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/app_settings.dart';
 
 class AppSettingsProvider extends ChangeNotifier {
-  AppSettings _currentSettings = const AppSettings(); // Initialize with default settings
+  AppSettings _currentSettings = const AppSettings();
 
   AppSettings get currentSettings => _currentSettings;
 
