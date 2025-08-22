@@ -1,107 +1,129 @@
-// session_panel.dart
+// lib/session_panel.dart
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 // Import your custom files
-import 'database/database_provider.dart'; // Your DatabaseProvider (ChangeNotifier)
+import 'app_settings_provider.dart';
+import 'app_settings.dart';
+import 'database_provider.dart';
 import 'models/session_panel_item.dart'; // Your SessionPanelItem model
 
 class SessionPanel extends StatelessWidget {
-  final bool showOnlyActiveSessions;
-  final int? playerId;
-  final VoidCallback? onOpenSettings; // <--- New: Accept the callback
+  final ValueChanged<int?>? onSessionSelected; // Callback for when a session is tapped
+  final void Function()? onSettingsOpened; // Callback for when Settings bottom sheet requested by icon
+  final int? selectedPlayerId;
+  final int? selectedSessionId;
 
   const SessionPanel({
     super.key,
-    required this.showOnlyActiveSessions,
-    this.playerId,
-    this.onOpenSettings, // <--- New: Accept the callback
+    this.onSessionSelected,
+    this.onSettingsOpened,
+    this.selectedPlayerId,
+    this.selectedSessionId,
   });
-
-  Future<List<String>> _getFilteredSessionStrings(BuildContext context) async {
-    // Access the DatabaseProvider provider
-    final databaseProvider = Provider.of<DatabaseProvider>(context, listen: false);
-
-    // Fetch the list of SessionPanelItem objects from the database
-    List<SessionPanelItem> sessionItemList = await databaseProvider.fetchSessionPanelList(
-      showingOnlyActiveSessions:showOnlyActiveSessions,
-      playerId:playerId,
-    );
-
-    // Filter the list if necessary (though fetchSessionPanelList should handle it)
-    // If fetchSessionPanelList returns all sessions and you need to filter further:
-    // if (showOnlyActiveSessions) {
-    //   sessionItemList = sessionItemList.where((session) => session.isActive).toList();
-    // }
-
-    // Transform the list of SessionPanelItem into a List<String>
-    // each showing the session number and player name.
-    List<String> sessionStrings = sessionItemList.map((session) {
-      return 'Session ${session.sessionId} - ${session.name}';
-    }).toList(); // Important: Convert the Iterable returned by map to a List
-
-    return sessionStrings;
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end, // Aligns all children to the right
-          children: [
-            Text(
-              showOnlyActiveSessions ? 'Active' : 'All',
-              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-            ),
-            IconButton( // <--- Settings Icon Button
-              icon: const Icon(Icons.settings),
-              tooltip: 'Open Settings',
-              onPressed: onOpenSettings, // <--- Call the passed callback
-            ),
-          ],
-        ),
-        const Divider(),
-        Expanded(
-          child: FutureBuilder<List<String>>(
-            future: _getFilteredSessionStrings(context), // Call the async method
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                // While data is being fetched, show a loading indicator
-                return const Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                // If an error occurred during data fetching
-                return Center(child: Text('Error: ${snapshot.error}'));
-              } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                // If no data was found or the list is empty
-                return const Center(child: Text('No sessions found.'));
-              } else {
-                // Data has been successfully fetched, display the list
-                List<String> sessions = snapshot.data!;
-                return ListView.builder(
-                  itemCount: sessions.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      leading: const Icon(Icons.meeting_room),
-                      title: Text(sessions[index]),
-                      onTap: () {
-                        // Handle tapping on a session item
-                        print('Tapped on ${sessions[index]}');
-                      },
-                    );
-                  },
-                );
-              }
-            },
-          ),
-        ),
-      ],
+    final AppSettingsProvider? _appSettingsProvider = Provider.of<AppSettingsProvider>(context);
+    final AppSettings? _currentSettings = _appSettingsProvider!.currentSettings;
+    final bool _showOnlyActiveSessions = _currentSettings!.showOnlyActiveSessions;
+
+    // Listen to DatabaseProvider for its loading status and database instance
+    return Consumer<DatabaseProvider>(
+      builder: (context, databaseProvider, child) {
+        // Handle different loading states of the database itself
+        switch (databaseProvider.loadStatus) {
+          case DatabaseLoadStatus.initial:
+          case DatabaseLoadStatus.loadingRemote:
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 10),
+                  Text('Downloading database...'), // More specific message
+                ],
+              ),
+            );
+          case DatabaseLoadStatus.loadingAssets:
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 10),
+                  Text('Loading database from assets...'), // Informing about fallback
+                ],
+              ),
+            );
+          case DatabaseLoadStatus.error:
+            // The database itself failed to load
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Failed to load database. Please check settings and internet connection.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            );
+          case DatabaseLoadStatus.loaded:
+            // Database is loaded, now load panel-specific data using a FutureBuilder
+            return FutureBuilder<List<SessionPanelItem>>(
+              future: databaseProvider.fetchSessionPanelList(
+                        showOnlyActiveSessions:_showOnlyActiveSessions,
+                        playerId:selectedPlayerId,
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  // This error is from fetching sessions, not the database itself loading
+                  return Center(child: Text('Error loading sessions: ${snapshot.error}'));
+                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No sessions found.'));
+                } else {
+                  List<SessionPanelItem> sessions = snapshot.data!;
+                  return ListView.builder(
+                    key: const PageStorageKey<String>('SessionListScrollPosition'),
+                    itemCount: sessions.length,
+                    itemBuilder: (context, index) {
+                      final session = sessions[index];
+                      final int sessionId = session.sessionId;
+                      final bool isSelected = sessionId == selectedSessionId;
+
+                      // Determine background color
+                      Color? cardColor = isSelected ? Colors.blue.shade100 : null;
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                        color: cardColor,
+                        child: MouseRegion(
+                          onHover: (PointerHoverEvent event) {
+                            // You might want to add hover logic here as well
+                          },
+                          child: InkWell(
+                            onTap: () {
+                              onSessionSelected?.call(sessionId);
+                            },
+                            child: ListTile(
+                              title: Text('sessionId: ${session.sessionId}   ${session.name}   ${session.balance}'),
+                              subtitle: Text('${session.amount}  ${session.durationInSeconds}   ${session.startEpoch} - ${session.stopEpoch}'), // Example
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }
+              },
+            );
+        }
+      },
     );
   }
 }

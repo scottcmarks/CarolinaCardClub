@@ -16,6 +16,7 @@ class _SettingsPage1State extends State<SettingsPage1> {
   late bool _localShowOnlyActiveSessions;
   late TimeOfDay? _localDefaultStartTime;
   late String _localPreferredTheme;
+  late TextEditingController _remoteDatabaseUrlController; // For the new URL field
 
   @override
   void initState() {
@@ -25,6 +26,13 @@ class _SettingsPage1State extends State<SettingsPage1> {
     _localShowOnlyActiveSessions = settings.showOnlyActiveSessions;
     _localDefaultStartTime = settings.defaultStartTime;
     _localPreferredTheme = settings.preferredTheme;
+    _remoteDatabaseUrlController = TextEditingController(text: settings.remoteDatabaseUrl);
+  }
+
+  @override
+  void dispose() {
+    _remoteDatabaseUrlController.dispose();
+    super.dispose();
   }
 
   Future<void> _selectTime(BuildContext context) async {
@@ -96,6 +104,21 @@ class _SettingsPage1State extends State<SettingsPage1> {
               }).toList(),
             ),
           ),
+          // New: Remote Database URL
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: TextField(
+              controller: _remoteDatabaseUrlController,
+              decoration: const InputDecoration(
+                labelText: 'Remote Database URL',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (newValue) {
+                // No need to call setState here, as we're using a TextEditingController
+                // The value will be read directly from the controller on save
+              },
+            ),
+          ),
           const Spacer(),
           ElevatedButton(
             onPressed: () {
@@ -107,6 +130,7 @@ class _SettingsPage1State extends State<SettingsPage1> {
                 showOnlyActiveSessions: _localShowOnlyActiveSessions,
                 defaultStartTime: _localDefaultStartTime,
                 preferredTheme: _localPreferredTheme,
+                remoteDatabaseUrl: _remoteDatabaseUrlController.text, // Add the new field
               );
 
               Navigator.pop(context); // Close the bottom sheet

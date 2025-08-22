@@ -1,13 +1,16 @@
+// lib/database_provider.dart (Updated with DatabaseLoadStatus)
 import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart'; // Though Provider isn't directly used here, often needed for setup
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
-import 'dart:typed_data'; // Import for ByteData
+import 'dart:typed_data';
+
+import 'package:async/async.dart'; // Import for AsyncMemoizer
 
 // Import your data models
 import 'package:carolina_card_club/models/payment.dart';
@@ -19,22 +22,108 @@ import 'package:carolina_card_club/models/session.dart';
 import 'package:carolina_card_club/models/player_selection_item.dart';
 import 'package:carolina_card_club/models/session_panel_item.dart';
 
+// Import AppSettingsProvider and AppSettings
+import 'package:carolina_card_club/app_settings.dart';
+import 'package:carolina_card_club/app_settings_provider.dart';
+
+// Define the enum for database loading status
+enum DatabaseLoadStatus {
+  initial,        // Initial state before any load attempt
+  loadingRemote,  // Attempting to download from remote URL
+  loadingAssets,  // Falling back to copying from assets
+  loaded,         // Database successfully loaded and open
+  error,          // An error occurred during loading
+}
+
 class DatabaseProvider with ChangeNotifier {
   static final DatabaseProvider _instance = DatabaseProvider._internal();
   static Database? _database;
 
   final String _databaseName = "CarolinaCardClub.db";
-  final String _remoteDbUrl = "http://carolinacardclub.com/CarolinaCardClub.db";
+  String _currentRemoteDbUrl = "https://carolinacardclub.com/CarolinaCardClub.db"; // Default
 
-  DatabaseProvider._internal();
+  AppSettingsProvider? _appSettingsProvider;
+  VoidCallback? _settingsListener;
+
+  AsyncMemoizer<Database> _initDbMemoizer = AsyncMemoizer<Database>();
+
+  // Add the database loading status
+  DatabaseLoadStatus _loadStatus = DatabaseLoadStatus.initial;
+  DatabaseLoadStatus get loadStatus => _loadStatus;
+
+  DatabaseProvider._internal() {
+    _subscribeToAppSettings();
+  }
 
   factory DatabaseProvider() => _instance;
 
-  Future<Database> get database async {
-    if (_database != null) {
-      return _database!;
+  void injectAppSettingsProvider(AppSettingsProvider provider) {
+    if (_appSettingsProvider == provider) return;
+
+    if (_appSettingsProvider != null && _settingsListener != null) {
+      _appSettingsProvider!.removeListener(_settingsListener!);
     }
-    _database = await _initDatabase();
+
+    _appSettingsProvider = provider;
+    _currentRemoteDbUrl = _appSettingsProvider!.currentSettings.remoteDatabaseUrl;
+    _subscribeToAppSettings();
+    // After injecting, immediately attempt to load settings from provider if not already loading
+    if (_loadStatus == DatabaseLoadStatus.initial) {
+      _triggerInitialLoad();
+    }
+  }
+
+  void _subscribeToAppSettings() {
+    if (_appSettingsProvider != null && _settingsListener != null) {
+      _appSettingsProvider!.removeListener(_settingsListener!);
+    }
+
+    if (_appSettingsProvider != null) {
+      _settingsListener = () {
+        final newRemoteDbUrl = _appSettingsProvider!.currentSettings.remoteDatabaseUrl;
+        if (newRemoteDbUrl != _currentRemoteDbUrl) {
+          _currentRemoteDbUrl = newRemoteDbUrl;
+          print("Remote database URL changed to: $_currentRemoteDbUrl. Reloading database.");
+          _reloadDatabase();
+        }
+      };
+      _appSettingsProvider!.addListener(_settingsListener!);
+    }
+  }
+
+  // New method to trigger the initial database load, often called after injection
+  Future<void> _triggerInitialLoad() async {
+     // Ensure _loadStatus is set to an appropriate loading state if not already.
+    if (_loadStatus != DatabaseLoadStatus.loaded && _loadStatus != DatabaseLoadStatus.loadingRemote && _loadStatus != DatabaseLoadStatus.loadingAssets) {
+       _loadStatus = DatabaseLoadStatus.initial;
+       notifyListeners();
+    }
+    try {
+      await database; // Call the getter to initiate or await the load
+      _loadStatus = DatabaseLoadStatus.loaded;
+      notifyListeners();
+    } catch (e) {
+      print("Initial database load failed: $e");
+      _loadStatus = DatabaseLoadStatus.error;
+      notifyListeners();
+    }
+  }
+
+  Future<Database> get database async {
+    if (_database == null) {
+      try {
+        _database = await _initDbMemoizer.runOnce(() => _initDatabase());
+        // Only set to loaded if successful and not already loaded
+        if (_loadStatus != DatabaseLoadStatus.loaded) {
+          _loadStatus = DatabaseLoadStatus.loaded;
+          notifyListeners();
+        }
+      } catch (e) {
+        _loadStatus = DatabaseLoadStatus.error;
+        notifyListeners();
+        rethrow; // Re-throw the error so the FutureBuilder can catch it
+      }
+    }
     return _database!;
   }
 
@@ -46,10 +135,14 @@ class DatabaseProvider with ChangeNotifier {
 
     if (!databaseExists) {
       try {
+        _loadStatus = DatabaseLoadStatus.loadingRemote; // Update status
+        notifyListeners(); // Notify UI about remote download attempt
         await _downloadDatabase(path);
       } catch (e) {
         print("Database download failed: $e. Copying from assets.");
-        await _copyDatabaseFromAssets(path);
+        _loadStatus = DatabaseLoadStatus.loadingAssets; // Update status
+        notifyListeners(); // Notify UI about fallback to assets
+        await _copyDatabaseFromAssets(path); // This could still throw an error
       }
     }
 
@@ -62,8 +155,8 @@ class DatabaseProvider with ChangeNotifier {
   }
 
   Future<void> _downloadDatabase(String path) async {
-    print("Attempting to download database from $_remoteDbUrl");
-    final response = await http.get(Uri.parse(_remoteDbUrl));
+    print("Attempting to download database from $_currentRemoteDbUrl");
+    final response = await http.get(Uri.parse(_currentRemoteDbUrl));
 
     if (response.statusCode == 200) {
       await File(path).writeAsBytes(response.bodyBytes);
@@ -82,172 +175,153 @@ class DatabaseProvider with ChangeNotifier {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    //  No table creation needed if pre-populated database is used
+    // No table creation needed if pre-populated database is used
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    //  Handle schema migrations here (e.g., adding columns, modifying tables)
-    //  Example:
-    // if (oldVersion < 2) {
-    //   await db.execute("ALTER TABLE Player ADD COLUMN new_column TEXT");
-    // }
+    // Handle schema migrations here (e.g., adding columns, modifying tables)
   }
 
-  // --- CRUD Operations for Player ---
-  Future<int> insertPlayer(Player player) async {
-    final db = await database;
-    return await db.insert('Player', player.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-  Future<List<Player>> getAllPlayers() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('Player');
-    return List.generate(maps.length, (i) => Player.fromMap(maps[i]));
-  }
-  Future<Player?> getPlayerById(int id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('Player', where: 'Player_Id = ?', whereArgs: [id]);
-    return maps.isNotEmpty ? Player.fromMap(maps.first) : null;
-  }
-  Future<int> updatePlayer(Player player) async {
-    final db = await database;
-    return await db.update('Player', player.toMap(), where: 'Player_Id = ?', whereArgs: [player.playerId]);
-  }
-  Future<int> deletePlayer(int id) async {
-    final db = await database;
-    return await db.delete('Player', where: 'Player_Id = ?', whereArgs: [id]);
+  Future<void> _reloadDatabase() async {
+    // Inform UI that a reload is starting
+    _loadStatus = DatabaseLoadStatus.initial;
+    notifyListeners();
+
+    if (_database != null && _database!.isOpen) {
+      await _database!.close();
+      _database = null;
+    }
+
+    _initDbMemoizer = AsyncMemoizer<Database>(); // Reset the memoizer
+
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+    String path = join(documentsDirectory.path, _databaseName);
+    File dbFile = File(path);
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+      print("Existing database file deleted.");
+    }
+
+    try {
+      // Trigger new initialization and wait for it
+      _database = await _initDbMemoizer.runOnce(() => _initDatabase());
+      _loadStatus = DatabaseLoadStatus.loaded;
+      notifyListeners();
+    } catch (e) {
+      print("Database reload failed: $e");
+      _loadStatus = DatabaseLoadStatus.error;
+      notifyListeners();
+      // Re-throw if you want the calling context (e.g., UI) to potentially catch it
+      rethrow;
+    }
   }
 
-  // --- CRUD Operations for Session ---
-  Future<int> insertSession(Session session) async {
-    final db = await database;
-    return await db.insert('Session', session.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-  Future<List<Session>> getAllSessions() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('Session');
-    return List.generate(maps.length, (i) => Session.fromMap(maps[i]));
-  }
-  Future<Session?> getSessionById(int id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('Session', where: 'Session_Id = ?', whereArgs: [id]);
-    return maps.isNotEmpty ? Session.fromMap(maps.first) : null;
-  }
-  Future<int> updateSession(Session session) async {
-    final db = await database;
-    return await db.update('Session', session.toMap(), where: 'Session_Id = ?', whereArgs: [session.sessionId]);
-  }
-  Future<int> deleteSession(int id) async {
-    final db = await database;
-    return await db.delete('Session', where: 'Session_Id = ?', whereArgs: [id]);
+  @override
+  void dispose() {
+    if (_appSettingsProvider != null && _settingsListener != null) {
+      _appSettingsProvider!.removeListener(_settingsListener!);
+    }
+    _database?.close();
+    super.dispose();
   }
 
-  // --- CRUD Operations for Payment ---
-  Future<int> insertPayment(Payment payment) async {
+  // Helper method for accessing the database, ensuring it's open
+  Future<Database> ensure_db() async {
     final db = await database;
-    return await db.insert('Payment', payment.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    if (!db.isOpen) {
+      // This case should ideally be covered by the loadStatus checks in UI,
+      // but is a good safeguard for direct calls or race conditions.
+      throw Exception("Database is not open for operation");
+    }
+    return db;
   }
-  Future<List<Payment>> getAllPayments() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('Payment');
-    return List.generate(maps.length, (i) => Payment.fromMap(maps[i]));
-  }
-  Future<Payment?> getPaymentById(int id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('Payment', where: 'Payment_Id = ?', whereArgs: [id]);
-    return maps.isNotEmpty ? Payment.fromMap(maps.first) : null;
-  }
-  Future<int> updatePayment(Payment payment) async {
-    final db = await database;
-    return await db.update('Payment', payment.toMap(), where: 'Payment_Id = ?', whereArgs: [payment.paymentId]);
-  }
-  Future<int> deletePayment(int id) async {
-    final db = await database;
-    return await db.delete('Payment', where: 'Payment_Id = ?', whereArgs: [id]);
-  }
+
 
   // --- CRUD Operations for Player_Category ---
   Future<int> insertPlayerCategory(PlayerCategory playerCategory) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.insert('Player_Category', playerCategory.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<PlayerCategory>> getAllPlayerCategories() async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Player_Category');
     return List.generate(maps.length, (i) => PlayerCategory.fromMap(maps[i]));
   }
   Future<PlayerCategory?> getPlayerCategoryById(int id) async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Player_Category', where: 'Player_Category_Id = ?', whereArgs: [id]);
     return maps.isNotEmpty ? PlayerCategory.fromMap(maps.first) : null;
   }
   Future<int> updatePlayerCategory(PlayerCategory playerCategory) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.update('Player_Category', playerCategory.toMap(), where: 'Player_Category_Id = ?', whereArgs: [playerCategory.playerCategoryId]);
   }
   Future<int> deletePlayerCategory(int id) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.delete('Player_Category', where: 'Player_Category_Id = ?', whereArgs: [id]);
   }
 
   // --- CRUD Operations for Rate ---
   Future<int> insertRate(Rate rate) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.insert('Rate', rate.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<Rate>> getAllRates() async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Rate');
     return List.generate(maps.length, (i) => Rate.fromMap(maps[i]));
   }
   Future<Rate?> getRateById(int id) async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Rate', where: 'Rate_Id = ?', whereArgs: [id]);
     return maps.isNotEmpty ? Rate.fromMap(maps.first) : null;
   }
   Future<int> updateRate(Rate rate) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.update('Rate', rate.toMap(), where: 'Rate_Id = ?', whereArgs: [rate.rateId]);
   }
   Future<int> deleteRate(int id) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.delete('Rate', where: 'Rate_Id = ?', whereArgs: [id]);
   }
 
   // --- CRUD Operations for Rate_Interval ---
   Future<int> insertRateInterval(RateInterval rateInterval) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.insert('Rate_Interval', rateInterval.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<RateInterval>> getAllRateIntervals() async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Rate_Interval');
     return List.generate(maps.length, (i) => RateInterval.fromMap(maps[i]));
   }
   Future<RateInterval?> getRateIntervalById(int id) async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Rate_Interval', where: 'Rate_Interval_Id = ?', whereArgs: [id]);
     return maps.isNotEmpty ? RateInterval.fromMap(maps.first) : null;
   }
   Future<int> updateRateInterval(RateInterval rateInterval) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.update('Rate_Interval', rateInterval.toMap(), where: 'Rate_Interval_Id = ?', whereArgs: [rateInterval.rateIntervalId]);
   }
   Future<int> deleteRateInterval(int id) async {
-    final db = await database;
+    final db = await ensure_db();
     return await db.delete('Rate_Interval', where: 'Rate_Interval_Id = ?', whereArgs: [id]);
   }
-  Future<List<PlayerSelectionItem>> fetchPlayerSelectionList() async {
-    final db = await database;
+  Future<List<PlayerSelectionItem>> fetchPlayerSelectionList () async {
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps = await db.query('Player_Selection_List');
     return List.generate(maps.length, (i) {
       return PlayerSelectionItem.fromMap(maps[i]); // Convert each map to a PlayerSelectionItem
     });
   }
-  Future<List<SessionPanelItem>> fetchSessionPanelList({bool showingOnlyActiveSessions = true,
+
+
+  Future<List<SessionPanelItem>> fetchSessionPanelList({bool showOnlyActiveSessions = true,
                                                         int? playerId}) async {
-    final db = await database;
+    final db = await ensure_db();
     final List<Map<String, dynamic>> maps =
-      showingOnlyActiveSessions
+      showOnlyActiveSessions
       ? (
           (playerId != null)
           ? await db.query(
@@ -279,4 +353,5 @@ class DatabaseProvider with ChangeNotifier {
       return SessionPanelItem.fromMap(maps[i]); // Convert each map to a SessionPanelItem
     });
   }
+
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carolina_card_club/time_provider.dart';
-import 'package:carolina_card_club/database/database_provider.dart';
+import 'package:carolina_card_club/database_provider.dart';
 import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart'
     as picker;
 
