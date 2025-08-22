@@ -5,22 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-// Import your custom files
-import 'app_settings_provider.dart';
-import 'app_settings.dart';
-import 'database_provider.dart';
-import 'models/session_panel_item.dart'; // Your SessionPanelItem model
+import '../providers/database_provider.dart';
+import '../providers/app_settings_provider.dart';
+
+import '../models/app_settings.dart';
+import '../models/session_panel_item.dart'; // Your SessionPanelItem model
 
 class SessionPanel extends StatelessWidget {
   final ValueChanged<int?>? onSessionSelected; // Callback for when a session is tapped
-  final void Function()? onOpenSettings; // Callback for when Settings bottom sheet requested by icon
   final int? selectedPlayerId;
   final int? selectedSessionId;
 
   const SessionPanel({
     super.key,
     this.onSessionSelected,
-    this.onOpenSettings,
     this.selectedPlayerId,
     this.selectedSessionId,
   });
@@ -81,9 +79,10 @@ class SessionPanel extends StatelessWidget {
                 ),
                 Row(
                   children: [
+                    SizedBox(width: 16.0), // Adds a fixed 16-pixel space
                     Text(
                       _defaultStartTime==null
-                        ? 'null'
+                        ? 'Start Time not set?!'
                         : 'Start Time: ${_defaultStartTime!.hour}:${_defaultStartTime!.minute.toString().padLeft(2, '0')}',
                       style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
                     ),
@@ -92,11 +91,7 @@ class SessionPanel extends StatelessWidget {
                       _showOnlyActiveSessions ? 'Active' : 'All',
                       style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
                     ),
-                    IconButton( // <--- Settings Icon Button
-                      icon: const Icon(Icons.settings),
-                      tooltip: 'Open Settings',
-                      onPressed: onOpenSettings, // <--- Call the passed callback
-                    ),
+                    SizedBox(width: 16.0), // Adds a fixed 16-pixel space
                   ],
                 ),
                 const Divider(),

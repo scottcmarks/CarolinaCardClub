@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart'; // For formatting the time
 import 'package:provider/provider.dart';
 
-import 'package:carolina_card_club/time_provider.dart';
+import '../providers/time_provider.dart';
 
 
 class RealtimeClock extends StatelessWidget {

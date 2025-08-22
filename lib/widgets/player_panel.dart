@@ -5,8 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-// Import your custom files
-import '../database_provider.dart'; // Your DatabaseProvider (ChangeNotifier) - Corrected path
+import '../providers/database_provider.dart'; // Your DatabaseProvider (ChangeNotifier) - Corrected path
 import '../models/player_selection_item.dart'; // Your PlayerSelectionItem model
 
 class PlayerPanel extends StatelessWidget {

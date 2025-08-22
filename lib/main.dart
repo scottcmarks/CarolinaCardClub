@@ -4,13 +4,13 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 // Providers
-import 'app_settings_provider.dart';
-import 'database_provider.dart';
-import 'time_provider.dart';
+import 'providers/app_settings_provider.dart';
+import 'providers/database_provider.dart';
+import 'providers/time_provider.dart';
 
 
 // Widgets
-import 'main_split_view_page.dart';
+import 'widgets/carolina_card_club_app.dart';
 
 
 void main() async {
@@ -63,28 +63,7 @@ void main() async {
         ),
 
       ],
-      child: const MyApp(), // The root widget of your application
+      child: const CarolinaCardClubApp(), // The root widget of your application
     ),
   );
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // MaterialApp sets up the basic Material Design theme and navigation for your app.
-    return MaterialApp(
-      title: 'Your Awesome Split View App', // This is the title for the OS, often seen in task switchers
-      theme: ThemeData(
-        primarySwatch: Colors.blue, // A basic primary color theme
-        visualDensity: VisualDensity.adaptivePlatformDensity, // Adjusts density based on platform
-        brightness: Provider.of<AppSettingsProvider>(context).currentSettings.preferredTheme == 'dark'
-            ? Brightness.dark
-            : Brightness.light,
-      ),
-      // The `home` widget is the first screen displayed when your app starts.
-      home: const MainSplitViewPage(),
-    );
-  }
 }

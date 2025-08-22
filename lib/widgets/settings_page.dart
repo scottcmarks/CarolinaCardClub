@@ -1,8 +1,10 @@
 // settings_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'app_settings.dart';          // Import AppSettings
-import 'app_settings_provider.dart'; // Import AppSettingsProvider
+
+import '../models/app_settings.dart';          // Import AppSettings
+
+import '../providers/app_settings_provider.dart'; // Import AppSettingsProvider
 
 class SettingsPage1 extends StatefulWidget {
   const SettingsPage1({super.key});
