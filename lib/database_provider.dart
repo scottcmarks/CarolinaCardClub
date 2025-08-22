@@ -156,7 +156,8 @@ class DatabaseProvider with ChangeNotifier {
 
   Future<void> _downloadDatabase(String path) async {
     print("Attempting to download database from $_currentRemoteDbUrl");
-    final response = await http.get(Uri.parse(_currentRemoteDbUrl));
+    // TODO: timeout in AppSettings
+    final response = await http.get(Uri.parse(_currentRemoteDbUrl)).timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
       await File(path).writeAsBytes(response.bodyBytes);

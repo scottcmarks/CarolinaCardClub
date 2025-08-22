@@ -10,7 +10,7 @@ class AppSettings {
   // Constructor
   const AppSettings({
     this.showOnlyActiveSessions = false, // Provide default values
-    this.defaultStartTime,
+    this.defaultStartTime = const TimeOfDay(hour:19, minute:30),
     this.preferredTheme = 'light',
     this.remoteDatabaseUrl = 'https://carolinacardclub.com/CarolinaCardClub.db',
   });

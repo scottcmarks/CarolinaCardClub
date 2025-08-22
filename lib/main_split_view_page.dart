@@ -20,7 +20,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   int? _selectedSessionId = null;
 
   void _handlePlayerSelected(int? playerId) {
-    print('_handlePlayerSelected($playerId)');
+//    debug_print('_handlePlayerSelected($playerId)');
     setState(() {
       _selectedPlayerId = _selectedPlayerId == playerId ? null : playerId;
       if (_selectedPlayerId != null) {
@@ -33,7 +33,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
  }
 
  void _handleSessionSelected(int? sessionId) {
-    print('_handleSessionSelected($sessionId)');
+//    debug_print('_handleSessionSelected($sessionId)');
     setState(() {
       _selectedSessionId = sessionId;
     });
@@ -77,7 +77,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
             flex: 2,
             child: SessionPanel(
               onSessionSelected: _handleSessionSelected,
-              onSettingsOpened: _openSettingsBottomSheet,
+              onOpenSettings: _openSettingsBottomSheet,
               selectedPlayerId: _selectedPlayerId,
               selectedSessionId: _selectedSessionId,
             ),
