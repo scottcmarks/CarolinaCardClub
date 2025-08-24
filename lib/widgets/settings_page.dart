@@ -115,7 +115,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final timePart = DateFormat('HH:mm');
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.5,
+      height: MediaQuery.of(context).size.height * 0.9,
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
