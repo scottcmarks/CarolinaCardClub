@@ -1,4 +1,7 @@
 #!/bin/bash
 rm -rf /Users/scott/Library/Containers/com.magnolia-heights.carolinaCardClub/Data/Documents/CarolinaCardClub.db
-flutter clean
+case "${1}" in
+    -c|--clean) flutter clean; ;;
+    *) ;;
+esac
 flutter run -d macos
