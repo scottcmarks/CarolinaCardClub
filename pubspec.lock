@@ -25,14 +25,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.0"
-  awesome_datetime_picker:
-    dependency: "direct main"
-    description:
-      name: awesome_datetime_picker
-      sha256: dd7143fcc0d4358d337b4d92bc1b696dbe0c3e9f6d3fef0019f8e88b61341a3b
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.1"
   boolean_selector:
     dependency: transitive
     description:
@@ -41,6 +33,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  bottom_picker:
+    dependency: "direct main"
+    description:
+      name: bottom_picker
+      sha256: "721b95e389b1c91e387832833fdcd0fa8658a1e3f9b9d75a966af9354bb24ada"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.1"
   characters:
     dependency: transitive
     description:
@@ -126,14 +126,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_datetime_picker_plus:
-    dependency: "direct main"
-    description:
-      name: flutter_datetime_picker_plus
-      sha256: "7d82da02c4e070bb28a9107de119ad195e2319b45c786fecc13482a9ffcc51da"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.0"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -196,10 +188,10 @@ packages:
     dependency: "direct main"
     description:
       name: intl
-      sha256: "3df61194eb431efc39c4ceba583b95633a403f46c9fd341e550ce0bfa50e9aa5"
+      sha256: "910f85bce16fb5c6f614e117efa303e85a1731bb0081edf3604a2ae6e9a3cc91"
       url: "https://pub.dev"
     source: hosted
-    version: "0.20.2"
+    version: "0.17.0"
   json_annotation:
     dependency: transitive
     description:

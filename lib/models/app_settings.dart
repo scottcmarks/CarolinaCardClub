@@ -3,14 +3,16 @@ import 'package:flutter/material.dart';
 
 class AppSettings {
   final bool showOnlyActiveSessions;
-  final TimeOfDay? defaultStartTime; // Example: Add a default start time setting
+  final TimeOfDay? defaultSessionStartTime;
+  final Duration? clockOffset;
   final String preferredTheme;     // Example: Theme preference (e.g., 'light', 'dark')
   final String remoteDatabaseUrl;
 
   // Constructor
   const AppSettings({
     this.showOnlyActiveSessions = false, // Provide default values
-    this.defaultStartTime = const TimeOfDay(hour:19, minute:30),
+    this.clockOffset = const Duration(microseconds:0),
+    this.defaultSessionStartTime = const TimeOfDay(hour:19, minute:30),
     this.preferredTheme = 'light',
     this.remoteDatabaseUrl = 'https://carolinacardclub.com/CarolinaCardClub.db',
   });
@@ -19,13 +21,15 @@ class AppSettings {
   // This is a crucial pattern for data classes in Flutter, especially with ChangeNotifier.
   AppSettings copyWith({
     bool? showOnlyActiveSessions,
-    TimeOfDay? defaultStartTime,
+    TimeOfDay? defaultSessionStartTime,
+    Duration? clockOffset,
     String? preferredTheme,
     String? remoteDatabaseUrl,
   }) {
     return AppSettings(
       showOnlyActiveSessions: showOnlyActiveSessions ?? this.showOnlyActiveSessions,
-      defaultStartTime: defaultStartTime ?? this.defaultStartTime,
+      defaultSessionStartTime: defaultSessionStartTime ?? this.defaultSessionStartTime,
+      clockOffset: clockOffset ?? this.clockOffset,
       preferredTheme: preferredTheme ?? this.preferredTheme,
       remoteDatabaseUrl: remoteDatabaseUrl ?? this.remoteDatabaseUrl,
     );
@@ -35,7 +39,8 @@ class AppSettings {
   @override
   String toString() {
     return '''AppSettings(showOnlyActiveSessions: $showOnlyActiveSessions,
-                          defaultStartTime: $defaultStartTime,
+                          defaultSessionStartTime: $defaultSessionStartTime,
+                          clockOffset: $clockOffset,
                           preferredTheme: $preferredTheme,
                           remoteDatabaseUrl: $remoteDatabaseUrl)''';
   }
@@ -47,13 +52,15 @@ class AppSettings {
       other is AppSettings &&
           runtimeType == other.runtimeType &&
           showOnlyActiveSessions == other.showOnlyActiveSessions &&
-          defaultStartTime == other.defaultStartTime &&
+          defaultSessionStartTime == other.defaultSessionStartTime &&
+          clockOffset == other.clockOffset &&
           preferredTheme == other.preferredTheme &&
           remoteDatabaseUrl == other.remoteDatabaseUrl;
 
   @override
   int get hashCode => showOnlyActiveSessions.hashCode
-                    ^ defaultStartTime.hashCode
+                    ^ defaultSessionStartTime.hashCode
+                    ^ clockOffset.hashCode
                     ^ preferredTheme.hashCode
                     ^ remoteDatabaseUrl.hashCode;
 }

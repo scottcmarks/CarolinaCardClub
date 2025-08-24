@@ -50,7 +50,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
       context: context,
       isScrollControlled: true,
       builder: (BuildContext context) {
-        return const SettingsPage1();
+        return const SettingsPage();
       },
     );
     // UI will rebuild automatically because MainSplitViewPage and SessionPanel

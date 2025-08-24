@@ -1,34 +1,44 @@
-// settings_page.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:bottom_picker/bottom_picker.dart';
+import 'package:bottom_picker/resources/arrays.dart';
 
-import '../models/app_settings.dart';          // Import AppSettings
+import '../models/app_settings.dart';
+import '../providers/app_settings_provider.dart';
+import '../providers/time_provider.dart';
 
-import '../providers/app_settings_provider.dart'; // Import AppSettingsProvider
-
-class SettingsPage1 extends StatefulWidget {
-  const SettingsPage1({super.key});
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
 
   @override
-  State<SettingsPage1> createState() => _SettingsPage1State();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPage1State extends State<SettingsPage1> {
+class _SettingsPageState extends State<SettingsPage> {
   // Local variables to hold temporary changes before applying
+  late AppSettingsProvider _appSettingsProvider;
+  late TimeProvider _timeProvider;
   late bool _localShowOnlyActiveSessions;
-  late TimeOfDay? _localDefaultStartTime;
+  late TimeOfDay? _defaultSessionStartTime;
+  late DateTime? _clockTime;
   late String _localPreferredTheme;
-  late TextEditingController _remoteDatabaseUrlController; // For the new URL field
+  late TextEditingController _remoteDatabaseUrlController;
 
   @override
   void initState() {
     super.initState();
-    // Initialize local variables from the current provider state
-    final settings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
+
+    _appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
+    final settings = _appSettingsProvider.currentSettings;
     _localShowOnlyActiveSessions = settings.showOnlyActiveSessions;
-    _localDefaultStartTime = settings.defaultStartTime;
+    _defaultSessionStartTime = settings.defaultSessionStartTime;
     _localPreferredTheme = settings.preferredTheme;
-    _remoteDatabaseUrlController = TextEditingController(text: settings.remoteDatabaseUrl);
+    _remoteDatabaseUrlController =
+        TextEditingController(text: settings.remoteDatabaseUrl);
+
+    _timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    _clockTime = null;
   }
 
   @override
@@ -37,30 +47,75 @@ class _SettingsPage1State extends State<SettingsPage1> {
     super.dispose();
   }
 
-  Future<void> _selectTime(BuildContext context) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _localDefaultStartTime ?? TimeOfDay.now(),
-      builder: (BuildContext context, Widget? child) {
-        return Center(
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.7,
-            child: child,
-          ),
-        );
-      },
+  /// Builds a standard title widget for the header of the bottom picker.
+  Widget _buildPickerHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
+      ),
     );
-    if (picked != null && picked != _localDefaultStartTime) {
-      setState(() {
-        _localDefaultStartTime = picked;
-      });
-    }
+  }
+
+  // A helper function to show the time picker using bottom_picker with headerBuilder
+  void _showSessionTimePicker(BuildContext context) {
+    BottomPicker.time(
+      headerBuilder: (context) => _buildPickerHeader('Set Default Session Start Time'),
+      initialTime: Time(
+        hours: _defaultSessionStartTime?.hour     ?? 19, // Carolina Card Club defaults
+        minutes: _defaultSessionStartTime?.minute ?? 30,
+      ),
+      onSubmit: (pickedDateTime) {
+        if (pickedDateTime is DateTime) {
+          setState(() {
+            _defaultSessionStartTime = TimeOfDay(hour: pickedDateTime.hour, minute: pickedDateTime.minute);
+          });
+        }
+      },
+      onDismiss: (pickedDateTime) {
+        // This callback is triggered when the picker is dismissed without a submission.
+        // If you need to perform an action on dismissal, place it here.
+        // In this case, we do nothing.
+      },
+      use24hFormat: true,
+      bottomPickerTheme: BottomPickerTheme.blue,
+    ).show(context);
+  }
+
+  // A helper function to show the combined date and time picker using bottom_picker with headerBuilder
+  void _showCombinedDateTimePicker(BuildContext context) {
+    BottomPicker.dateTime(
+      headerBuilder: (context) => _buildPickerHeader('Set Clock Time'),
+      initialDateTime: _clockTime ?? _timeProvider.currentTime,
+      minDateTime: DateTime(2025, 7, 1),
+      onSubmit: (pickedDateTime) {
+        if (pickedDateTime is DateTime) {
+          setState(() {
+            _clockTime = pickedDateTime;
+          });
+        }
+      },
+      onDismiss: (pickedDateTime) {
+        // This callback is triggered when the picker is dismissed without a submission.
+        // If you need to perform an action on dismissal, place it here.
+        // In this case, we do nothing.
+      },
+      use24hFormat: true,
+      bottomPickerTheme: BottomPickerTheme.blue,
+    ).show(context);
   }
 
   @override
   Widget build(BuildContext context) {
+    final datePart = DateFormat.yMMMd();
+    final timePart = DateFormat('HH:mm');
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7, // Example height
+      height: MediaQuery.of(context).size.height * 0.5,
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
@@ -68,74 +123,62 @@ class _SettingsPage1State extends State<SettingsPage1> {
             'App Settings',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
+          const Divider(),
+          // Toggle for showing only active sessions
           SwitchListTile(
-            title: const Text('Show only active sessions'),
+            title: const Text('Show Only Active Sessions'),
             value: _localShowOnlyActiveSessions,
-            onChanged: (bool newValue) {
+            onChanged: (bool value) {
               setState(() {
-                _localShowOnlyActiveSessions = newValue;
+                _localShowOnlyActiveSessions = value;
               });
             },
           ),
+          // Button to set session start time
           ListTile(
-            title: const Text('Default Start Time'),
-            subtitle: Text(
-              _localDefaultStartTime?.format(context) ?? 'Not set',
-            ),
-            trailing: const Icon(Icons.access_time),
-            onTap: () => _selectTime(context),
-          ),
-          // Example: Dropdown for theme selection
-          ListTile(
-            title: const Text('Preferred Theme'),
-            trailing: DropdownButton<String>(
-              value: _localPreferredTheme,
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    _localPreferredTheme = newValue;
-                  });
-                }
-              },
-              items: <String>['light', 'dark', 'system']
-                  .map<DropdownMenuItem<String>>((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value),
-                );
-              }).toList(),
+            title: const Text('Default Session Start Time'),
+            trailing: TextButton(
+              onPressed: () => _showSessionTimePicker(context),
+              child: Text(_defaultSessionStartTime?.format(context) ?? 'Not set'),
             ),
           ),
-          // New: Remote Database URL
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: TextField(
-              controller: _remoteDatabaseUrlController,
-              decoration: const InputDecoration(
-                labelText: 'Remote Database URL',
-                border: OutlineInputBorder(),
+          // Button to set the clock using bottom_picker
+          ListTile(
+            title: const Text('Clock Time'),
+            trailing: TextButton(
+              onPressed: () => _showCombinedDateTimePicker(context),
+              child: Text(
+                _clockTime != null
+                    ? '${datePart.format(_clockTime!)} ${timePart.format(_clockTime!)}'
+                    : 'Set Time',
               ),
-              onChanged: (newValue) {
-                // No need to call setState here, as we're using a TextEditingController
-                // The value will be read directly from the controller on save
-              },
             ),
+          ),
+          // Text field for remote database URL
+          TextField(
+            controller: _remoteDatabaseUrlController,
+            decoration:
+                const InputDecoration(labelText: 'Remote Database URL'),
           ),
           const Spacer(),
           ElevatedButton(
             onPressed: () {
-              // Get the provider instance to update it
-              final appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
-
-              // Update the provider with the new settings
-              appSettingsProvider.updateSettings(
+              final _now = DateTime.now();
+              final clockOffset = _clockTime?.difference(_now);
+              _appSettingsProvider.updateSettings(
                 showOnlyActiveSessions: _localShowOnlyActiveSessions,
-                defaultStartTime: _localDefaultStartTime,
+                defaultSessionStartTime: _defaultSessionStartTime,
+                clockOffset: clockOffset,
                 preferredTheme: _localPreferredTheme,
-                remoteDatabaseUrl: _remoteDatabaseUrlController.text, // Add the new field
+                remoteDatabaseUrl: _remoteDatabaseUrlController.text,
               );
-
-              Navigator.pop(context); // Close the bottom sheet
+              if (_clockTime != null) {
+                _timeProvider.setTime(_clockTime!);
+              }
+              setState((){});
+              if (mounted) {
+                Navigator.of(context).pop();
+              }
             },
             child: const Text('Save Settings'),
           ),
