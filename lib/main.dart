@@ -1,7 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
+// import 'package:window_manager/window_manager.dart';
 
 // Providers
 import 'providers/app_settings_provider.dart';
@@ -16,21 +16,21 @@ import 'widgets/carolina_card_club_app.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Required to ensure the window manager can be initialized
-  await windowManager.ensureInitialized();
+  // await windowManager.ensureInitialized();
 
-  // Define your initial window size and position
-  WindowOptions windowOptions = WindowOptions(
-    size: const Size(1200, 800), // Desired initial width and height
-    center: true, // Center the window on the screen
-    minimumSize: const Size(800, 600), // Optional: Set a minimum size
-    // You can also set maximumSize, backgroundColor, etc.
-  );
+  // // Define your initial window size and position
+  // WindowOptions windowOptions = WindowOptions(
+  //   size: const Size(1200, 800), // Desired initial width and height
+  //   center: true, // Center the window on the screen
+  //   minimumSize: const Size(800, 600), // Optional: Set a minimum size
+  //   // You can also set maximumSize, backgroundColor, etc.
+  // );
 
-  // Set the window options
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-  });
+  // // Set the window options
+  // windowManager.waitUntilReadyToShow(windowOptions, () async {
+  //   await windowManager.show();
+  //   await windowManager.focus();
+  // });
 
   final appSettingsProvider = AppSettingsProvider();
   await appSettingsProvider.loadSettings();

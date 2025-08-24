@@ -11,7 +11,8 @@ class AppSettingsProvider extends ChangeNotifier {
 
   // Key constants for SharedPreferences
   static const String _keyShowOnlyActiveSessions = 'showOnlyActiveSessions';
-  static const String _keyDefaultStartTime = 'defaultStartTime';
+  static const String _keySessionStartTime = 'defaultSessionStartTime';
+  static const String _keyClockOffset = 'clockOffset';
   static const String _keyPreferredTheme = 'preferredTheme';
   static const String _keyRemoteDatabaseUrl = 'remoteDatabaseUrl';
 
@@ -20,13 +21,15 @@ class AppSettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
 
     final bool? showOnlyActiveSessions = prefs.getBool(_keyShowOnlyActiveSessions);
-    final String? defaultStartTimeString = prefs.getString(_keyDefaultStartTime);
+    final String? defaultSessionStartTimeString = prefs.getString(_keySessionStartTime);
+    final int? clockOffsetMicroseconds = prefs.getInt(_keyClockOffset);
     final String? preferredTheme = prefs.getString(_keyPreferredTheme);
     final String? remoteDatabaseUrl = prefs.getString(_keyRemoteDatabaseUrl);
 
     _currentSettings = _currentSettings.copyWith(
       showOnlyActiveSessions: showOnlyActiveSessions,
-      defaultStartTime: _timeOfDayFromString(defaultStartTimeString),
+      defaultSessionStartTime: _timeOfDayFromString(defaultSessionStartTimeString),
+      clockOffset: Duration(microseconds:(clockOffsetMicroseconds ?? 0)),
       preferredTheme: preferredTheme,
       remoteDatabaseUrl: remoteDatabaseUrl,
     );
@@ -55,7 +58,8 @@ class AppSettingsProvider extends ChangeNotifier {
   // Combines logic for updating settings and persisting them
   void updateSettings({
     bool? showOnlyActiveSessions,
-    TimeOfDay? defaultStartTime,
+    TimeOfDay? defaultSessionStartTime,
+    Duration? clockOffset,
     String? preferredTheme,
     String? remoteDatabaseUrl,
   }) async { // Make it async since it interacts with SharedPreferences
@@ -63,7 +67,8 @@ class AppSettingsProvider extends ChangeNotifier {
 
     _currentSettings = _currentSettings.copyWith(
       showOnlyActiveSessions: showOnlyActiveSessions,
-      defaultStartTime: defaultStartTime,
+      defaultSessionStartTime: defaultSessionStartTime,
+      clockOffset: clockOffset,
       preferredTheme: preferredTheme,
       remoteDatabaseUrl: remoteDatabaseUrl,
     );
@@ -72,8 +77,11 @@ class AppSettingsProvider extends ChangeNotifier {
     if (showOnlyActiveSessions != null) {
       await prefs.setBool(_keyShowOnlyActiveSessions, _currentSettings.showOnlyActiveSessions);
     }
-    if (defaultStartTime != null) {
-      await prefs.setString(_keyDefaultStartTime, _timeOfDayToString(_currentSettings.defaultStartTime)!);
+    if (defaultSessionStartTime != null) {  // TODO: DatabaseProvider for new Sessions?
+      await prefs.setString(_keySessionStartTime, _timeOfDayToString(_currentSettings.defaultSessionStartTime)!);
+    }
+    if (clockOffset != null) {  // TODO: TimeProvider
+      await prefs.setInt(_keyClockOffset, _currentSettings.clockOffset!.inMicroseconds);
     }
     if (preferredTheme != null) {
       await prefs.setString(_keyPreferredTheme, _currentSettings.preferredTheme);
@@ -95,11 +103,20 @@ class AppSettingsProvider extends ChangeNotifier {
     }
   }
 
-  void setDefaultStartTime(TimeOfDay newTime) async {
-    if (_currentSettings.defaultStartTime != newTime) {
-      _currentSettings = _currentSettings.copyWith(defaultStartTime: newTime);
+  void setSessionStartTime(TimeOfDay newTime) async {  // TODO: DatabaseProvider for new Sessions?
+    if (_currentSettings.defaultSessionStartTime != newTime) {
+      _currentSettings = _currentSettings.copyWith(defaultSessionStartTime: newTime);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDefaultStartTime, _timeOfDayToString(newTime)!); // Persist
+      await prefs.setString(_keySessionStartTime, _timeOfDayToString(newTime)!); // Persist
+      notifyListeners();
+    }
+  }
+
+  void setClockOffset(Duration newOffset) async {  // TODO: TimeProvider
+    if (_currentSettings.clockOffset != newOffset) {
+      _currentSettings = _currentSettings.copyWith(clockOffset: newOffset);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keyClockOffset, newOffset!.inMicroseconds); // Persist
       notifyListeners();
     }
   }

@@ -3,10 +3,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/database_provider.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/database_provider.dart';
+import '../providers/time_provider.dart';
 
 import '../models/app_settings.dart';
 import '../models/session_panel_item.dart'; // Your SessionPanelItem model
@@ -28,7 +30,16 @@ class SessionPanel extends StatelessWidget {
     final AppSettingsProvider? _appSettingsProvider = Provider.of<AppSettingsProvider>(context);
     final AppSettings? _currentSettings = _appSettingsProvider!.currentSettings;
     final bool _showOnlyActiveSessions = _currentSettings!.showOnlyActiveSessions;
-    final TimeOfDay? _defaultStartTime = _currentSettings!.defaultStartTime;
+    final TimeOfDay? _defaultSessionStartTime = _currentSettings!.defaultSessionStartTime;
+    final TimeProvider? _timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    final DateTime _now = _timeProvider!.currentTime;
+    DateTime _clubSessionStartDateTime = DateTime(
+      _now.year,
+      _now.month,
+      _now.day,
+      _defaultSessionStartTime?.hour ?? 19,
+      _defaultSessionStartTime?.minute ?? 30,
+    );
 
     // Listen to DatabaseProvider for its loading status and database instance
     return Consumer<DatabaseProvider>(
@@ -80,10 +91,11 @@ class SessionPanel extends StatelessWidget {
                 Row(
                   children: [
                     SizedBox(width: 16.0), // Adds a fixed 16-pixel space
-                    Text(
-                      _defaultStartTime==null
-                        ? 'Start Time not set?!'
-                        : 'Start Time: ${_defaultStartTime!.hour}:${_defaultStartTime!.minute.toString().padLeft(2, '0')}',
+                    Text(  // TODO: this is all wrong, of course.  It's the default Session Start Time, which
+                           // really is just the TimeOfDay pasted on to the current day as the initial DateTime for
+                           // a DateTime picker for the _clubSessionStartTime, which is what should be here.
+                           // I note that by giving the correct label to the wrong value ;>
+                      'Club session started at ${DateFormat("yyyy-MM-dd HH:mm").format(_clubSessionStartDateTime)}',
                       style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
                     ),
                     Spacer(),
@@ -101,7 +113,7 @@ class SessionPanel extends StatelessWidget {
                       showOnlyActiveSessions:_showOnlyActiveSessions,
                       playerId:selectedPlayerId,
                     ),
-                    builder: (context, snapshot) {
+                    builder: (context, snapshot) {  // TODO: factor out
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       } else if (snapshot.hasError) {
