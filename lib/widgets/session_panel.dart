@@ -50,6 +50,10 @@ String formatMoney(double price) {
   return '\$${price.toStringAsFixed(2)}';
 }
 
+String formatMaybeMoney(double? price) {
+  return (price != null ) ? formatMoney(price!) : '';
+}
+
 String formatDuration(int totalSeconds) {
   final int totalMinutes = totalSeconds ~/ 60;
   final int hours = totalMinutes ~/ 60;
@@ -57,6 +61,10 @@ String formatDuration(int totalSeconds) {
   final String formattedHours = hours.toString();
   final String formattedMinutes = minutes.toString().padLeft(2, '0');
   return '${formattedHours}h${formattedMinutes}m';
+}
+
+String formatMaybeDuration(int? maybeSeconds) {
+  return (maybeSeconds != null) ? formatDuration(maybeSeconds!) : '' ;
 }
 
 class _SessionPanelState extends State<SessionPanel> {
@@ -310,14 +318,14 @@ class SelectedPlayerCard extends StatelessWidget {
                 Expanded(
                   flex: 1,
                   child: Text(
-                    'Duration: ${formatDuration(session.durationInSeconds)}',
+                    'Duration: ${formatMaybeDuration(session.durationInSeconds)}',
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Expanded(
                   flex: 1,
                   child: Text(
-                    'Amount: ${formatMoney(session.amount)}',
+                    'Amount: ${formatMaybeMoney(session.amount)}',
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -384,7 +392,7 @@ class AllPlayersCard extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    formatDuration(session.durationInSeconds),
+                    formatMaybeDuration(session.durationInSeconds),
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -392,7 +400,7 @@ class AllPlayersCard extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    formatMoney(session.amount),
+                    formatMaybeMoney(session.amount),
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                   ),
