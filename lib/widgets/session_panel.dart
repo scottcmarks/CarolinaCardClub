@@ -1,4 +1,4 @@
-// lib/session_panel.dart
+// lib/widgets/session_panel.dart
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +13,7 @@ import '../providers/time_provider.dart';
 import '../models/app_settings.dart';
 import '../models/session_panel_item.dart'; // Your SessionPanelItem model
 
-class SessionPanel extends StatelessWidget {
+class SessionPanel extends StatefulWidget {
   final ValueChanged<int?>? onSessionSelected; // Callback for when a session is tapped
   final int? selectedPlayerId;
   final int? selectedSessionId;
@@ -26,14 +26,67 @@ class SessionPanel extends StatelessWidget {
   });
 
   @override
+  _SessionPanelState createState() => _SessionPanelState();
+}
+
+DateTime epochToDateTime(int seconds) {
+  return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+}
+
+String formatEpoch(String format, int seconds) {
+  return DateFormat(format).format(epochToDateTime(seconds));
+}
+
+String isoFormatEpoch(int seconds) {
+  return formatEpoch('yy-MM-dd HH:mm', seconds);
+}
+
+String maybe_isoFormatEpoch(int? seconds, String ifNull) {
+  return seconds != null ? isoFormatEpoch(seconds!) : ifNull;
+}
+
+String formatMoney(double price) {
+  return '\$${price.toStringAsFixed(2)}';
+}
+
+String formatDuration(int totalSeconds) {
+  final int totalMinutes = totalSeconds ~/ 60;
+
+  final int hours = totalMinutes ~/ 60;
+  final int minutes = totalMinutes.remainder(60);
+
+  // Use padLeft for leading zeros and create the final string
+  final String formattedHours = hours.toString();
+  final String formattedMinutes = minutes.toString().padLeft(2, '0');
+
+  return '${formattedHours}h${formattedMinutes}m';
+}
+
+class _SessionPanelState extends State<SessionPanel> {
+  DateTime? _clubSessionStartDateTime = null;
+
+  late AppSettingsProvider? _appSettingsProvider;
+
+  void _toggleClubSessionTime(DateTime defaultTime) {
+    setState(() {
+      if (_clubSessionStartDateTime == null) {
+        _clubSessionStartDateTime = defaultTime;
+      } else {
+        _clubSessionStartDateTime = null;
+      }
+      _appSettingsProvider!.setShowOnlyActiveSessions(_clubSessionStartDateTime != null);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final AppSettingsProvider? _appSettingsProvider = Provider.of<AppSettingsProvider>(context);
+    _appSettingsProvider = Provider.of<AppSettingsProvider>(context);
     final AppSettings? _currentSettings = _appSettingsProvider!.currentSettings;
     final bool _showOnlyActiveSessions = _currentSettings!.showOnlyActiveSessions;
     final TimeOfDay? _defaultSessionStartTime = _currentSettings!.defaultSessionStartTime;
     final TimeProvider? _timeProvider = Provider.of<TimeProvider>(context, listen: false);
     final DateTime _now = _timeProvider!.currentTime;
-    DateTime _clubSessionStartDateTime = DateTime(
+    final DateTime _defaultSessionStartDateTime = DateTime(
       _now.year,
       _now.month,
       _now.day,
@@ -90,37 +143,42 @@ class SessionPanel extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    SizedBox(width: 16.0), // Adds a fixed 16-pixel space
-                    Text(  // TODO: this is all wrong, of course.  It's the default Session Start Time, which
-                           // really is just the TimeOfDay pasted on to the current day as the initial DateTime for
-                           // a DateTime picker for the _clubSessionStartTime, which is what should be here.
-                           // I note that by giving the correct label to the wrong value ;>
-                      'Club session started at ${DateFormat("yyyy-MM-dd HH:mm").format(_clubSessionStartDateTime)}',
-                      style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+                    const SizedBox(width: 16.0), // Adds a fixed 16-pixel space
+                    InkWell(
+                      onTap: () => _toggleClubSessionTime(_defaultSessionStartDateTime),
+                      child: Text(
+                        (_clubSessionStartDateTime != null)
+                            ? 'Club session started at ${DateFormat("yyyy-MM-dd HH:mm").format(_clubSessionStartDateTime!)}'
+                            : 'Club session would be started at ${DateFormat("yyyy-MM-dd HH:mm").format(_defaultSessionStartDateTime)}',
+                        style: TextStyle(fontSize: 16, fontStyle: _clubSessionStartDateTime != null ? FontStyle.normal : FontStyle.italic),
+                      ),
                     ),
-                    Spacer(),
+                    const Spacer(),
                     Text(
                       _showOnlyActiveSessions ? 'Active' : 'All',
-                      style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+                      style: TextStyle(fontSize: 16, fontStyle: _clubSessionStartDateTime != null ? FontStyle.normal : FontStyle.italic),
                     ),
-                    SizedBox(width: 16.0), // Adds a fixed 16-pixel space
+                    const SizedBox(width: 16.0), // Adds a fixed 16-pixel space
                   ],
                 ),
                 const Divider(),
                 Expanded(
                   child: FutureBuilder<List<SessionPanelItem>>(
                     future: databaseProvider.fetchSessionPanelList(
-                      showOnlyActiveSessions:_showOnlyActiveSessions,
-                      playerId:selectedPlayerId,
+                      showOnlyActiveSessions: _showOnlyActiveSessions,
+                      playerId: widget.selectedPlayerId,
                     ),
-                    builder: (context, snapshot) {  // TODO: factor out
+                    builder: (context, snapshot) {
+                      // TODO: factor out
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       } else if (snapshot.hasError) {
                         // This error is from fetching sessions, not the database itself loading
                         return Center(child: Text('Error loading sessions: ${snapshot.error}'));
                       } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return Center(child: Text('No ${_showOnlyActiveSessions ? 'active sessions' : 'sessions'} found.'));
+                        return Center(
+                            child: Text(
+                                'No ${_showOnlyActiveSessions ? 'active sessions' : 'sessions'} found.'));
                       } else {
                         List<SessionPanelItem> sessions = snapshot.data!;
                         return ListView.builder(
@@ -129,7 +187,7 @@ class SessionPanel extends StatelessWidget {
                           itemBuilder: (context, index) {
                             final session = sessions[index];
                             final int sessionId = session.sessionId;
-                            final bool isSelected = sessionId == selectedSessionId;
+                            final bool isSelected = sessionId == widget.selectedSessionId;
 
                             // Determine background color
                             Color? cardColor = isSelected ? Colors.blue.shade100 : null;
@@ -143,11 +201,22 @@ class SessionPanel extends StatelessWidget {
                                 },
                                 child: InkWell(
                                   onTap: () {
-                                    onSessionSelected?.call(sessionId);
+                                    widget.onSessionSelected?.call(sessionId);
                                   },
                                   child: ListTile(
-                                    title: Text('sessionId: ${session.sessionId}   ${session.name}   ${session.balance}'),
-                                    subtitle: Text('${session.amount}  ${session.durationInSeconds}   ${session.startEpoch} - ${session.stopEpoch}'), // Example
+                                    title: Text(
+                                        ' ${session.name}',
+                                    ),
+                                    subtitle: Text(
+                                        'Player session ${session.sessionId}:'
+                                        + '  ' +
+                                        '${isoFormatEpoch(session.startEpoch)} - ${maybe_isoFormatEpoch(session.stopEpoch, "ongoing")}'
+                                        + '  ' +
+                                        '${formatDuration(session.durationInSeconds)}'
+                                        + '  ' +
+                                        '${formatMoney(session.amount)}'
+                                        ,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -158,9 +227,9 @@ class SessionPanel extends StatelessWidget {
                     },
                   ),
                 ),
-              ]
+              ],
             );
-        };
+        }
       },
     );
   }
