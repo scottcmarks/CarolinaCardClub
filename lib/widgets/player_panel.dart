@@ -161,7 +161,7 @@ class PlayerCard extends StatelessWidget {
             title: Text(player.name),
             subtitle: Text('Balance: \$${player.balance.toStringAsFixed(2)}'),
             trailing: player.balance > 0
-                ? const Icon(Icons.emergency, color: Colors.green)
+                ? const Icon(Icons.check_circle, color: Colors.green)
                 : player.balance < 0
                     ? const Icon(Icons.warning, color: Colors.red)
                     : null,

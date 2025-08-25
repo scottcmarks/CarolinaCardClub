@@ -5,9 +5,10 @@ class SessionPanelItem {
   final String name;
   final int startEpoch;
   final int? stopEpoch; // Nullable as per schema
-  final int durationInSeconds;
-  final double amount;
+  final int? durationInSeconds;
+  final double? amount;
   final double balance;
+  final double rate;
 
   SessionPanelItem({
     required this.sessionId,
@@ -15,9 +16,10 @@ class SessionPanelItem {
     required this.name,
     required this.startEpoch,
     this.stopEpoch, // Make optional, it will be null?
-    required this.durationInSeconds,
-    required this.amount,
+    this.durationInSeconds,
+    this.amount,
     required this.balance,
+    required this.rate,
   });
 
   // Convert a SessionPanelItem object into a Map.
@@ -31,6 +33,7 @@ class SessionPanelItem {
       'Duration_In_Seconds': durationInSeconds,
       'Amount': amount,
       'Balance': balance,
+      'Rate': rate,
     };
   }
 
@@ -42,9 +45,10 @@ class SessionPanelItem {
       name: map['Name'] ?? 'Unnamed', // Provide a default if name is null
       startEpoch: map['Start_Epoch'],
       stopEpoch: map['Stop_Epoch'], // Will be null if it's not set in the DB
-      durationInSeconds: map['Duration_In_Seconds'],
-      amount: (map['Amount'] is int) ? (map['Amount'] as int).toDouble() : map['Amount'],
+      durationInSeconds: map['Duration_In_Seconds'], // Will be null if it's not set in the DB
+      amount: (map['Amount'] is int) ? (map['Amount'] as int).toDouble() : map['Amount'], // ditto
       balance: (map['Balance'] is int) ? (map['Balance'] as int).toDouble() : map['Balance'],
+      rate: (map['Rate'] is int) ? (map['Rate'] as int).toDouble() : map['Rate'],
     );
   }
 }
