@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/database_provider.dart'; // Your DatabaseProvider (ChangeNotifier) - Corrected path
-import '../models/player_selection_item.dart'; // Your PlayerSelectionItem model
+import '../providers/database_provider.dart';
+import '../models/player_selection_item.dart';
 
 class PlayerPanel extends StatelessWidget {
-  final ValueChanged<int?>? onPlayerSelected; // Callback for when a player is tapped
+  final ValueChanged<int?>? onPlayerSelected;
   final int? selectedPlayerId;
 
   const PlayerPanel({
@@ -20,10 +20,8 @@ class PlayerPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to DatabaseProvider for its loading status and database instance
     return Consumer<DatabaseProvider>(
       builder: (context, databaseProvider, child) {
-        // Handle different loading states of the database itself
         switch (databaseProvider.loadStatus) {
           case DatabaseLoadStatus.initial:
           case DatabaseLoadStatus.loadingRemote:
@@ -33,7 +31,7 @@ class PlayerPanel extends StatelessWidget {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 10),
-                  Text('Downloading database...'), // More specific message
+                  Text('Downloading database...'),
                 ],
               ),
             );
@@ -44,12 +42,11 @@ class PlayerPanel extends StatelessWidget {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 10),
-                  Text('Loading database from assets...'), // Informing about fallback
+                  Text('Loading database from assets...'),
                 ],
               ),
             );
           case DatabaseLoadStatus.error:
-            // The database itself failed to load
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(16.0),
@@ -61,14 +58,12 @@ class PlayerPanel extends StatelessWidget {
               ),
             );
           case DatabaseLoadStatus.loaded:
-            // Database is loaded, now load panel-specific data using a FutureBuilder
             return FutureBuilder<List<PlayerSelectionItem>>(
               future: databaseProvider.fetchPlayerSelectionList(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 } else if (snapshot.hasError) {
-                  // This error is from fetching players, not the database itself loading
                   return Center(child: Text('Error loading players: ${snapshot.error}'));
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return const Center(child: Text('No players found.'));
@@ -79,58 +74,10 @@ class PlayerPanel extends StatelessWidget {
                     itemCount: players.length,
                     itemBuilder: (context, index) {
                       final player = players[index];
-                      final int playerId = player.playerId;
-                      final bool isSelected = playerId == selectedPlayerId;
-                      final bool inArrears = player.balance < 0; // Assuming PlayerSelectionItem has balance
-
-                      // Determine background color based on balance
-                      Color? cardColor =
-                          isSelected
-                          ? inArrears
-                            ? Colors.purple.shade100
-                            : Colors.blue.shade100
-                          : inArrears
-                            ? Colors.red.shade100
-                            : null;
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                        color: cardColor,
-                        child: MouseRegion(
-                          onHover: (PointerHoverEvent event) {
-                            if (event.synthesized == false && event.buttons == 0) {
-                              if (HardwareKeyboard.instance.isShiftPressed) {
-                                // Shift + hover detected
-                              }
-                            }
-                          },
-                          child: InkWell(
-                            onTap: () {
-                              if (HardwareKeyboard.instance.isShiftPressed) {
-                                print("Shift + Left click!");
-                              } else if (HardwareKeyboard.instance.isControlPressed) {
-                                print("Ctrl/Cmd + Left click!");
-                              } else if (HardwareKeyboard.instance.isAltPressed) {
-                                print("Alt + Left click!");
-                              } else {
-                                print("Regular Left click!");
-                              }
-                              onPlayerSelected?.call(playerId); // Your original logic
-                            },
-                            onDoubleTap: () {
-                              print("Double-tap!");
-                            },
-                            onLongPress: () {
-                              print("Long press!");
-                            },
-                            onSecondaryTap: () {
-                              print("Right click!");
-                            },
-                            child: ListTile(
-                              title: Text(player.name),
-                            ),
-                          ),
-                        ),
+                      return PlayerCard(
+                        player: player,
+                        isSelected: player.playerId == selectedPlayerId,
+                        onPlayerSelected: onPlayerSelected,
                       );
                     },
                   );
@@ -139,6 +86,88 @@ class PlayerPanel extends StatelessWidget {
             );
         }
       },
+    );
+  }
+}
+
+/// A card to display player information.
+class PlayerCard extends StatelessWidget {
+  final PlayerSelectionItem player;
+  final bool isSelected;
+  final ValueChanged<int?>? onPlayerSelected;
+
+  const PlayerCard({
+    super.key,
+    required this.player,
+    required this.isSelected,
+    this.onPlayerSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color? cardColor;
+
+    if (isSelected) {
+      if (player.balance > 0) {
+        cardColor = Colors.cyan.shade100;
+      } else if (player.balance == 0) {
+        cardColor = Colors.blue.shade100;
+      } else {
+        cardColor = Colors.purple.shade100;
+      }
+    } else {
+      if (player.balance > 0) {
+        cardColor = Colors.green.shade100;
+      } else if (player.balance == 0) {
+        cardColor = null; // or Colors.white
+      } else {
+        cardColor = Colors.red.shade100;
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      color: cardColor,
+      child: MouseRegion(
+        onHover: (PointerHoverEvent event) {
+          if (event.synthesized == false && event.buttons == 0) {
+            if (HardwareKeyboard.instance.isShiftPressed) {
+              // Shift + hover detected
+            }
+          }
+        },
+        child: InkWell(
+          onTap: () {
+            if (HardwareKeyboard.instance.isShiftPressed) {
+              print("Shift + Left click!");
+            } else if (HardwareKeyboard.instance.isControlPressed) {
+              print("Ctrl/Cmd + Left click!");
+            } else if (HardwareKeyboard.instance.isAltPressed) {
+              print("Alt + Left click!");
+            } else {
+              onPlayerSelected?.call(player.playerId);
+            }
+          },
+          onDoubleTap: () {
+            print("Double-tap!");
+          },
+          onLongPress: () {
+            print("Long press!");
+          },
+          onSecondaryTap: () {
+            print("Right click!");
+          },
+          child: ListTile(
+            title: Text(player.name),
+            subtitle: Text('Balance: \$${player.balance.toStringAsFixed(2)}'),
+            trailing: player.balance > 0
+                ? const Icon(Icons.emergency, color: Colors.green)
+                : player.balance < 0
+                    ? const Icon(Icons.warning, color: Colors.red)
+                    : null,
+          ),
+        ),
+      ),
     );
   }
 }

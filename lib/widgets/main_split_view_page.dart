@@ -1,6 +1,6 @@
 // main_split_view_page.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // If using Provider
+import 'package:provider/provider.dart';
 
 import '../providers/app_settings_provider.dart';
 import '../providers/session_filter_provider.dart';
@@ -82,8 +82,9 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
       ),
       body: Row(
         children: [
-          Expanded(
+          Flexible(
             flex: 1,
+            fit: FlexFit.loose,
             child: PlayerPanel(
               onPlayerSelected: _handlePlayerSelected,
               selectedPlayerId: _selectedPlayerId,
