@@ -1,5 +1,6 @@
 // lib/widgets/player_panel.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -90,7 +91,7 @@ class PlayerPanel extends StatelessWidget {
   }
 }
 
-/// A card to display player information.
+/// A card to display player information with a context menu on left-click.
 class PlayerCard extends StatelessWidget {
   final PlayerSelectionItem player;
   final bool isSelected;
@@ -103,69 +104,120 @@ class PlayerCard extends StatelessWidget {
     this.onPlayerSelected,
   });
 
+  /// Shows a context-sensitive dialog with a colored background based on the player's balance.
+  void _showPlayerMenu(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        List<Widget> actions = [];
+        String title = 'Player Actions';
+        Widget content;
+        Color? dialogColor;
+
+        // Determine dialog color based on balance
+        if (player.balance > 0) {
+          dialogColor = Colors.green.shade100;
+        } else if (player.balance < 0) {
+          dialogColor = Colors.red.shade100;
+        } else {
+          dialogColor = null; // Default white
+        }
+
+        // Build the dialog content and actions based on the player's balance
+        if (player.balance < 0) {
+          title = 'Negative Balance';
+          content = Text('The current balance for ${player.name} is negative.\nPlease add money to continue.');
+          actions.addAll([
+            TextButton(
+              child: const Text('Add Money'),
+              onPressed: () {
+                debugPrint('Action: Add Money for player ${player.name}');
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                // De-select the player and then close the dialog.
+                onPlayerSelected?.call(null);
+                Navigator.of(context).pop();
+              },
+            ),
+          ]);
+        } else { // Positive or zero balance
+          title = 'Player Menu';
+          content = Text('What would you like to do for ${player.name}?');
+          actions.addAll([
+            TextButton(
+              child: const Text('Add Money'),
+              onPressed: () {
+                debugPrint('Action: Add Money for player ${player.name}');
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Open a new session'),
+              onPressed: () {
+                debugPrint('Action: Open a new session for player ${player.name}');
+                Navigator.of(context).pop();
+              },
+            ),
+          ]);
+        }
+
+        return AlertDialog(
+          backgroundColor: dialogColor,
+          title: Text(title),
+          content: content,
+          actions: actions,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Determine card color based on balance
     Color? cardColor;
-
-    if (isSelected) {
-      if (player.balance > 0) {
-        cardColor = Colors.cyan.shade100;
-      } else if (player.balance == 0) {
-        cardColor = Colors.blue.shade100;
-      } else {
-        cardColor = Colors.purple.shade100;
-      }
+    if (player.balance > 0) {
+      cardColor = Colors.green.shade100;
+    } else if (player.balance < 0) {
+      cardColor = Colors.red.shade100;
     } else {
-      if (player.balance > 0) {
-        cardColor = Colors.green.shade100;
-      } else if (player.balance == 0) {
-        cardColor = null; // or Colors.white
-      } else {
-        cardColor = Colors.red.shade100;
-      }
+      cardColor = null; // Use default white for zero balance
     }
+
+    // Use a border for the selected card to provide visual feedback
+    final Border? border = isSelected
+        ? Border.all(color: Theme.of(context).primaryColor, width: 2)
+        : null;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       color: cardColor,
-      child: MouseRegion(
-        onHover: (PointerHoverEvent event) {
-          if (event.synthesized == false && event.buttons == 0) {
-            if (HardwareKeyboard.instance.isShiftPressed) {
-              // Shift + hover detected
-            }
+      shape: border != null ? RoundedRectangleBorder(
+        side: BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
+        borderRadius: BorderRadius.circular(4.0),
+      ) : null,
+      child: InkWell(
+        onTap: () {
+          if (isSelected) {
+            // If the player is already selected, deselect them.
+            onPlayerSelected?.call(null);
+          } else {
+            // If the player is not selected, select them AND show the menu.
+            onPlayerSelected?.call(player.playerId);
+            _showPlayerMenu(context);
           }
         },
-        child: InkWell(
-          onTap: () {
-            if (HardwareKeyboard.instance.isShiftPressed) {
-              print("Shift + Left click!");
-            } else if (HardwareKeyboard.instance.isControlPressed) {
-              print("Ctrl/Cmd + Left click!");
-            } else if (HardwareKeyboard.instance.isAltPressed) {
-              print("Alt + Left click!");
-            } else {
-              onPlayerSelected?.call(player.playerId);
-            }
-          },
-          onDoubleTap: () {
-            print("Double-tap!");
-          },
-          onLongPress: () {
-            print("Long press!");
-          },
-          onSecondaryTap: () {
-            print("Right click!");
-          },
-          child: ListTile(
-            title: Text(player.name),
-            subtitle: Text('Balance: \$${player.balance.toStringAsFixed(2)}'),
-            trailing: player.balance > 0
-                ? const Icon(Icons.check_circle, color: Colors.green)
-                : player.balance < 0
-                    ? const Icon(Icons.warning, color: Colors.red)
-                    : null,
-          ),
+        child: ListTile(
+          title: Text(player.name),
+          subtitle: Text('Balance: \$${player.balance.toStringAsFixed(2)}'),
+          trailing: player.balance > 0
+              ? const Icon(Icons.check_circle, color: Colors.green)
+              : player.balance < 0
+                  ? const Icon(Icons.warning, color: Colors.red)
+                  : null,
         ),
       ),
     );
