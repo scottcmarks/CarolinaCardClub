@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../providers/database_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/player_selection_item.dart';
-import '../models/payment.dart'; // Assuming this is the path to your Payment model
+import '../models/payment.dart';
 
 class PlayerPanel extends StatelessWidget {
   final ValueChanged<int?>? onPlayerSelected;
@@ -106,8 +106,12 @@ class PlayerCard extends StatelessWidget {
   });
 
   /// Shows a dialog for adding a payment for the current player.
-  void _showAddMoneyDialog(BuildContext context) {
+  void _showAddMoneyDialog(BuildContext context, double currentBalance) {
     final TextEditingController amountController = TextEditingController();
+    // Pre-fill the amount if the balance is negative
+    if (currentBalance < 0) {
+      amountController.text = (-currentBalance).toStringAsFixed(2);
+    }
 
     showDialog(
       context: context,
@@ -116,6 +120,8 @@ class PlayerCard extends StatelessWidget {
           title: Text('Add Money for ${player.name}'),
           content: TextField(
             controller: amountController,
+            // Set autofocus to true
+            autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
               labelText: 'Amount',
@@ -143,7 +149,6 @@ class PlayerCard extends StatelessWidget {
                   final newPayment = Payment(
                     playerId: player.playerId,
                     amount: amount,
-                    // CORRECTED: Use 'epoch' and convert DateTime to seconds since epoch.
                     epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                   );
 
@@ -183,8 +188,8 @@ class PlayerCard extends StatelessWidget {
             TextButton(
               child: const Text('Add Money'),
               onPressed: () {
-                Navigator.of(context).pop(); // Close current menu
-                _showAddMoneyDialog(context); // Open add money dialog
+                Navigator.of(context).pop();
+                _showAddMoneyDialog(context, player.balance);
               },
             ),
             TextButton(
@@ -202,8 +207,8 @@ class PlayerCard extends StatelessWidget {
             TextButton(
               child: const Text('Add Money'),
               onPressed: () {
-                Navigator.of(context).pop(); // Close current menu
-                _showAddMoneyDialog(context); // Open add money dialog
+                Navigator.of(context).pop();
+                _showAddMoneyDialog(context, player.balance);
               },
             ),
             TextButton(
