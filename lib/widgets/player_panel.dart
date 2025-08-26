@@ -1,13 +1,14 @@
 // lib/widgets/player_panel.dart
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/database_provider.dart';
+import '../providers/time_provider.dart';
 import '../models/player_selection_item.dart';
+import '../models/payment.dart'; // Assuming this is the path to your Payment model
 
 class PlayerPanel extends StatelessWidget {
   final ValueChanged<int?>? onPlayerSelected;
@@ -104,7 +105,60 @@ class PlayerCard extends StatelessWidget {
     this.onPlayerSelected,
   });
 
-  /// Shows a context-sensitive dialog with a colored background based on the player's balance.
+  /// Shows a dialog for adding a payment for the current player.
+  void _showAddMoneyDialog(BuildContext context) {
+    final TextEditingController amountController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Add Money for ${player.name}'),
+          content: TextField(
+            controller: amountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              prefixText: '\$',
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('OK'),
+              onPressed: () {
+                final double? amount = double.tryParse(amountController.text);
+                if (amount != null && amount != 0) {
+                  final dbProvider = Provider.of<DatabaseProvider>(context, listen: false);
+                  final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+
+                  final newPayment = Payment(
+                    playerId: player.playerId,
+                    amount: amount,
+                    // CORRECTED: Use 'epoch' and convert DateTime to seconds since epoch.
+                    epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                  );
+
+                  dbProvider.addPayment(newPayment);
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Shows a context-sensitive dialog based on the player's balance.
   void _showPlayerMenu(BuildContext context) {
     showDialog(
       context: context,
@@ -114,7 +168,6 @@ class PlayerCard extends StatelessWidget {
         Widget content;
         Color? dialogColor;
 
-        // Determine dialog color based on balance
         if (player.balance > 0) {
           dialogColor = Colors.green.shade100;
         } else if (player.balance < 0) {
@@ -123,7 +176,6 @@ class PlayerCard extends StatelessWidget {
           dialogColor = null; // Default white
         }
 
-        // Build the dialog content and actions based on the player's balance
         if (player.balance < 0) {
           title = 'Negative Balance';
           content = Text('The current balance for ${player.name} is negative.\nPlease add money to continue.');
@@ -131,14 +183,13 @@ class PlayerCard extends StatelessWidget {
             TextButton(
               child: const Text('Add Money'),
               onPressed: () {
-                debugPrint('Action: Add Money for player ${player.name}');
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Close current menu
+                _showAddMoneyDialog(context); // Open add money dialog
               },
             ),
             TextButton(
               child: const Text('Cancel'),
               onPressed: () {
-                // De-select the player and then close the dialog.
                 onPlayerSelected?.call(null);
                 Navigator.of(context).pop();
               },
@@ -151,8 +202,8 @@ class PlayerCard extends StatelessWidget {
             TextButton(
               child: const Text('Add Money'),
               onPressed: () {
-                debugPrint('Action: Add Money for player ${player.name}');
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Close current menu
+                _showAddMoneyDialog(context); // Open add money dialog
               },
             ),
             TextButton(
@@ -177,17 +228,15 @@ class PlayerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine card color based on balance
     Color? cardColor;
     if (player.balance > 0) {
       cardColor = Colors.green.shade100;
     } else if (player.balance < 0) {
       cardColor = Colors.red.shade100;
     } else {
-      cardColor = null; // Use default white for zero balance
+      cardColor = null;
     }
 
-    // Use a border for the selected card to provide visual feedback
     final Border? border = isSelected
         ? Border.all(color: Theme.of(context).primaryColor, width: 2)
         : null;
@@ -202,10 +251,8 @@ class PlayerCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           if (isSelected) {
-            // If the player is already selected, deselect them.
             onPlayerSelected?.call(null);
           } else {
-            // If the player is not selected, select them AND show the menu.
             onPlayerSelected?.call(player.playerId);
             _showPlayerMenu(context);
           }
