@@ -67,14 +67,14 @@ def send_data_to_db(query,data):
 
 def strip_time(time_string):
     return (datetime.datetime.strptime(time_string, "%Y-%m-%d %H:%M:%S.000")
-                             .strftime("%-m/%-d %H:%M"))
+                             .strftime("%-m/%d %H:%M"))
 
 
 def local_time(epoch):
     dt_object_local = datetime.datetime.fromtimestamp(epoch)
     # Format the datetime object into a human-readable string
     # Customize the format using strftime codes (similar to SQLite)
-    formatted_time = dt_object_local.strftime('%-m/%-d %H:%M')
+    formatted_time = dt_object_local.strftime('%-m/%d %H:%M')
     return formatted_time
 
 def create_carolina_font():
@@ -243,7 +243,7 @@ class SessionView(tk.Frame):
 
         for (session_id, _player_id, player_name,
              session_start_epoch, session_stop_epoch,
-             duration, amount, balance) in self.session_list:
+             duration, amount, balance, _rate) in self.session_list:
             if session_stop_epoch is not None:
                 tags=("courier",)
                 effective_session_stop_epoch = session_stop_epoch
