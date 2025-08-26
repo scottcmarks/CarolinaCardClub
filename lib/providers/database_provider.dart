@@ -206,8 +206,6 @@ class DatabaseProvider with ChangeNotifier {
 
   Future<int> addPayment(Payment payment) async {
     final db = await ensure_db();
-    // Use the model's toMap() method for consistency. This relies on the
-    // Payment model to correctly map its properties to database columns.
     final id = await db.insert('Payment', payment.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     notifyListeners();
     return id;
@@ -286,6 +284,20 @@ class DatabaseProvider with ChangeNotifier {
     return result;
   }
 
+  /// Stops all active sessions by setting their Stop_Epoch to the provided time.
+  Future<int> stopAllActiveSessions(int stopEpoch) async {
+    final db = await ensure_db();
+    final count = await db.update(
+      'Session',
+      {'Stop_Epoch': stopEpoch},
+      where: 'Stop_Epoch IS NULL',
+    );
+    if (count > 0) {
+      notifyListeners();
+    }
+    return count;
+  }
+
   // --- CRUD Operations for Player_Category ---
   Future<int> addPlayerCategory(PlayerCategory playerCategory) async {
     final db = await ensure_db();
@@ -358,7 +370,7 @@ class DatabaseProvider with ChangeNotifier {
     return await db.delete('Rate_Interval', where: 'Rate_Interval_Id = ?', whereArgs: [id]);
   }
 
-  // --- Existing Read-Only Operations from Views ---
+  // --- Read-Only Operations from Views ---
 
   Future<List<PlayerSelectionItem>> fetchPlayerSelectionList () async {
     final db = await ensure_db();
