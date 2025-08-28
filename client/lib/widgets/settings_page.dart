@@ -1,3 +1,5 @@
+// client/lib/widgets/settings_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -22,8 +24,10 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _localShowOnlyActiveSessions;
   late TimeOfDay? _defaultSessionStartTime;
   late DateTime? _clockTime;
-  late String _localPreferredTheme;
-  late TextEditingController _remoteDatabaseUrlController;
+
+  // Updated controllers for new settings
+  late TextEditingController _localServerUrlController;
+  late TextEditingController _localServerApiKeyController;
 
   @override
   void initState() {
@@ -33,9 +37,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = _appSettingsProvider.currentSettings;
     _localShowOnlyActiveSessions = settings.showOnlyActiveSessions;
     _defaultSessionStartTime = settings.defaultSessionStartTime;
-    _localPreferredTheme = settings.preferredTheme;
-    _remoteDatabaseUrlController =
-        TextEditingController(text: settings.remoteDatabaseUrl);
+
+    // Initialize new controllers
+    _localServerUrlController = TextEditingController(text: settings.localServerUrl);
+    _localServerApiKeyController = TextEditingController(text: settings.localServerApiKey);
 
     _timeProvider = Provider.of<TimeProvider>(context, listen: false);
     _clockTime = null;
@@ -43,7 +48,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
-    _remoteDatabaseUrlController.dispose();
+    _localServerUrlController.dispose();
+    _localServerApiKeyController.dispose();
     super.dispose();
   }
 
@@ -61,12 +67,12 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // A helper function to show the time picker using bottom_picker with headerBuilder
+  // A helper function to show the time picker
   void _showSessionTimePicker(BuildContext context) {
     BottomPicker.time(
       headerBuilder: (context) => _buildPickerHeader('Set Default Session Start Time'),
       initialTime: Time(
-        hours: _defaultSessionStartTime?.hour     ?? 19, // Carolina Card Club defaults
+        hours: _defaultSessionStartTime?.hour     ?? 19,
         minutes: _defaultSessionStartTime?.minute ?? 30,
       ),
       onSubmit: (pickedDateTime) {
@@ -76,17 +82,12 @@ class _SettingsPageState extends State<SettingsPage> {
           });
         }
       },
-      onDismiss: (pickedDateTime) {
-        // This callback is triggered when the picker is dismissed without a submission.
-        // If you need to perform an action on dismissal, place it here.
-        // In this case, we do nothing.
-      },
       use24hFormat: true,
       bottomPickerTheme: BottomPickerTheme.blue,
     ).show(context);
   }
 
-  // A helper function to show the combined date and time picker using bottom_picker with headerBuilder
+  // A helper function to show the combined date and time picker
   void _showCombinedDateTimePicker(BuildContext context) {
     BottomPicker.dateTime(
       headerBuilder: (context) => _buildPickerHeader('Set Clock Time'),
@@ -99,14 +100,30 @@ class _SettingsPageState extends State<SettingsPage> {
           });
         }
       },
-      onDismiss: (pickedDateTime) {
-        // This callback is triggered when the picker is dismissed without a submission.
-        // If you need to perform an action on dismissal, place it here.
-        // In this case, we do nothing.
-      },
       use24hFormat: true,
       bottomPickerTheme: BottomPickerTheme.blue,
     ).show(context);
+  }
+
+  void _saveSettings() {
+    final newSettings = _appSettingsProvider.currentSettings.copyWith(
+      showOnlyActiveSessions: _localShowOnlyActiveSessions,
+      defaultSessionStartTime: _defaultSessionStartTime,
+      localServerUrl: _localServerUrlController.text,
+      localServerApiKey: _localServerApiKeyController.text,
+    );
+    _appSettingsProvider.updateSettings(newSettings);
+
+    if (_clockTime != null) {
+      _timeProvider.setTime(_clockTime!);
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settings Saved')),
+      );
+    }
   }
 
   @override
@@ -124,62 +141,53 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const Divider(),
-          // Toggle for showing only active sessions
-          SwitchListTile(
-            title: const Text('Show Only Active Sessions'),
-            value: _localShowOnlyActiveSessions,
-            onChanged: (bool value) {
-              setState(() {
-                _localShowOnlyActiveSessions = value;
-              });
-            },
-          ),
-          // Button to set session start time
-          ListTile(
-            title: const Text('Default Session Start Time'),
-            trailing: TextButton(
-              onPressed: () => _showSessionTimePicker(context),
-              child: Text(_defaultSessionStartTime?.format(context) ?? 'Not set'),
+          Expanded(
+            child: ListView(
+              children: [
+                SwitchListTile(
+                  title: const Text('Show Only Active Sessions'),
+                  value: _localShowOnlyActiveSessions,
+                  onChanged: (bool value) {
+                    setState(() {
+                      _localShowOnlyActiveSessions = value;
+                    });
+                  },
+                ),
+                ListTile(
+                  title: const Text('Default Session Start Time'),
+                  trailing: TextButton(
+                    onPressed: () => _showSessionTimePicker(context),
+                    child: Text(_defaultSessionStartTime?.format(context) ?? 'Not set'),
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Clock Time'),
+                  trailing: TextButton(
+                    onPressed: () => _showCombinedDateTimePicker(context),
+                    child: Text(
+                      _clockTime != null
+                          ? '${datePart.format(_clockTime!)} ${timePart.format(_clockTime!)}'
+                          : 'Set Time',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Server Configuration', style: Theme.of(context).textTheme.titleLarge),
+                const Divider(),
+                TextFormField(
+                  controller: _localServerUrlController,
+                  decoration: const InputDecoration(labelText: 'Local Server URL'),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _localServerApiKeyController,
+                  decoration: const InputDecoration(labelText: 'Local Server API Key'),
+                ),
+              ],
             ),
           ),
-          // Button to set the clock using bottom_picker
-          ListTile(
-            title: const Text('Clock Time'),
-            trailing: TextButton(
-              onPressed: () => _showCombinedDateTimePicker(context),
-              child: Text(
-                _clockTime != null
-                    ? '${datePart.format(_clockTime!)} ${timePart.format(_clockTime!)}'
-                    : 'Set Time',
-              ),
-            ),
-          ),
-          // Text field for remote database URL
-          TextField(
-            controller: _remoteDatabaseUrlController,
-            decoration:
-                const InputDecoration(labelText: 'Remote Database URL'),
-          ),
-          const Spacer(),
           ElevatedButton(
-            onPressed: () {
-              final _now = DateTime.now();
-              final clockOffset = _clockTime?.difference(_now);
-              _appSettingsProvider.updateSettings(
-                showOnlyActiveSessions: _localShowOnlyActiveSessions,
-                defaultSessionStartTime: _defaultSessionStartTime,
-                clockOffset: clockOffset,
-                preferredTheme: _localPreferredTheme,
-                remoteDatabaseUrl: _remoteDatabaseUrlController.text,
-              );
-              if (_clockTime != null) {
-                _timeProvider.setTime(_clockTime!);
-              }
-              setState((){});
-              if (mounted) {
-                Navigator.of(context).pop();
-              }
-            },
+            onPressed: _saveSettings,
             child: const Text('Save Settings'),
           ),
         ],

@@ -1,140 +1,26 @@
-// app_settings_provider.dart
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// client/lib/providers/app_settings_provider.dart
 
+import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 
-class AppSettingsProvider extends ChangeNotifier {
-  AppSettings _currentSettings = const AppSettings();
+class AppSettingsProvider with ChangeNotifier {
+  AppSettings _currentSettings = AppSettings(
+    localServerUrl: 'http://localhost:8080', // New default
+    localServerApiKey: '9af85ab7895eb6d8baceb0fe1203c96851c87bdbad9af5fd5d5d0de2a24dad428b5906722412bfa5b4fe3a9a07a7a24abea50cff4c9de08c02b8708871f1c2b1', // Default key
+    defaultSessionStartTime: const TimeOfDay(hour: 19, minute: 30),
+  );
 
   AppSettings get currentSettings => _currentSettings;
 
-  // Key constants for SharedPreferences
-  static const String _keyShowOnlyActiveSessions = 'showOnlyActiveSessions';
-  static const String _keySessionStartTime = 'defaultSessionStartTime';
-  static const String _keyClockOffset = 'clockOffset';
-  static const String _keyPreferredTheme = 'preferredTheme';
-  static const String _keyRemoteDatabaseUrl = 'remoteDatabaseUrl';
-
-  // Add a loadSettings method to load settings on app startup
-  Future<void> loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final bool? showOnlyActiveSessions = prefs.getBool(_keyShowOnlyActiveSessions);
-    final String? defaultSessionStartTimeString = prefs.getString(_keySessionStartTime);
-    final int? clockOffsetMicroseconds = prefs.getInt(_keyClockOffset);
-    final String? preferredTheme = prefs.getString(_keyPreferredTheme);
-    final String? remoteDatabaseUrl = prefs.getString(_keyRemoteDatabaseUrl);
-
-    _currentSettings = _currentSettings.copyWith(
-      showOnlyActiveSessions: showOnlyActiveSessions,
-      defaultSessionStartTime: _timeOfDayFromString(defaultSessionStartTimeString),
-      clockOffset: Duration(microseconds:(clockOffsetMicroseconds ?? 0)),
-      preferredTheme: preferredTheme,
-      remoteDatabaseUrl: remoteDatabaseUrl,
-    );
-    notifyListeners(); // Notify listeners that settings have been loaded
+  void updateSettings(AppSettings newSettings) {
+    _currentSettings = newSettings;
+    notifyListeners();
   }
 
-  // Helper to convert TimeOfDay to String for storage
-  String? _timeOfDayToString(TimeOfDay? time) {
-    if (time == null) return null;
-    return '${time.hour}:${time.minute}';
-  }
-
-  // Helper to convert String back to TimeOfDay
-  TimeOfDay? _timeOfDayFromString(String? timeString) {
-    if (timeString == null || timeString.isEmpty) return null;
-    final parts = timeString.split(':');
-    if (parts.length == 2) {
-      return TimeOfDay(
-        hour: int.tryParse(parts[0]) ?? 0, // Handle parsing errors
-        minute: int.tryParse(parts[1]) ?? 0,
-      );
-    }
-    return null;
-  }
-
-  // Combines logic for updating settings and persisting them
-  void updateSettings({
-    bool? showOnlyActiveSessions,
-    TimeOfDay? defaultSessionStartTime,
-    Duration? clockOffset,
-    String? preferredTheme,
-    String? remoteDatabaseUrl,
-  }) async { // Make it async since it interacts with SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-
-    _currentSettings = _currentSettings.copyWith(
-      showOnlyActiveSessions: showOnlyActiveSessions,
-      defaultSessionStartTime: defaultSessionStartTime,
-      clockOffset: clockOffset,
-      preferredTheme: preferredTheme,
-      remoteDatabaseUrl: remoteDatabaseUrl,
-    );
-
-    // Persist each setting if it was provided
-    if (showOnlyActiveSessions != null) {
-      await prefs.setBool(_keyShowOnlyActiveSessions, _currentSettings.showOnlyActiveSessions);
-    }
-    if (defaultSessionStartTime != null) {  // TODO: DatabaseProvider for new Sessions?
-      await prefs.setString(_keySessionStartTime, _timeOfDayToString(_currentSettings.defaultSessionStartTime)!);
-    }
-    if (clockOffset != null) {  // TODO: TimeProvider
-      await prefs.setInt(_keyClockOffset, _currentSettings.clockOffset!.inMicroseconds);
-    }
-    if (preferredTheme != null) {
-      await prefs.setString(_keyPreferredTheme, _currentSettings.preferredTheme);
-    }
-    if (remoteDatabaseUrl != null) {
-      await prefs.setString(_keyRemoteDatabaseUrl, _currentSettings.remoteDatabaseUrl);
-    }
-
-    notifyListeners(); // Notify all listening widgets
-  }
-
-  // Individual update methods for clarity, now persisting changes
-  void setShowOnlyActiveSessions(bool newValue) async {
-    if (_currentSettings.showOnlyActiveSessions != newValue) {
-      _currentSettings = _currentSettings.copyWith(showOnlyActiveSessions: newValue);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_keyShowOnlyActiveSessions, newValue); // Persist
-      notifyListeners();
-    }
-  }
-
-  void setSessionStartTime(TimeOfDay newTime) async {  // TODO: DatabaseProvider for new Sessions?
-    if (_currentSettings.defaultSessionStartTime != newTime) {
-      _currentSettings = _currentSettings.copyWith(defaultSessionStartTime: newTime);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySessionStartTime, _timeOfDayToString(newTime)!); // Persist
-      notifyListeners();
-    }
-  }
-
-  void setClockOffset(Duration newOffset) async {  // TODO: TimeProvider
-    if (_currentSettings.clockOffset != newOffset) {
-      _currentSettings = _currentSettings.copyWith(clockOffset: newOffset);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_keyClockOffset, newOffset!.inMicroseconds); // Persist
-      notifyListeners();
-    }
-  }
-
-  void setPreferredTheme(String newTheme) async {
-    if (_currentSettings.preferredTheme != newTheme) {
-      _currentSettings = _currentSettings.copyWith(preferredTheme: newTheme);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyPreferredTheme, newTheme); // Persist
-      notifyListeners();
-    }
-  }
-
-  void setRemoteDatabaseUrl(String newUrl) async {
-    if (_currentSettings.remoteDatabaseUrl != newUrl) {
-      _currentSettings = _currentSettings.copyWith(remoteDatabaseUrl: newUrl);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyRemoteDatabaseUrl, newUrl); // Persist
+  // Helper method for toggling active sessions
+  void setShowOnlyActiveSessions(bool value) {
+    if (_currentSettings.showOnlyActiveSessions != value) {
+      _currentSettings = _currentSettings.copyWith(showOnlyActiveSessions: value);
       notifyListeners();
     }
   }
