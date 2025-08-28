@@ -1,10 +1,11 @@
 // client/lib/widgets/main_split_view_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Needed for FontFeature
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/app_settings_provider.dart';
 import '../providers/time_provider.dart';
 import 'player_panel.dart';
 import 'session_panel.dart';
@@ -21,6 +22,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   int? _selectedPlayerId;
   int? _selectedSessionId;
   int? _newlyAddedSessionId;
+  DateTime? _clubSessionStartDateTime; // State is now owned by the parent
 
   void _onPlayerSelected(int? playerId) {
     setState(() {
@@ -38,6 +40,13 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   void _onSessionAdded(int sessionId) {
     setState(() {
       _newlyAddedSessionId = sessionId;
+    });
+  }
+
+  // Callback for the SessionPanel to update the parent's state
+  void _onClubSessionTimeChanged(DateTime? newTime) {
+    setState(() {
+      _clubSessionStartDateTime = newTime;
     });
   }
 
@@ -63,9 +72,8 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
           ),
         ),
         actions: const [
-          // Wrap the clock in a SizedBox to give it a fixed width
           SizedBox(
-            width: 100, // Fixed width for the clock
+            width: 100,
             child: RealTimeClock(),
           ),
           SizedBox(width: 16),
@@ -79,6 +87,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
               selectedPlayerId: _selectedPlayerId,
               onPlayerSelected: _onPlayerSelected,
               onSessionAdded: _onSessionAdded,
+              clubSessionStartDateTime: _clubSessionStartDateTime, // Pass state down
             ),
           ),
           const VerticalDivider(width: 1),
@@ -89,6 +98,8 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
               selectedSessionId: _selectedSessionId,
               onSessionSelected: _onSessionSelected,
               newlyAddedSessionId: _newlyAddedSessionId,
+              clubSessionStartDateTime: _clubSessionStartDateTime, // Pass state down
+              onClubSessionTimeChanged: _onClubSessionTimeChanged, // Pass callback down
             ),
           ),
         ],
@@ -111,13 +122,8 @@ class RealTimeClock extends StatelessWidget {
             formattedTime,
             style: const TextStyle(
               fontSize: 18,
-              // Changed from FontWeight.bold to FontWeight.normal
               fontWeight: FontWeight.normal,
-              // This font feature ensures that all numbers take up the same
-              // amount of space, which prevents the "wiggling" effect.
-              fontFeatures: [
-                FontFeature.tabularFigures(),
-              ],
+              fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
         );
