@@ -1,3 +1,5 @@
+// client/lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,9 +19,24 @@ class CarolinaCardClubApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // These two providers are independent
         ChangeNotifierProvider(create: (context) => TimeProvider()),
         ChangeNotifierProvider(create: (context) => AppSettingsProvider()),
-        ChangeNotifierProvider(create: (context) => ApiProvider()),
+
+        // This is the corrected provider setup.
+        // ChangeNotifierProxyProvider creates an ApiProvider and automatically
+        // gives it the AppSettingsProvider it depends on.
+        ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
+          // This function creates the ApiProvider
+          create: (context) => ApiProvider(
+            // It's created with a reference to the AppSettingsProvider
+            Provider.of<AppSettingsProvider>(context, listen: false),
+          ),
+          // This function is called whenever AppSettingsProvider updates.
+          // We don't need it here, but it's required by the provider.
+          update: (context, appSettings, previousApiProvider) =>
+              previousApiProvider ?? ApiProvider(appSettings),
+        ),
       ],
       child: MaterialApp(
         title: 'Carolina Card Club',

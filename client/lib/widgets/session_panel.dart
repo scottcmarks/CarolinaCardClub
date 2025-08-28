@@ -1,13 +1,12 @@
 // lib/widgets/session_panel.dart
 
-import 'dart:async';
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
-import '../providers/api_provider.dart'; // Changed import
+import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/app_settings.dart';
@@ -18,12 +17,14 @@ class SessionPanel extends StatefulWidget {
   final ValueChanged<int?>? onSessionSelected;
   final int? selectedPlayerId;
   final int? selectedSessionId;
+  final int? newlyAddedSessionId;
 
   const SessionPanel({
     super.key,
     this.onSessionSelected,
     this.selectedPlayerId,
     this.selectedSessionId,
+    this.newlyAddedSessionId,
   });
 
   @override
@@ -32,6 +33,8 @@ class SessionPanel extends StatefulWidget {
 
 class _SessionPanelState extends State<SessionPanel> {
   DateTime? _clubSessionStartDateTime;
+  final ItemScrollController _itemScrollController = ItemScrollController();
+  final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
 
   void _showStopClubSessionDialog(BuildContext context) {
     showDialog(
@@ -41,22 +44,14 @@ class _SessionPanelState extends State<SessionPanel> {
           title: const Text('End Club Session'),
           content: const Text('Close all active sessions and trigger a server backup?'),
           actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
+            TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(dialogContext).pop()),
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
                 final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 final appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
-
-                // This logic is now handled by the server, we just trigger the backup.
                 await apiProvider.triggerBackup();
-
-                setState(() {
-                  _clubSessionStartDateTime = null;
-                });
+                setState(() { _clubSessionStartDateTime = null; });
                 appSettingsProvider.setShowOnlyActiveSessions(false);
                 Navigator.of(dialogContext).pop();
               },
@@ -71,9 +66,7 @@ class _SessionPanelState extends State<SessionPanel> {
     if (_clubSessionStartDateTime != null) {
       _showStopClubSessionDialog(context);
     } else {
-      setState(() {
-        _clubSessionStartDateTime = defaultTime;
-      });
+      setState(() { _clubSessionStartDateTime = defaultTime; });
       appSettingsProvider.setShowOnlyActiveSessions(true);
     }
   }
@@ -88,11 +81,7 @@ class _SessionPanelState extends State<SessionPanel> {
     final TimeOfDay defaultSessionStartTime = currentSettings.defaultSessionStartTime ?? const TimeOfDay(hour: 19, minute: 30);
     final DateTime now = timeProvider.currentTime;
 
-    final DateTime defaultSessionStartDateTime = DateTime(
-      now.year, now.month, now.day,
-      defaultSessionStartTime.hour, defaultSessionStartTime.minute,
-    );
-
+    final DateTime defaultSessionStartDateTime = DateTime(now.year, now.month, now.day, defaultSessionStartTime.hour, defaultSessionStartTime.minute);
     final DateTime effectiveClubStartTime = _clubSessionStartDateTime ?? defaultSessionStartDateTime;
 
     return Column(
@@ -111,6 +100,9 @@ class _SessionPanelState extends State<SessionPanel> {
             selectedSessionId: widget.selectedSessionId,
             onSessionSelected: widget.onSessionSelected,
             clubSessionStartTime: effectiveClubStartTime,
+            newlyAddedSessionId: widget.newlyAddedSessionId,
+            itemScrollController: _itemScrollController,
+            itemPositionsListener: _itemPositionsListener,
           ),
         ),
       ],
@@ -119,7 +111,6 @@ class _SessionPanelState extends State<SessionPanel> {
 }
 
 // --- Helper Functions & Widgets ---
-
 String formatMoney(double? price) => price != null ? '\$${price.toStringAsFixed(2)}' : '';
 String formatDuration(int? totalSeconds) {
   if (totalSeconds == null) return '';
@@ -135,7 +126,6 @@ class SessionPanelHeader extends StatelessWidget {
   final DateTime defaultSessionStartDateTime;
   final bool showOnlyActiveSessions;
   final VoidCallback onTap;
-
   const SessionPanelHeader({super.key, required this.clubSessionStartDateTime, required this.defaultSessionStartDateTime, required this.showOnlyActiveSessions, required this.onTap});
 
   @override
@@ -167,34 +157,44 @@ class SessionPanelBody extends StatelessWidget {
   final int? selectedSessionId;
   final ValueChanged<int?>? onSessionSelected;
   final DateTime clubSessionStartTime;
+  final int? newlyAddedSessionId;
+  final ItemScrollController itemScrollController;
+  final ItemPositionsListener itemPositionsListener;
 
-  const SessionPanelBody({super.key, required this.showOnlyActiveSessions, required this.clubSessionStartTime, this.selectedPlayerId, this.selectedSessionId, this.onSessionSelected});
+  const SessionPanelBody({super.key, required this.showOnlyActiveSessions, required this.clubSessionStartTime, this.selectedPlayerId, this.selectedSessionId, this.onSessionSelected, this.newlyAddedSessionId, required this.itemScrollController, required this.itemPositionsListener});
 
   @override
   Widget build(BuildContext context) {
     final apiProvider = Provider.of<ApiProvider>(context);
-    if (!apiProvider.isServerAvailable) {
-      return const Center(child: Text('Server not available.', style: TextStyle(color: Colors.red)));
-    }
+    if (!apiProvider.isServerAvailable) return const Center(child: Text('Server not available.', style: TextStyle(color: Colors.red)));
 
     return FutureBuilder<List<SessionPanelItem>>(
-      future: apiProvider.fetchSessionPanelList(), // Use ApiProvider
+      future: apiProvider.fetchSessionPanelList(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(child: Text('No sessions found.'));
+        if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No sessions found.'));
 
-        // Basic filtering on the client side
         List<SessionPanelItem> sessions = snapshot.data!;
-        if (showOnlyActiveSessions) {
-          sessions = sessions.where((s) => s.stopEpoch == null).toList();
-        }
-        if (selectedPlayerId != null) {
-          sessions = sessions.where((s) => s.playerId == selectedPlayerId).toList();
+        if (showOnlyActiveSessions) sessions = sessions.where((s) => s.stopEpoch == null).toList();
+        if (selectedPlayerId != null) sessions = sessions.where((s) => s.playerId == selectedPlayerId).toList();
+
+        if (newlyAddedSessionId != null) {
+          final index = sessions.indexWhere((s) => s.sessionId == newlyAddedSessionId);
+          if (index != -1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              itemScrollController.scrollTo(
+                index: index,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            });
+          }
         }
 
-        return ListView.builder(
-          key: const PageStorageKey<String>('SessionListScrollPosition'),
+        return ScrollablePositionedList.builder(
+          itemScrollController: itemScrollController,
+          itemPositionsListener: itemPositionsListener,
           itemCount: sessions.length,
           itemBuilder: (context, index) {
             final session = sessions[index];
@@ -214,7 +214,6 @@ abstract class SessionCard extends StatelessWidget {
   final bool isSelected;
   final ValueChanged<int?>? onSessionSelected;
   final DateTime clubSessionStartTime;
-
   const SessionCard({super.key, required this.session, required this.isSelected, required this.onSessionSelected, required this.clubSessionStartTime});
 
   Map<String, dynamic> _calculateDynamicValues(DateTime currentTime) {
@@ -231,8 +230,11 @@ abstract class SessionCard extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context) {
-    if (session.stopEpoch == null) _showStopSessionDialog(context);
-    else onSessionSelected?.call(isSelected ? null : session.sessionId);
+    if (session.stopEpoch == null) {
+      _showStopSessionDialog(context);
+    } else {
+      onSessionSelected?.call(isSelected ? null : session.sessionId);
+    }
   }
 
   void _showStopSessionDialog(BuildContext context) {
@@ -249,15 +251,13 @@ abstract class SessionCard extends StatelessWidget {
               onPressed: () async {
                 final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-
                 final updatedSession = Session(
                   sessionId: session.sessionId,
                   playerId: session.playerId,
                   startEpoch: session.startEpoch,
                   stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                 );
-                await apiProvider.updateSession(updatedSession); // Use ApiProvider
-
+                await apiProvider.updateSession(updatedSession);
                 Navigator.of(dialogContext).pop();
                 onSessionSelected?.call(null);
               },

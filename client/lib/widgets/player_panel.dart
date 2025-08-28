@@ -1,8 +1,7 @@
-// lib/widgets/player_panel.dart
+// client/lib/widgets/player_panel.dart
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // <--- ADDED THIS IMPORT
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/api_provider.dart';
@@ -14,30 +13,23 @@ import '../models/session.dart';
 
 class PlayerPanel extends StatelessWidget {
   final ValueChanged<int?>? onPlayerSelected;
+  final ValueChanged<int>? onSessionAdded; // Callback for new sessions
   final int? selectedPlayerId;
 
   const PlayerPanel({
     super.key,
     this.onPlayerSelected,
+    this.onSessionAdded,
     this.selectedPlayerId,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Consume the new ApiProvider
     return Consumer<ApiProvider>(
       builder: (context, apiProvider, child) {
-        // Check if the server is available instead of db status
         if (!apiProvider.isServerAvailable) {
-          return const Center(
-            child: Text(
-              'Error: Could not connect to the local server.',
-              style: TextStyle(color: Colors.red),
-            ),
-          );
+          return const Center(child: Text('Error: Could not connect to the local server.', style: TextStyle(color: Colors.red)));
         }
-
-        // The FutureBuilder now calls the apiProvider
         return FutureBuilder<List<PlayerSelectionItem>>(
           future: apiProvider.fetchPlayerSelectionList(),
           builder: (context, snapshot) {
@@ -48,16 +40,15 @@ class PlayerPanel extends StatelessWidget {
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(child: Text('No players found.'));
             } else {
-              List<PlayerSelectionItem> players = snapshot.data!;
               return ListView.builder(
-                key: const PageStorageKey<String>('PlayerListScrollPosition'),
-                itemCount: players.length,
+                itemCount: snapshot.data!.length,
                 itemBuilder: (context, index) {
-                  final player = players[index];
+                  final player = snapshot.data![index];
                   return PlayerCard(
                     player: player,
                     isSelected: player.playerId == selectedPlayerId,
                     onPlayerSelected: onPlayerSelected,
+                    onSessionAdded: onSessionAdded,
                   );
                 },
               );
@@ -73,25 +64,32 @@ class PlayerCard extends StatelessWidget {
   final PlayerSelectionItem player;
   final bool isSelected;
   final ValueChanged<int?>? onPlayerSelected;
+  final ValueChanged<int>? onSessionAdded;
 
-  const PlayerCard({
-    super.key,
-    required this.player,
-    required this.isSelected,
-    this.onPlayerSelected,
-  });
+  const PlayerCard({super.key, required this.player, required this.isSelected, this.onPlayerSelected, this.onSessionAdded});
 
-  void _showAddMoneyDialog(BuildContext context, double currentBalance) {
+  Future<void> _startNewSession(BuildContext context, int playerId) async {
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    final newSession = Session(
+      playerId: playerId,
+      startEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+    );
+    final newSessionId = await apiProvider.addSession(newSession);
+    onSessionAdded?.call(newSessionId);
+  }
+
+  void _showAddMoneyDialog(BuildContext context, PlayerSelectionItem currentPlayer) {
     final TextEditingController amountController = TextEditingController();
-    if (currentBalance < 0) {
-      amountController.text = (-currentBalance).toStringAsFixed(2);
+    if (currentPlayer.balance < 0) {
+      amountController.text = (-currentPlayer.balance).toStringAsFixed(2);
     }
 
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: Text('Add Money for ${player.name}'),
+          title: Text('Add Money for ${currentPlayer.name}'),
           content: TextField(
             controller: amountController,
             autofocus: true,
@@ -100,21 +98,32 @@ class PlayerCard extends StatelessWidget {
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
           ),
           actions: [
-            TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop()),
+            TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(dialogContext).pop()),
             TextButton(
               child: const Text('OK'),
-              onPressed: () {
+              onPressed: () async {
                 final double? amount = double.tryParse(amountController.text);
                 if (amount != null && amount != 0) {
                   final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                   final timeProvider = Provider.of<TimeProvider>(context, listen: false);
                   final newPayment = Payment(
-                    playerId: player.playerId,
+                    playerId: currentPlayer.playerId,
                     amount: amount,
                     epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                   );
-                  apiProvider.addPayment(newPayment); // Use ApiProvider
-                  Navigator.of(context).pop();
+
+                  // This now returns the updated player info
+                  final updatedPlayer = await apiProvider.addPayment(newPayment);
+
+                  Navigator.of(dialogContext).pop(); // Close the current dialog
+
+                  // Chained logic
+                  if (updatedPlayer.balance >= 0) {
+                    _startNewSession(context, updatedPlayer.playerId);
+                  } else {
+                    // Re-open the dialog with the new, still negative balance
+                    _showAddMoneyDialog(context, updatedPlayer);
+                  }
                 }
               },
             ),
@@ -129,68 +138,39 @@ class PlayerCard extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         final appSettings = Provider.of<AppSettingsProvider>(context, listen: false);
-        List<Widget> actions = [];
-        String title;
-        Widget content;
-        Color? dialogColor;
 
         if (player.balance < 0) {
-          title = 'Negative Balance';
-          content = Text('The current balance for ${player.name} is negative.\nPlease add money to continue.');
-          dialogColor = Colors.red.shade100;
-          actions.addAll([
+          // For negative balance, skip the menu and go straight to adding money
+          // We need to pop the menu context and then show the new dialog
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.of(context).pop();
+            _showAddMoneyDialog(context, player);
+          });
+          return const SizedBox.shrink(); // Return an empty widget while we transition
+        }
+
+        // For non-negative balance, show the menu
+        return AlertDialog(
+          title: Text('Player Menu for ${player.name}'),
+          content: const Text('What would you like to do?'),
+          backgroundColor: player.balance > 0 ? Colors.green.shade100 : null,
+          actions: [
             TextButton(
               child: const Text('Add Money'),
               onPressed: () {
                 Navigator.of(context).pop();
-                _showAddMoneyDialog(context, player.balance);
+                _showAddMoneyDialog(context, player);
               },
             ),
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                onPlayerSelected?.call(null);
-                Navigator.of(context).pop();
-              },
-            ),
-          ]);
-        } else {
-          title = 'Player Menu';
-          content = Text('What would you like to do for ${player.name}?');
-          dialogColor = player.balance > 0 ? Colors.green.shade100 : null;
-          actions.add(
-            TextButton(
-              child: const Text('Add Money'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showAddMoneyDialog(context, player.balance);
-              },
-            ),
-          );
-          if (appSettings.currentSettings.showOnlyActiveSessions) {
-            actions.add(
+            if (appSettings.currentSettings.showOnlyActiveSessions)
               TextButton(
                 child: const Text('Open a new session'),
                 onPressed: () {
-                  final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-                  final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-                  final newSession = Session(
-                    playerId: player.playerId,
-                    startEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                  );
-                  apiProvider.addSession(newSession); // Use ApiProvider
                   Navigator.of(context).pop();
+                  _startNewSession(context, player.playerId);
                 },
               ),
-            );
-          }
-        }
-
-        return AlertDialog(
-          backgroundColor: dialogColor,
-          title: Text(title),
-          content: content,
-          actions: actions,
+          ],
         );
       },
     );
@@ -199,11 +179,8 @@ class PlayerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color? cardColor;
-    if (player.balance > 0) {
-      cardColor = Colors.green.shade100;
-    } else if (player.balance < 0) {
-      cardColor = Colors.red.shade100;
-    }
+    if (player.balance > 0) cardColor = Colors.green.shade100;
+    else if (player.balance < 0) cardColor = Colors.red.shade100;
 
     final Border? border = isSelected ? Border.all(color: Theme.of(context).primaryColor, width: 2) : null;
 
@@ -223,11 +200,7 @@ class PlayerCard extends StatelessWidget {
         child: ListTile(
           title: Text(player.name),
           subtitle: Text('Balance: \$${player.balance.toStringAsFixed(2)}'),
-          trailing: player.balance > 0
-              ? const Icon(Icons.check_circle, color: Colors.green)
-              : player.balance < 0
-                  ? const Icon(Icons.warning, color: Colors.red)
-                  : null,
+          trailing: player.balance > 0 ? const Icon(Icons.check_circle, color: Colors.green) : player.balance < 0 ? const Icon(Icons.warning, color: Colors.red) : null,
         ),
       ),
     );
