@@ -1,4 +1,4 @@
-// lib/widgets/session_panel.dart
+// client/lib/widgets/session_panel.dart
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -18,6 +18,8 @@ class SessionPanel extends StatefulWidget {
   final int? selectedPlayerId;
   final int? selectedSessionId;
   final int? newlyAddedSessionId;
+  final DateTime? clubSessionStartDateTime; // Receive from parent
+  final ValueChanged<DateTime?> onClubSessionTimeChanged; // Receive callback from parent
 
   const SessionPanel({
     super.key,
@@ -25,6 +27,8 @@ class SessionPanel extends StatefulWidget {
     this.selectedPlayerId,
     this.selectedSessionId,
     this.newlyAddedSessionId,
+    this.clubSessionStartDateTime,
+    required this.onClubSessionTimeChanged,
   });
 
   @override
@@ -32,7 +36,6 @@ class SessionPanel extends StatefulWidget {
 }
 
 class _SessionPanelState extends State<SessionPanel> {
-  DateTime? _clubSessionStartDateTime;
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
 
@@ -51,7 +54,9 @@ class _SessionPanelState extends State<SessionPanel> {
                 final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 final appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
                 await apiProvider.triggerBackup();
-                setState(() { _clubSessionStartDateTime = null; });
+
+                widget.onClubSessionTimeChanged(null); // Use callback to notify parent
+
                 appSettingsProvider.setShowOnlyActiveSessions(false);
                 Navigator.of(dialogContext).pop();
               },
@@ -63,10 +68,10 @@ class _SessionPanelState extends State<SessionPanel> {
   }
 
   void _toggleClubSessionTime(DateTime defaultTime, AppSettingsProvider appSettingsProvider) {
-    if (_clubSessionStartDateTime != null) {
+    if (widget.clubSessionStartDateTime != null) {
       _showStopClubSessionDialog(context);
     } else {
-      setState(() { _clubSessionStartDateTime = defaultTime; });
+      widget.onClubSessionTimeChanged(defaultTime); // Use callback to notify parent
       appSettingsProvider.setShowOnlyActiveSessions(true);
     }
   }
@@ -82,12 +87,12 @@ class _SessionPanelState extends State<SessionPanel> {
     final DateTime now = timeProvider.currentTime;
 
     final DateTime defaultSessionStartDateTime = DateTime(now.year, now.month, now.day, defaultSessionStartTime.hour, defaultSessionStartTime.minute);
-    final DateTime effectiveClubStartTime = _clubSessionStartDateTime ?? defaultSessionStartDateTime;
+    final DateTime effectiveClubStartTime = widget.clubSessionStartDateTime ?? defaultSessionStartDateTime;
 
     return Column(
       children: [
         SessionPanelHeader(
-          clubSessionStartDateTime: _clubSessionStartDateTime,
+          clubSessionStartDateTime: widget.clubSessionStartDateTime,
           defaultSessionStartDateTime: defaultSessionStartDateTime,
           showOnlyActiveSessions: showOnlyActiveSessions,
           onTap: () => _toggleClubSessionTime(defaultSessionStartDateTime, appSettingsProvider),

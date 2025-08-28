@@ -1,5 +1,6 @@
 // client/lib/widgets/player_panel.dart
 
+import 'dart:math'; // Import for max()
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,14 +14,16 @@ import '../models/session.dart';
 
 class PlayerPanel extends StatelessWidget {
   final ValueChanged<int?>? onPlayerSelected;
-  final ValueChanged<int>? onSessionAdded; // Callback for new sessions
+  final ValueChanged<int>? onSessionAdded;
   final int? selectedPlayerId;
+  final DateTime? clubSessionStartDateTime; // Receive from parent
 
   const PlayerPanel({
     super.key,
     this.onPlayerSelected,
     this.onSessionAdded,
     this.selectedPlayerId,
+    this.clubSessionStartDateTime,
   });
 
   @override
@@ -49,6 +52,7 @@ class PlayerPanel extends StatelessWidget {
                     isSelected: player.playerId == selectedPlayerId,
                     onPlayerSelected: onPlayerSelected,
                     onSessionAdded: onSessionAdded,
+                    clubSessionStartDateTime: clubSessionStartDateTime, // Pass down
                   );
                 },
               );
@@ -65,16 +69,27 @@ class PlayerCard extends StatelessWidget {
   final bool isSelected;
   final ValueChanged<int?>? onPlayerSelected;
   final ValueChanged<int>? onSessionAdded;
+  final DateTime? clubSessionStartDateTime; // Receive from parent
 
-  const PlayerCard({super.key, required this.player, required this.isSelected, this.onPlayerSelected, this.onSessionAdded});
+  const PlayerCard({super.key, required this.player, required this.isSelected, this.onPlayerSelected, this.onSessionAdded, this.clubSessionStartDateTime});
 
   Future<void> _startNewSession(BuildContext context, int playerId) async {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+
+    final currentTime = timeProvider.currentTime;
+    DateTime effectiveStartTime = currentTime;
+
+    // Use the later of the current time or the club session start time
+    if (clubSessionStartDateTime != null && clubSessionStartDateTime!.isAfter(currentTime)) {
+      effectiveStartTime = clubSessionStartDateTime!;
+    }
+
     final newSession = Session(
       playerId: playerId,
-      startEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+      startEpoch: effectiveStartTime.millisecondsSinceEpoch ~/ 1000,
     );
+
     final newSessionId = await apiProvider.addSession(newSession);
     onSessionAdded?.call(newSessionId);
   }
@@ -112,16 +127,13 @@ class PlayerCard extends StatelessWidget {
                     epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                   );
 
-                  // This now returns the updated player info
                   final updatedPlayer = await apiProvider.addPayment(newPayment);
 
-                  Navigator.of(dialogContext).pop(); // Close the current dialog
+                  Navigator.of(dialogContext).pop();
 
-                  // Chained logic
                   if (updatedPlayer.balance >= 0) {
                     _startNewSession(context, updatedPlayer.playerId);
                   } else {
-                    // Re-open the dialog with the new, still negative balance
                     _showAddMoneyDialog(context, updatedPlayer);
                   }
                 }
@@ -140,16 +152,13 @@ class PlayerCard extends StatelessWidget {
         final appSettings = Provider.of<AppSettingsProvider>(context, listen: false);
 
         if (player.balance < 0) {
-          // For negative balance, skip the menu and go straight to adding money
-          // We need to pop the menu context and then show the new dialog
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Navigator.of(context).pop();
             _showAddMoneyDialog(context, player);
           });
-          return const SizedBox.shrink(); // Return an empty widget while we transition
+          return const SizedBox.shrink();
         }
 
-        // For non-negative balance, show the menu
         return AlertDialog(
           title: Text('Player Menu for ${player.name}'),
           content: const Text('What would you like to do?'),
