@@ -266,7 +266,7 @@ class DatabaseProvider with ChangeNotifier {
 
   Future<List<Session>> getAllSessions() async {
     final db = await ensure_db();
-    final List<Map<String, dynamic>> maps = await db.query('Session', orderBy: 'Start_Epoch DESC');
+    final List<Map<String, dynamic>> maps = await db.query('Session', orderBy: 'Start_Epoch ASC');
     return List.generate(maps.length, (i) => Session.fromMap(maps[i]));
   }
 

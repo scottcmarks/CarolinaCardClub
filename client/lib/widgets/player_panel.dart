@@ -2,11 +2,11 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; // <--- ADDED THIS IMPORT
 import 'package:provider/provider.dart';
 
+import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
-import '../providers/database_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/payment.dart';
@@ -24,43 +24,46 @@ class PlayerPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DatabaseProvider>(
-      builder: (context, databaseProvider, child) {
-        switch (databaseProvider.loadStatus) {
-          case DatabaseLoadStatus.initial:
-          case DatabaseLoadStatus.loadingRemote:
-          case DatabaseLoadStatus.loadingAssets:
-            return const Center(child: CircularProgressIndicator());
-          case DatabaseLoadStatus.error:
-            return const Center(child: Text('Error loading database.', style: TextStyle(color: Colors.red)));
-          case DatabaseLoadStatus.loaded:
-            return FutureBuilder<List<PlayerSelectionItem>>(
-              future: databaseProvider.fetchPlayerSelectionList(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                } else if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No players found.'));
-                } else {
-                  List<PlayerSelectionItem> players = snapshot.data!;
-                  return ListView.builder(
-                    key: const PageStorageKey<String>('PlayerListScrollPosition'),
-                    itemCount: players.length,
-                    itemBuilder: (context, index) {
-                      final player = players[index];
-                      return PlayerCard(
-                        player: player,
-                        isSelected: player.playerId == selectedPlayerId,
-                        onPlayerSelected: onPlayerSelected,
-                      );
-                    },
-                  );
-                }
-              },
-            );
+    // Consume the new ApiProvider
+    return Consumer<ApiProvider>(
+      builder: (context, apiProvider, child) {
+        // Check if the server is available instead of db status
+        if (!apiProvider.isServerAvailable) {
+          return const Center(
+            child: Text(
+              'Error: Could not connect to the local server.',
+              style: TextStyle(color: Colors.red),
+            ),
+          );
         }
+
+        // The FutureBuilder now calls the apiProvider
+        return FutureBuilder<List<PlayerSelectionItem>>(
+          future: apiProvider.fetchPlayerSelectionList(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            } else if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const Center(child: Text('No players found.'));
+            } else {
+              List<PlayerSelectionItem> players = snapshot.data!;
+              return ListView.builder(
+                key: const PageStorageKey<String>('PlayerListScrollPosition'),
+                itemCount: players.length,
+                itemBuilder: (context, index) {
+                  final player = players[index];
+                  return PlayerCard(
+                    player: player,
+                    isSelected: player.playerId == selectedPlayerId,
+                    onPlayerSelected: onPlayerSelected,
+                  );
+                },
+              );
+            }
+          },
+        );
       },
     );
   }
@@ -103,14 +106,14 @@ class PlayerCard extends StatelessWidget {
               onPressed: () {
                 final double? amount = double.tryParse(amountController.text);
                 if (amount != null && amount != 0) {
-                  final dbProvider = Provider.of<DatabaseProvider>(context, listen: false);
+                  final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                   final timeProvider = Provider.of<TimeProvider>(context, listen: false);
                   final newPayment = Payment(
                     playerId: player.playerId,
                     amount: amount,
                     epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                   );
-                  dbProvider.addPayment(newPayment);
+                  apiProvider.addPayment(newPayment); // Use ApiProvider
                   Navigator.of(context).pop();
                 }
               },
@@ -164,19 +167,18 @@ class PlayerCard extends StatelessWidget {
               },
             ),
           );
-          // Conditionally add the "Open a new session" button
           if (appSettings.currentSettings.showOnlyActiveSessions) {
             actions.add(
               TextButton(
                 child: const Text('Open a new session'),
                 onPressed: () {
-                  final dbProvider = Provider.of<DatabaseProvider>(context, listen: false);
+                  final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                   final timeProvider = Provider.of<TimeProvider>(context, listen: false);
                   final newSession = Session(
                     playerId: player.playerId,
                     startEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                   );
-                  dbProvider.addSession(newSession);
+                  apiProvider.addSession(newSession); // Use ApiProvider
                   Navigator.of(context).pop();
                 },
               ),

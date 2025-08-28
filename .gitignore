@@ -32,6 +32,21 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+# Dart
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# Flutter
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# IDE files
+.idea/
+.vscode/
+
 
 # Symbolication related
 app.*.symbols
