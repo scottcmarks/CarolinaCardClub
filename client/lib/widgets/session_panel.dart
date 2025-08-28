@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/api_provider.dart'; // Changed import
 import '../providers/app_settings_provider.dart';
-import '../providers/database_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/app_settings.dart';
 import '../models/session.dart';
@@ -39,7 +39,7 @@ class _SessionPanelState extends State<SessionPanel> {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('End Club Session'),
-          content: const Text('Close all active sessions at the current time?'),
+          content: const Text('Close all active sessions and trigger a server backup?'),
           actions: <Widget>[
             TextButton(
               child: const Text('Cancel'),
@@ -48,13 +48,11 @@ class _SessionPanelState extends State<SessionPanel> {
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                final dbProvider = Provider.of<DatabaseProvider>(context, listen: false);
-                final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+                final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 final appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
 
-                await dbProvider.stopAllActiveSessions(
-                  timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                );
+                // This logic is now handled by the server, we just trigger the backup.
+                await apiProvider.triggerBackup();
 
                 setState(() {
                   _clubSessionStartDateTime = null;
@@ -71,10 +69,8 @@ class _SessionPanelState extends State<SessionPanel> {
 
   void _toggleClubSessionTime(DateTime defaultTime, AppSettingsProvider appSettingsProvider) {
     if (_clubSessionStartDateTime != null) {
-      // If a session is active, show confirmation dialog to stop it
       _showStopClubSessionDialog(context);
     } else {
-      // If no session is active, start one immediately
       setState(() {
         _clubSessionStartDateTime = defaultTime;
       });
@@ -86,7 +82,6 @@ class _SessionPanelState extends State<SessionPanel> {
   Widget build(BuildContext context) {
     final appSettingsProvider = Provider.of<AppSettingsProvider>(context);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-    final dbProvider = Provider.of<DatabaseProvider>(context);
 
     final AppSettings currentSettings = appSettingsProvider.currentSettings;
     final bool showOnlyActiveSessions = currentSettings.showOnlyActiveSessions;
@@ -111,7 +106,6 @@ class _SessionPanelState extends State<SessionPanel> {
         const Divider(),
         Expanded(
           child: SessionPanelBody(
-            databaseProvider: dbProvider,
             showOnlyActiveSessions: showOnlyActiveSessions,
             selectedPlayerId: widget.selectedPlayerId,
             selectedSessionId: widget.selectedSessionId,
@@ -168,25 +162,37 @@ class SessionPanelHeader extends StatelessWidget {
 }
 
 class SessionPanelBody extends StatelessWidget {
-  final DatabaseProvider databaseProvider;
   final bool showOnlyActiveSessions;
   final int? selectedPlayerId;
   final int? selectedSessionId;
   final ValueChanged<int?>? onSessionSelected;
   final DateTime clubSessionStartTime;
 
-  const SessionPanelBody({super.key, required this.databaseProvider, required this.showOnlyActiveSessions, required this.clubSessionStartTime, this.selectedPlayerId, this.selectedSessionId, this.onSessionSelected});
+  const SessionPanelBody({super.key, required this.showOnlyActiveSessions, required this.clubSessionStartTime, this.selectedPlayerId, this.selectedSessionId, this.onSessionSelected});
 
   @override
   Widget build(BuildContext context) {
+    final apiProvider = Provider.of<ApiProvider>(context);
+    if (!apiProvider.isServerAvailable) {
+      return const Center(child: Text('Server not available.', style: TextStyle(color: Colors.red)));
+    }
+
     return FutureBuilder<List<SessionPanelItem>>(
-      future: databaseProvider.fetchSessionPanelList(showOnlyActiveSessions: showOnlyActiveSessions, playerId: selectedPlayerId),
+      future: apiProvider.fetchSessionPanelList(), // Use ApiProvider
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(child: Text('No ${showOnlyActiveSessions ? 'active' : ''} sessions found.'));
+        if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(child: Text('No sessions found.'));
 
+        // Basic filtering on the client side
         List<SessionPanelItem> sessions = snapshot.data!;
+        if (showOnlyActiveSessions) {
+          sessions = sessions.where((s) => s.stopEpoch == null).toList();
+        }
+        if (selectedPlayerId != null) {
+          sessions = sessions.where((s) => s.playerId == selectedPlayerId).toList();
+        }
+
         return ListView.builder(
           key: const PageStorageKey<String>('SessionListScrollPosition'),
           itemCount: sessions.length,
@@ -220,7 +226,6 @@ abstract class SessionCard extends StatelessWidget {
     final effectiveEndEpoch = currentTime.millisecondsSinceEpoch ~/ 1000;
     final durationInSeconds = max(0, effectiveEndEpoch - effectiveStartEpoch);
     final fractionalHours = durationInSeconds / 3600.0;
-    // Round the amount to a whole number
     final amount = (fractionalHours * (session.rate ?? 0.0)).round().toDouble();
     return {'duration': durationInSeconds, 'amount': amount};
   }
@@ -242,18 +247,17 @@ abstract class SessionCard extends StatelessWidget {
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                final dbProvider = Provider.of<DatabaseProvider>(context, listen: false);
+                final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-                Session? sessionToUpdate = await dbProvider.getSession(session.sessionId);
-                if (sessionToUpdate != null) {
-                  final updatedSession = Session(
-                    sessionId: sessionToUpdate.sessionId,
-                    playerId: sessionToUpdate.playerId,
-                    startEpoch: sessionToUpdate.startEpoch,
-                    stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                  );
-                  await dbProvider.updateSession(updatedSession);
-                }
+
+                final updatedSession = Session(
+                  sessionId: session.sessionId,
+                  playerId: session.playerId,
+                  startEpoch: session.startEpoch,
+                  stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                );
+                await apiProvider.updateSession(updatedSession); // Use ApiProvider
+
                 Navigator.of(dialogContext).pop();
                 onSessionSelected?.call(null);
               },
