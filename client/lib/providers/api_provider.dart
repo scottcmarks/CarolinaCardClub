@@ -22,48 +22,39 @@ class ApiProvider with ChangeNotifier {
   final Map<String, Completer> _requests = {};
   final Uuid _uuid = const Uuid();
   bool _isConnecting = false;
+  bool _mounted = true;
 
   ServerStatus get serverStatus => _serverStatus;
 
   ApiProvider(this._appSettingsProvider);
 
+  /// This is the method the UI's FutureBuilder will listen to.
+  /// It now throws a clear, high-level exception on failure.
   Future<void> initialize() async {
-    await _connect();
+    final bool success = await _connect();
+    if (!success) {
+      throw Exception('Failed to establish connection with the server.');
+    }
   }
 
+  /// This only updates the internal settings reference. It no longer
+  /// triggers a reconnect, which prevents race conditions.
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
-    if (!newSettingsProvider.isInitialized) {
-      _appSettingsProvider = newSettingsProvider;
-      return;
-    }
-
-    final oldUrl = _appSettingsProvider.currentSettings.localServerUrl;
-    final newUrl = newSettingsProvider.currentSettings.localServerUrl;
-
     _appSettingsProvider = newSettingsProvider;
-
-    if (oldUrl != newUrl && !_isConnecting) {
-      print('--> Server URL changed by user. Forcing reconnect...');
-      // Here, _disconnect is appropriate because a connection likely existed.
-      _disconnect().then((_) => _connect());
-    }
   }
 
-  Future<void> _connect() async {
-    if (_isConnecting) return;
+  /// Attempts to connect to the server.
+  /// Returns `true` on success and `false` on failure.
+  /// This method NO LONGER THROWS exceptions, it catches them internally.
+  Future<bool> _connect() async {
+    if (_isConnecting) return false;
     _isConnecting = true;
 
-    final Completer<void> connectionCompleter = Completer<void>();
-
     final serverUrl = _appSettingsProvider.currentSettings.localServerUrl;
-    if (_serverStatus != ServerStatus.connecting) {
-      _serverStatus = ServerStatus.connecting;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          notifyListeners();
-        }
-      });
-    }
+    _serverStatus = ServerStatus.connecting;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_mounted) notifyListeners();
+    });
 
     try {
       await _disconnect();
@@ -74,18 +65,16 @@ class ApiProvider with ChangeNotifier {
         connectTimeout: const Duration(seconds: 10),
       );
 
+      final connectionCompleter = Completer<void>();
       _streamSubscription = _channel!.stream.listen(
         (message) {
           if (!connectionCompleter.isCompleted) {
             final decoded = jsonDecode(message as String);
             if (decoded['type'] == 'ack') {
-              print('✓ Handshake successful. Connected to $serverUrl.');
-              _serverStatus = ServerStatus.connected;
-              notifyListeners();
               connectionCompleter.complete();
             } else {
-              connectionCompleter
-                  .completeError(Exception('Invalid handshake message from server.'));
+              connectionCompleter.completeError(
+                  Exception('Invalid handshake message from server.'));
             }
           } else {
             _handleServerMessage(message);
@@ -95,68 +84,63 @@ class ApiProvider with ChangeNotifier {
           if (!connectionCompleter.isCompleted) {
             connectionCompleter.completeError(error);
           }
-          _handleConnectionEnd(serverUrl, 'ERROR: $error');
         },
         onDone: () {
           if (!connectionCompleter.isCompleted) {
-            connectionCompleter
-                .completeError(Exception('Connection closed during handshake.'));
+            connectionCompleter.completeError(
+                Exception('Connection closed during handshake.'));
           }
-          _handleConnectionEnd(serverUrl, 'Connection closed by server.');
         },
       );
 
       await connectionCompleter.future;
+
+      print('✓ Handshake successful. Connected to $serverUrl.');
+      _serverStatus = ServerStatus.connected;
+      if (_mounted) notifyListeners();
+      _isConnecting = false;
+      return true; // Signal success
     } catch (e) {
       print('✗ FAILED to connect to $serverUrl: $e');
-      // THE FIX: Call the new hard-reset method instead of _disconnect.
       _resetConnectionState();
-      throw e;
-    } finally {
       _isConnecting = false;
+      return false; // Signal failure
     }
   }
 
-  /// Performs a graceful disconnection from an active connection.
   Future<void> _disconnect() async {
     await _streamSubscription?.cancel();
     _streamSubscription = null;
-    await _channel?.sink.close();
-    _channel = null;
-
+    if (_channel != null) {
+      await _channel!.sink.close();
+      _channel = null;
+    }
     if (_serverStatus != ServerStatus.disconnected) {
       _serverStatus = ServerStatus.disconnected;
-      notifyListeners();
+      if (_mounted) notifyListeners();
     }
   }
 
-  /// Performs a "hard" reset of connection variables without attempting
-  /// a graceful network closure. This is safe to call when a connection
-  /// failed to establish.
   void _resetConnectionState() {
     _streamSubscription?.cancel();
     _streamSubscription = null;
     _channel = null;
-
     if (_serverStatus != ServerStatus.disconnected) {
       _serverStatus = ServerStatus.disconnected;
-      notifyListeners();
+      if (_mounted) notifyListeners();
     }
   }
 
   void _handleConnectionEnd(String serverUrl, String reason) {
     print('--> [!] WebSocket connection to $serverUrl ended: $reason');
-    // _disconnect is appropriate here as a connection existed.
     _disconnect();
   }
 
   void _handleServerMessage(dynamic message) {
     try {
-      if (message != null && (message as String).contains('"type":"ack"')) {
-        return;
-      }
+      if ((message as String).contains('"type":"ack"')) return;
 
-      final decoded = jsonDecode(message as String);
+      final decoded = jsonDecode(message);
       final type = decoded['type'];
 
       if (type == 'response') {
@@ -170,7 +154,7 @@ class ApiProvider with ChangeNotifier {
           }
         }
       } else if (type == 'broadcast' && decoded['event'] == 'update') {
-        notifyListeners();
+        if (_mounted) notifyListeners();
       }
     } catch (e) {
       print('Error handling server message: $e');
@@ -182,11 +166,9 @@ class ApiProvider with ChangeNotifier {
     if (_serverStatus != ServerStatus.connected) {
       throw Exception('Not connected to the server.');
     }
-
     final requestId = _uuid.v4();
     final completer = Completer<dynamic>();
     _requests[requestId] = completer;
-
     final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
 
     _channel!.sink.add(jsonEncode({
@@ -242,11 +224,9 @@ class ApiProvider with ChangeNotifier {
     await _sendCommand('reloadDatabase');
   }
 
-  // A helper to check if the provider is still mounted before notifying listeners.
-  bool get mounted => _appSettingsProvider.isInitialized;
-
   @override
   void dispose() {
+    _mounted = false;
     _disconnect();
     super.dispose();
   }
