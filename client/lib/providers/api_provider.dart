@@ -1,9 +1,8 @@
-// client/lib/providers/api_provider.dart
-
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shared/shared.dart';
 
@@ -17,7 +16,7 @@ enum ServerStatus { connecting, connected, disconnected }
 
 class ApiProvider with ChangeNotifier {
   late AppSettingsProvider _appSettingsProvider;
-  ServerStatus _serverStatus = ServerStatus.connecting;
+  ServerStatus _serverStatus = ServerStatus.disconnected;
   WebSocketChannel? _channel;
   StreamSubscription? _streamSubscription;
   final Map<String, Completer> _requests = {};
@@ -26,99 +25,138 @@ class ApiProvider with ChangeNotifier {
 
   ServerStatus get serverStatus => _serverStatus;
 
-  ApiProvider(this._appSettingsProvider) {
-    _connect();
+  ApiProvider(this._appSettingsProvider);
+
+  Future<void> initialize() async {
+    await _connect();
   }
 
-  void updateAppSettings(AppSettingsProvider newSettings) {
-    _appSettingsProvider = newSettings;
-    _reconnect();
-  }
-
-  Future<void> _connect() async {
-    if (_isConnecting) {
+  void updateAppSettings(AppSettingsProvider newSettingsProvider) {
+    if (!newSettingsProvider.isInitialized) {
+      _appSettingsProvider = newSettingsProvider;
       return;
     }
 
-    final serverUrl = _appSettingsProvider.currentSettings.localServerUrl;
-    print('--> Connecting to WebSocket server at $serverUrl...');
-    _serverStatus = ServerStatus.connecting;
-    notifyListeners();
+    final oldUrl = _appSettingsProvider.currentSettings.localServerUrl;
+    final newUrl = newSettingsProvider.currentSettings.localServerUrl;
 
+    _appSettingsProvider = newSettingsProvider;
+
+    if (oldUrl != newUrl && !_isConnecting) {
+      print('--> Server URL changed by user. Forcing reconnect...');
+      // Here, _disconnect is appropriate because a connection likely existed.
+      _disconnect().then((_) => _connect());
+    }
+  }
+
+  Future<void> _connect() async {
+    if (_isConnecting) return;
     _isConnecting = true;
 
+    final Completer<void> connectionCompleter = Completer<void>();
+
+    final serverUrl = _appSettingsProvider.currentSettings.localServerUrl;
+    if (_serverStatus != ServerStatus.connecting) {
+      _serverStatus = ServerStatus.connecting;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          notifyListeners();
+        }
+      });
+    }
+
     try {
+      await _disconnect();
+
       final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
-
-      await _streamSubscription?.cancel();
-      await _channel?.sink.close();
-
-      final connectionCompleter = Completer<void>();
-
-      _channel = WebSocketChannel.connect(wsUrl);
+      _channel = IOWebSocketChannel.connect(
+        wsUrl,
+        connectTimeout: const Duration(seconds: 10),
+      );
 
       _streamSubscription = _channel!.stream.listen(
         (message) {
           if (!connectionCompleter.isCompleted) {
-            final decoded = jsonDecode(message);
+            final decoded = jsonDecode(message as String);
             if (decoded['type'] == 'ack') {
+              print('✓ Handshake successful. Connected to $serverUrl.');
+              _serverStatus = ServerStatus.connected;
+              notifyListeners();
               connectionCompleter.complete();
+            } else {
+              connectionCompleter
+                  .completeError(Exception('Invalid handshake message from server.'));
             }
+          } else {
+            _handleServerMessage(message);
           }
-          _handleServerMessage(message);
-        },
-        onDone: () {
-          print('--> WebSocket connection to $serverUrl closed.');
-          _disconnect();
-          _reconnect();
         },
         onError: (error) {
-          print('--> WebSocket connection to $serverUrl error: $error');
           if (!connectionCompleter.isCompleted) {
             connectionCompleter.completeError(error);
           }
-          _disconnect();
-          _reconnect();
+          _handleConnectionEnd(serverUrl, 'ERROR: $error');
+        },
+        onDone: () {
+          if (!connectionCompleter.isCompleted) {
+            connectionCompleter
+                .completeError(Exception('Connection closed during handshake.'));
+          }
+          _handleConnectionEnd(serverUrl, 'Connection closed by server.');
         },
       );
 
-      await connectionCompleter.future.timeout(const Duration(seconds: 10));
-
-      print('✓ Connected to $serverUrl.');
-      _serverStatus = ServerStatus.connected;
-      notifyListeners();
+      await connectionCompleter.future;
     } catch (e) {
-      print('✗ Failed to connect to $serverUrl: $e');
-      await _disconnect();
-      _reconnect();
+      print('✗ FAILED to connect to $serverUrl: $e');
+      // THE FIX: Call the new hard-reset method instead of _disconnect.
+      _resetConnectionState();
+      throw e;
     } finally {
       _isConnecting = false;
     }
   }
 
-  void _reconnect() {
-    if (_serverStatus == ServerStatus.connected || _isConnecting) return;
-    Future.delayed(const Duration(seconds: 5), () {
-      if (_serverStatus != ServerStatus.connected) {
-        _connect();
-      }
-    });
-  }
-
+  /// Performs a graceful disconnection from an active connection.
   Future<void> _disconnect() async {
     await _streamSubscription?.cancel();
+    _streamSubscription = null;
     await _channel?.sink.close();
     _channel = null;
-    _streamSubscription = null;
+
     if (_serverStatus != ServerStatus.disconnected) {
       _serverStatus = ServerStatus.disconnected;
       notifyListeners();
     }
   }
 
-  void _handleServerMessage(String message) {
+  /// Performs a "hard" reset of connection variables without attempting
+  /// a graceful network closure. This is safe to call when a connection
+  /// failed to establish.
+  void _resetConnectionState() {
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
+    _channel = null;
+
+    if (_serverStatus != ServerStatus.disconnected) {
+      _serverStatus = ServerStatus.disconnected;
+      notifyListeners();
+    }
+  }
+
+  void _handleConnectionEnd(String serverUrl, String reason) {
+    print('--> [!] WebSocket connection to $serverUrl ended: $reason');
+    // _disconnect is appropriate here as a connection existed.
+    _disconnect();
+  }
+
+  void _handleServerMessage(dynamic message) {
     try {
-      final decoded = jsonDecode(message);
+      if (message != null && (message as String).contains('"type":"ack"')) {
+        return;
+      }
+
+      final decoded = jsonDecode(message as String);
       final type = decoded['type'];
 
       if (type == 'response') {
@@ -126,7 +164,7 @@ class ApiProvider with ChangeNotifier {
         if (_requests.containsKey(requestId)) {
           final completer = _requests.remove(requestId)!;
           if (decoded.containsKey('error')) {
-            completer.completeError(decoded['error']);
+            completer.completeError(Exception(decoded['error']));
           } else {
             completer.complete(decoded['payload']);
           }
@@ -139,8 +177,8 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  Future<dynamic> _sendCommand(String command,
-      [Map<String, dynamic>? params]) async {
+  Future<dynamic> _sendCommand(
+      String command, [Map<String, dynamic>? params]) async {
     if (_serverStatus != ServerStatus.connected) {
       throw Exception('Not connected to the server.');
     }
@@ -158,11 +196,15 @@ class ApiProvider with ChangeNotifier {
       'params': params,
     }));
 
-    return completer.future;
+    return completer.future.timeout(const Duration(seconds: 15),
+        onTimeout: () {
+      _requests.remove(requestId);
+      throw TimeoutException(
+          'Server did not respond in time for command: $command');
+    });
   }
 
   // --- Public API Methods ---
-
   Future<List<PlayerSelectionItem>> fetchPlayerSelectionList() async {
     final result = await _sendCommand('getPlayers');
     return (result as List)
@@ -186,7 +228,8 @@ class ApiProvider with ChangeNotifier {
     await _sendCommand('updateSession', session.toMap());
   }
 
-  Future<PlayerSelectionItem> addPayment(Map<String, dynamic> paymentMap) async {
+  Future<PlayerSelectionItem> addPayment(
+      Map<String, dynamic> paymentMap) async {
     final result = await _sendCommand('addPayment', paymentMap);
     return PlayerSelectionItem.fromMap(result);
   }
@@ -194,6 +237,13 @@ class ApiProvider with ChangeNotifier {
   Future<void> backupDatabase() async {
     await _sendCommand('backupDatabase');
   }
+
+  Future<void> reloadServerDatabase() async {
+    await _sendCommand('reloadDatabase');
+  }
+
+  // A helper to check if the provider is still mounted before notifying listeners.
+  bool get mounted => _appSettingsProvider.isInitialized;
 
   @override
   void dispose() {

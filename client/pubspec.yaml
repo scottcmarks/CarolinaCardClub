@@ -1,23 +1,32 @@
 name: carolina_card_club
-description: "A new Flutter project."
+description: A Flutter application for managing card club sessions.
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.4.1 <4.0.0'
+  sdk: '>=3.2.3 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  provider: ^6.1.2
-  http: ^1.2.1
-  web_socket_channel: ^2.4.0
-  intl: ^0.19.0
-  scrollable_positioned_list: ^0.3.8
-  bottom_picker: ^2.8.1
+
+  # Core App Utilities
+  provider: ^6.1.2 # For state management
+  http: ^1.2.1 # For network requests (kept for future use)
+  shared_preferences: ^2.2.3 # For persisting app settings
+  intl: ^0.19.0 # For date and time formatting
+  uuid: ^4.4.0 # For generating unique request IDs
+
+  # WebSocket Communication
+  web_socket_channel: ^2.4.0 # For real-time communication with the server
+
+  # UI Components
   cupertino_icons: ^1.0.2
-  google_fonts: ^6.2.1
-  uuid: ^4.4.0
+  google_fonts: ^6.2.1 # For custom fonts, like the monospaced clock
+  scrollable_positioned_list: ^0.3.8 # For auto-scrolling the session list
+  bottom_picker: ^2.11.2 # For the settings page date/time pickers
+
+  # Local Shared Code
   shared:
     path: ../shared
 
@@ -25,7 +34,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.13.1 # For generating app icons
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/icon/
 
 flutter_launcher_icons:
   android: true
@@ -34,9 +49,3 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/icon/CCCIcon.png"
   image_path: "assets/icon/CCCIconA.png"
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/
-    - assets/icon/

@@ -2,33 +2,50 @@
 
 import 'package:flutter/material.dart';
 
+/// A data class to hold all user-configurable application settings.
+///
+/// This class is immutable. To change a setting, create a new instance
+/// using the [copyWith] method.
 class AppSettings {
-  // REMOVED: remoteDatabaseUrl
-  // ADDED: localServerUrl
   final String localServerUrl;
-  final String localServerApiKey; // Added for client-server auth
-  final bool showOnlyActiveSessions;
+  final String localServerApiKey;
+  final String preferredTheme;
   final TimeOfDay? defaultSessionStartTime;
 
   AppSettings({
     required this.localServerUrl,
     required this.localServerApiKey,
-    this.showOnlyActiveSessions = false,
+    required this.preferredTheme,
     this.defaultSessionStartTime,
   });
 
-  // Method to create a copy with modified fields
+  /// Creates a new [AppSettings] instance with updated values.
   AppSettings copyWith({
     String? localServerUrl,
     String? localServerApiKey,
-    bool? showOnlyActiveSessions,
+    String? preferredTheme,
     TimeOfDay? defaultSessionStartTime,
   }) {
     return AppSettings(
       localServerUrl: localServerUrl ?? this.localServerUrl,
       localServerApiKey: localServerApiKey ?? this.localServerApiKey,
-      showOnlyActiveSessions: showOnlyActiveSessions ?? this.showOnlyActiveSessions,
-      defaultSessionStartTime: defaultSessionStartTime ?? this.defaultSessionStartTime,
+      preferredTheme: preferredTheme ?? this.preferredTheme,
+      defaultSessionStartTime:
+          defaultSessionStartTime ?? this.defaultSessionStartTime,
+    );
+  }
+
+  /// A factory constructor to create default settings.
+  ///
+  /// This is used to initialize the [AppSettingsProvider] before the
+  /// actual settings have been loaded from persistent storage, preventing
+  /// initialization errors.
+  factory AppSettings.defaults() {
+    return AppSettings(
+      localServerUrl: 'http://127.0.0.1:8080',
+      localServerApiKey: '', // Default to empty; loaded from storage later.
+      preferredTheme: 'light',
+      defaultSessionStartTime: const TimeOfDay(hour: 19, minute: 30),
     );
   }
 }
