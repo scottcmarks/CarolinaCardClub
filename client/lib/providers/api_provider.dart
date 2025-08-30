@@ -1,92 +1,203 @@
 // client/lib/providers/api_provider.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:shared/shared.dart';
+
+import '../models/app_settings.dart';
 import '../models/player_selection_item.dart';
 import '../models/session_panel_item.dart';
-import '../models/payment.dart';
 import '../models/session.dart';
 import 'app_settings_provider.dart';
 
+enum ServerStatus { connecting, connected, disconnected }
+
 class ApiProvider with ChangeNotifier {
-  // This provider now depends on AppSettingsProvider
-  final AppSettingsProvider _appSettingsProvider;
+  late AppSettingsProvider _appSettingsProvider;
+  ServerStatus _serverStatus = ServerStatus.connecting;
+  WebSocketChannel? _channel;
+  StreamSubscription? _streamSubscription;
+  final Map<String, Completer> _requests = {};
+  final Uuid _uuid = const Uuid();
+  bool _isConnecting = false;
 
-  ApiProvider(this._appSettingsProvider);
+  ServerStatus get serverStatus => _serverStatus;
 
-  String get _baseUrl => _appSettingsProvider.currentSettings.localServerUrl;
-  String get _apiKey => _appSettingsProvider.currentSettings.localServerApiKey;
+  ApiProvider(this._appSettingsProvider) {
+    _connect();
+  }
 
-  bool _isServerAvailable = true;
-  bool get isServerAvailable => _isServerAvailable;
+  void updateAppSettings(AppSettingsProvider newSettings) {
+    _appSettingsProvider = newSettings;
+    _reconnect();
+  }
 
-  // Helper to add the API key to every request
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    'X-Api-Key': _apiKey, // Custom header for our key
-  };
+  Future<void> _connect() async {
+    if (_isConnecting) {
+      return;
+    }
 
-  Future<T> _handleRequest<T>(Future<http.Response> Function() request, T Function(dynamic) fromJson) async {
+    final serverUrl = _appSettingsProvider.currentSettings.localServerUrl;
+    print('--> Connecting to WebSocket server at $serverUrl...');
+    _serverStatus = ServerStatus.connecting;
+    notifyListeners();
+
+    _isConnecting = true;
+
     try {
-      final response = await request();
-      if (response.statusCode == 403) { // Forbidden
-        throw Exception('Invalid API Key. Please check settings.');
-      }
-      if (response.statusCode == 200) {
-        if (!_isServerAvailable) {
-          _isServerAvailable = true;
-          notifyListeners();
-        }
-        return fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception('Failed request: ${response.statusCode}');
-      }
+      final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
+
+      await _streamSubscription?.cancel();
+      await _channel?.sink.close();
+
+      final connectionCompleter = Completer<void>();
+
+      _channel = WebSocketChannel.connect(wsUrl);
+
+      _streamSubscription = _channel!.stream.listen(
+        (message) {
+          if (!connectionCompleter.isCompleted) {
+            final decoded = jsonDecode(message);
+            if (decoded['type'] == 'ack') {
+              connectionCompleter.complete();
+            }
+          }
+          _handleServerMessage(message);
+        },
+        onDone: () {
+          print('--> WebSocket connection to $serverUrl closed.');
+          _disconnect();
+          _reconnect();
+        },
+        onError: (error) {
+          print('--> WebSocket connection to $serverUrl error: $error');
+          if (!connectionCompleter.isCompleted) {
+            connectionCompleter.completeError(error);
+          }
+          _disconnect();
+          _reconnect();
+        },
+      );
+
+      await connectionCompleter.future.timeout(const Duration(seconds: 10));
+
+      print('✓ Connected to $serverUrl.');
+      _serverStatus = ServerStatus.connected;
+      notifyListeners();
     } catch (e) {
-      if (_isServerAvailable) {
-        _isServerAvailable = false;
-        notifyListeners();
-      }
-      debugPrint('API Error: $e');
-      throw Exception('Could not connect to the local server.');
+      print('✗ Failed to connect to $serverUrl: $e');
+      await _disconnect();
+      _reconnect();
+    } finally {
+      _isConnecting = false;
     }
   }
 
+  void _reconnect() {
+    if (_serverStatus == ServerStatus.connected || _isConnecting) return;
+    Future.delayed(const Duration(seconds: 5), () {
+      if (_serverStatus != ServerStatus.connected) {
+        _connect();
+      }
+    });
+  }
+
+  Future<void> _disconnect() async {
+    await _streamSubscription?.cancel();
+    await _channel?.sink.close();
+    _channel = null;
+    _streamSubscription = null;
+    if (_serverStatus != ServerStatus.disconnected) {
+      _serverStatus = ServerStatus.disconnected;
+      notifyListeners();
+    }
+  }
+
+  void _handleServerMessage(String message) {
+    try {
+      final decoded = jsonDecode(message);
+      final type = decoded['type'];
+
+      if (type == 'response') {
+        final requestId = decoded['requestId'];
+        if (_requests.containsKey(requestId)) {
+          final completer = _requests.remove(requestId)!;
+          if (decoded.containsKey('error')) {
+            completer.completeError(decoded['error']);
+          } else {
+            completer.complete(decoded['payload']);
+          }
+        }
+      } else if (type == 'broadcast' && decoded['event'] == 'update') {
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error handling server message: $e');
+    }
+  }
+
+  Future<dynamic> _sendCommand(String command,
+      [Map<String, dynamic>? params]) async {
+    if (_serverStatus != ServerStatus.connected) {
+      throw Exception('Not connected to the server.');
+    }
+
+    final requestId = _uuid.v4();
+    final completer = Completer<dynamic>();
+    _requests[requestId] = completer;
+
+    final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
+
+    _channel!.sink.add(jsonEncode({
+      'requestId': requestId,
+      'apiKey': apiKey,
+      'command': command,
+      'params': params,
+    }));
+
+    return completer.future;
+  }
+
+  // --- Public API Methods ---
+
   Future<List<PlayerSelectionItem>> fetchPlayerSelectionList() async {
-    return _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/players'), headers: _headers),
-      (json) => (json as List).map((item) => PlayerSelectionItem.fromMap(item)).toList()
-    );
+    final result = await _sendCommand('getPlayers');
+    return (result as List)
+        .map((item) => PlayerSelectionItem.fromMap(item))
+        .toList();
   }
 
-  Future<List<SessionPanelItem>> fetchSessionPanelList() async {
-    return _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/sessions'), headers: _headers),
-      (json) => (json as List).map((item) => SessionPanelItem.fromMap(item)).toList()
-    );
-  }
-
-  Future<PlayerSelectionItem> addPayment(Payment payment) async {
-    return _handleRequest(
-      () => http.post(Uri.parse('$_baseUrl/payments'), headers: _headers, body: jsonEncode(payment.toMap())),
-      (json) => PlayerSelectionItem.fromMap(json)
-    );
+  Future<List<SessionPanelItem>> fetchSessionPanelList({int? playerId}) async {
+    final result = await _sendCommand('getSessions', {'playerId': playerId});
+    return (result as List)
+        .map((item) => SessionPanelItem.fromMap(item))
+        .toList();
   }
 
   Future<int> addSession(Session session) async {
-    return _handleRequest(
-      () => http.post(Uri.parse('$_baseUrl/sessions'), headers: _headers, body: jsonEncode(session.toMap())),
-      (json) => json['sessionId']
-    );
+    final result = await _sendCommand('addSession', session.toMap());
+    return result['sessionId'];
   }
 
   Future<void> updateSession(Session session) async {
-    await http.put(Uri.parse('$_baseUrl/sessions/${session.sessionId}'), headers: _headers, body: jsonEncode(session.toMap()));
-    notifyListeners();
+    await _sendCommand('updateSession', session.toMap());
   }
 
-  Future<void> triggerBackup() async {
-    await http.post(Uri.parse('$_baseUrl/backup'), headers: _headers);
-    notifyListeners();
+  Future<PlayerSelectionItem> addPayment(Map<String, dynamic> paymentMap) async {
+    final result = await _sendCommand('addPayment', paymentMap);
+    return PlayerSelectionItem.fromMap(result);
+  }
+
+  Future<void> backupDatabase() async {
+    await _sendCommand('backupDatabase');
+  }
+
+  @override
+  void dispose() {
+    _disconnect();
+    super.dispose();
   }
 }

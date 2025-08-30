@@ -1,64 +1,107 @@
 // client/lib/widgets/session_panel.dart
 
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
-import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
-import '../models/app_settings.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
 
+// Helper Functions
+String _formatMaybeMoney(double? price) {
+  if (price == null) return '';
+  return '\$${price.toStringAsFixed(2)}';
+}
+
+String _formatDuration(int totalSeconds) {
+  final int totalMinutes = totalSeconds ~/ 60;
+  final int hours = totalMinutes ~/ 60;
+  final int minutes = totalMinutes.remainder(60);
+  return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+}
+
+String _formatMaybeDuration(int? maybeSeconds) {
+  return (maybeSeconds != null) ? _formatDuration(maybeSeconds) : '';
+}
+
 class SessionPanel extends StatefulWidget {
-  final ValueChanged<int?>? onSessionSelected;
   final int? selectedPlayerId;
   final int? selectedSessionId;
+  final ValueChanged<int?>? onSessionSelected;
   final int? newlyAddedSessionId;
-  final DateTime? clubSessionStartDateTime; // Receive from parent
-  final ValueChanged<DateTime?> onClubSessionTimeChanged; // Receive callback from parent
+  final DateTime? clubSessionStartDateTime;
+  final ValueChanged<DateTime?> onClubSessionTimeChanged;
 
   const SessionPanel({
     super.key,
-    this.onSessionSelected,
     this.selectedPlayerId,
     this.selectedSessionId,
+    this.onSessionSelected,
     this.newlyAddedSessionId,
-    this.clubSessionStartDateTime,
+    required this.clubSessionStartDateTime,
     required this.onClubSessionTimeChanged,
   });
 
   @override
-  _SessionPanelState createState() => _SessionPanelState();
+  State<SessionPanel> createState() => _SessionPanelState();
 }
 
 class _SessionPanelState extends State<SessionPanel> {
-  final ItemScrollController _itemScrollController = ItemScrollController();
-  final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
+  final ItemScrollController _scrollController = ItemScrollController();
+
+  @override
+  void didUpdateWidget(covariant SessionPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.newlyAddedSessionId != null &&
+        widget.newlyAddedSessionId != oldWidget.newlyAddedSessionId) {
+      // Use a post-frame callback to ensure the list has been built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollToSession(widget.newlyAddedSessionId!);
+        }
+      });
+    }
+  }
+
+  void _scrollToSession(int sessionId) {
+    // This logic needs the index of the session, not the ID.
+    // The FutureBuilder will need to handle finding the index.
+    // We will handle this inside the FutureBuilder's builder.
+  }
 
   void _showStopClubSessionDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
+      builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('End Club Session'),
-          content: const Text('Close all active sessions and trigger a server backup?'),
-          actions: <Widget>[
-            TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(dialogContext).pop()),
+          title: const Text('End Club Session?'),
+          content: const Text(
+              'This will stop all active sessions at the current time. Are you sure?'),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
+                Navigator.of(context).pop();
                 final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-                final appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
-                await apiProvider.triggerBackup();
-
-                widget.onClubSessionTimeChanged(null); // Use callback to notify parent
-
-                appSettingsProvider.setShowOnlyActiveSessions(false);
-                Navigator.of(dialogContext).pop();
+                try {
+                  await apiProvider.backupDatabase();
+                   // Notify parent that the session time has been cleared.
+                  widget.onClubSessionTimeChanged(null);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error stopping sessions: $e')),
+                  );
+                }
               },
             ),
           ],
@@ -67,47 +110,91 @@ class _SessionPanelState extends State<SessionPanel> {
     );
   }
 
-  void _toggleClubSessionTime(DateTime defaultTime, AppSettingsProvider appSettingsProvider) {
-    if (widget.clubSessionStartDateTime != null) {
-      _showStopClubSessionDialog(context);
-    } else {
-      widget.onClubSessionTimeChanged(defaultTime); // Use callback to notify parent
-      appSettingsProvider.setShowOnlyActiveSessions(true);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final appSettingsProvider = Provider.of<AppSettingsProvider>(context);
-    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    final apiProvider = Provider.of<ApiProvider>(context);
+    final appSettings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
+    final now = Provider.of<TimeProvider>(context, listen: false).currentTime;
 
-    final AppSettings currentSettings = appSettingsProvider.currentSettings;
-    final bool showOnlyActiveSessions = currentSettings.showOnlyActiveSessions;
-    final TimeOfDay defaultSessionStartTime = currentSettings.defaultSessionStartTime ?? const TimeOfDay(hour: 19, minute: 30);
-    final DateTime now = timeProvider.currentTime;
+    // Provide a default if the setting is null
+    final defaultStartTime = appSettings.defaultSessionStartTime ?? const TimeOfDay(hour: 19, minute: 30);
 
-    final DateTime defaultSessionStartDateTime = DateTime(now.year, now.month, now.day, defaultSessionStartTime.hour, defaultSessionStartTime.minute);
-    final DateTime effectiveClubStartTime = widget.clubSessionStartDateTime ?? defaultSessionStartDateTime;
+    final defaultSessionStartDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      defaultStartTime.hour,
+      defaultStartTime.minute,
+    );
 
     return Column(
       children: [
         SessionPanelHeader(
           clubSessionStartDateTime: widget.clubSessionStartDateTime,
           defaultSessionStartDateTime: defaultSessionStartDateTime,
-          showOnlyActiveSessions: showOnlyActiveSessions,
-          onTap: () => _toggleClubSessionTime(defaultSessionStartDateTime, appSettingsProvider),
+          onToggleClubSessionTime: () {
+            if (widget.clubSessionStartDateTime == null) {
+              widget.onClubSessionTimeChanged(defaultSessionStartDateTime);
+            } else {
+              _showStopClubSessionDialog(context);
+            }
+          },
         ),
         const Divider(),
         Expanded(
-          child: SessionPanelBody(
-            showOnlyActiveSessions: showOnlyActiveSessions,
-            selectedPlayerId: widget.selectedPlayerId,
-            selectedSessionId: widget.selectedSessionId,
-            onSessionSelected: widget.onSessionSelected,
-            clubSessionStartTime: effectiveClubStartTime,
-            newlyAddedSessionId: widget.newlyAddedSessionId,
-            itemScrollController: _itemScrollController,
-            itemPositionsListener: _itemPositionsListener,
+          child: Consumer<ApiProvider>(
+            builder: (context, apiProvider, child) {
+              if (apiProvider.serverStatus == ServerStatus.connecting) {
+                return const Center(child: Text('Connecting to server...'));
+              }
+              if (apiProvider.serverStatus == ServerStatus.disconnected) {
+                return const Center(child: Text('Disconnected from server.', style: TextStyle(color: Colors.red)));
+              }
+              return FutureBuilder<List<SessionPanelItem>>(
+                future: apiProvider.fetchSessionPanelList(playerId: widget.selectedPlayerId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  } else if (snapshot.hasError) {
+                    return Center(child: Text('Error loading sessions: ${snapshot.error}', style: TextStyle(color: Colors.red)));
+                  } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text('No sessions found.'));
+                  } else {
+                    List<SessionPanelItem> sessions = snapshot.data!;
+                     if (widget.newlyAddedSessionId != null) {
+                      final index = sessions.indexWhere((s) => s.sessionId == widget.newlyAddedSessionId);
+                      if (index != -1) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                           if (mounted && _scrollController.isAttached) {
+                            _scrollController.scrollTo(
+                              index: index,
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.easeInOut,
+                            );
+                           }
+                        });
+                      }
+                    }
+                    return ScrollablePositionedList.builder(
+                      itemScrollController: _scrollController,
+                      key: const PageStorageKey<String>('SessionListScrollPosition'),
+                      itemCount: sessions.length,
+                      itemBuilder: (context, index) {
+                        final session = sessions[index];
+                        final isSelected = session.sessionId == widget.selectedSessionId;
+                        return SessionCard(
+                          session: session,
+                          isSelected: isSelected,
+                          onSessionSelected: widget.onSessionSelected,
+                          clubSessionStartDateTime: widget.clubSessionStartDateTime,
+                          showPlayerName: widget.selectedPlayerId == null,
+                        );
+                      },
+                    );
+                  }
+                },
+              );
+            },
           ),
         ),
       ],
@@ -115,156 +202,99 @@ class _SessionPanelState extends State<SessionPanel> {
   }
 }
 
-// --- Helper Functions & Widgets ---
-String formatMoney(double? price) => price != null ? '\$${price.toStringAsFixed(2)}' : '';
-String formatDuration(int? totalSeconds) {
-  if (totalSeconds == null) return '';
-  final int hours = totalSeconds ~/ 3600;
-  final int minutes = (totalSeconds % 3600) ~/ 60;
-  return '${hours}h${minutes.toString().padLeft(2, '0')}m';
-}
-String isoFormatEpoch(int seconds) => DateFormat('yyyy-MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(seconds * 1000));
-String maybeIsoFormatEpoch(int? seconds, String ifNull) => seconds != null ? isoFormatEpoch(seconds) : ifNull;
-
 class SessionPanelHeader extends StatelessWidget {
   final DateTime? clubSessionStartDateTime;
   final DateTime defaultSessionStartDateTime;
-  final bool showOnlyActiveSessions;
-  final VoidCallback onTap;
-  const SessionPanelHeader({super.key, required this.clubSessionStartDateTime, required this.defaultSessionStartDateTime, required this.showOnlyActiveSessions, required this.onTap});
+  final VoidCallback onToggleClubSessionTime;
+
+  const SessionPanelHeader({
+    super.key,
+    required this.clubSessionStartDateTime,
+    required this.defaultSessionStartDateTime,
+    required this.onToggleClubSessionTime,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
-        children: [
-          InkWell(
-            onTap: onTap,
-            child: Text(
-              (clubSessionStartDateTime != null)
-                  ? 'Club session started at ${DateFormat("HH:mm").format(clubSessionStartDateTime!)}'
-                  : 'Club session starts at ${DateFormat("HH:mm").format(defaultSessionStartDateTime)}',
-              style: TextStyle(fontSize: 16, fontStyle: clubSessionStartDateTime != null ? FontStyle.normal : FontStyle.italic),
+    final bool showOnlyActiveSessions = clubSessionStartDateTime != null;
+    return InkWell(
+      onTap: onToggleClubSessionTime,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                showOnlyActiveSessions
+                    ? 'Club session started at ${DateFormat("yyyy-MM-dd HH:mm").format(clubSessionStartDateTime!)}'
+                    : 'Tap to start club session at ${DateFormat("yyyy-MM-dd HH:mm").format(defaultSessionStartDateTime)}',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontStyle: showOnlyActiveSessions
+                        ? FontStyle.normal
+                        : FontStyle.italic),
+              ),
             ),
-          ),
-          const Spacer(),
-          Text(showOnlyActiveSessions ? 'Active' : 'All', style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic)),
-        ],
+            Text(
+              showOnlyActiveSessions ? 'Active' : 'All',
+              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class SessionPanelBody extends StatelessWidget {
-  final bool showOnlyActiveSessions;
-  final int? selectedPlayerId;
-  final int? selectedSessionId;
-  final ValueChanged<int?>? onSessionSelected;
-  final DateTime clubSessionStartTime;
-  final int? newlyAddedSessionId;
-  final ItemScrollController itemScrollController;
-  final ItemPositionsListener itemPositionsListener;
-
-  const SessionPanelBody({super.key, required this.showOnlyActiveSessions, required this.clubSessionStartTime, this.selectedPlayerId, this.selectedSessionId, this.onSessionSelected, this.newlyAddedSessionId, required this.itemScrollController, required this.itemPositionsListener});
-
-  @override
-  Widget build(BuildContext context) {
-    final apiProvider = Provider.of<ApiProvider>(context);
-    if (!apiProvider.isServerAvailable) return const Center(child: Text('Server not available.', style: TextStyle(color: Colors.red)));
-
-    return FutureBuilder<List<SessionPanelItem>>(
-      future: apiProvider.fetchSessionPanelList(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No sessions found.'));
-
-        List<SessionPanelItem> sessions = snapshot.data!;
-        if (showOnlyActiveSessions) sessions = sessions.where((s) => s.stopEpoch == null).toList();
-        if (selectedPlayerId != null) sessions = sessions.where((s) => s.playerId == selectedPlayerId).toList();
-
-        if (newlyAddedSessionId != null) {
-          final index = sessions.indexWhere((s) => s.sessionId == newlyAddedSessionId);
-          if (index != -1) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              itemScrollController.scrollTo(
-                index: index,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            });
-          }
-        }
-
-        return ScrollablePositionedList.builder(
-          itemScrollController: itemScrollController,
-          itemPositionsListener: itemPositionsListener,
-          itemCount: sessions.length,
-          itemBuilder: (context, index) {
-            final session = sessions[index];
-            final isSelected = session.sessionId == selectedSessionId;
-            return selectedPlayerId != null
-                ? SelectedPlayerCard(session: session, isSelected: isSelected, onSessionSelected: onSessionSelected, clubSessionStartTime: clubSessionStartTime)
-                : AllPlayersCard(session: session, isSelected: isSelected, onSessionSelected: onSessionSelected, clubSessionStartTime: clubSessionStartTime);
-          },
-        );
-      },
-    );
-  }
-}
-
-abstract class SessionCard extends StatelessWidget {
+class SessionCard extends StatelessWidget {
   final SessionPanelItem session;
   final bool isSelected;
   final ValueChanged<int?>? onSessionSelected;
-  final DateTime clubSessionStartTime;
-  const SessionCard({super.key, required this.session, required this.isSelected, required this.onSessionSelected, required this.clubSessionStartTime});
+  final DateTime? clubSessionStartDateTime;
+  final bool showPlayerName;
 
-  Map<String, dynamic> _calculateDynamicValues(DateTime currentTime) {
-    if (session.stopEpoch != null) {
-      return {'duration': session.durationInSeconds, 'amount': session.amount};
-    }
-    final clubStartEpoch = clubSessionStartTime.millisecondsSinceEpoch ~/ 1000;
-    final effectiveStartEpoch = max(session.startEpoch, clubStartEpoch);
-    final effectiveEndEpoch = currentTime.millisecondsSinceEpoch ~/ 1000;
-    final durationInSeconds = max(0, effectiveEndEpoch - effectiveStartEpoch);
-    final fractionalHours = durationInSeconds / 3600.0;
-    final amount = (fractionalHours * (session.rate ?? 0.0)).round().toDouble();
-    return {'duration': durationInSeconds, 'amount': amount};
-  }
+  const SessionCard({
+    super.key,
+    required this.session,
+    required this.isSelected,
+    this.onSessionSelected,
+    this.clubSessionStartDateTime,
+    required this.showPlayerName,
+  });
 
-  void _handleTap(BuildContext context) {
-    if (session.stopEpoch == null) {
-      _showStopSessionDialog(context);
-    } else {
-      onSessionSelected?.call(isSelected ? null : session.sessionId);
-    }
-  }
+  Future<void> _stopSession(BuildContext context, SessionPanelItem session) async {
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-  void _showStopSessionDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
+      builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Stop Session'),
-          content: Text('Do you want to stop the session for ${session.name}?'),
-          actions: <Widget>[
-            TextButton(child: const Text('Cancel'), onPressed: () => Navigator.of(dialogContext).pop()),
+          title: Text('Stop Session for ${session.name}?'),
+          content: const Text('Are you sure you want to stop this session?'),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-                final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-                final updatedSession = Session(
-                  sessionId: session.sessionId,
-                  playerId: session.playerId,
-                  startEpoch: session.startEpoch,
-                  stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                );
-                await apiProvider.updateSession(updatedSession);
-                Navigator.of(dialogContext).pop();
-                onSessionSelected?.call(null);
+                 try {
+                   final fullSession = Session(
+                     sessionId: session.sessionId,
+                     playerId: session.playerId,
+                     startEpoch: session.startEpoch,
+                     stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                   );
+                   await apiProvider.updateSession(fullSession);
+                   Navigator.of(context).pop();
+                 } catch (e) {
+                   Navigator.of(context).pop();
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     SnackBar(content: Text('Failed to stop session: $e')),
+                   );
+                 }
               },
             ),
           ],
@@ -272,10 +302,6 @@ abstract class SessionCard extends StatelessWidget {
       },
     );
   }
-}
-
-class SelectedPlayerCard extends SessionCard {
-  const SelectedPlayerCard({super.key, required super.session, required super.isSelected, required super.onSessionSelected, required super.clubSessionStartTime});
 
   @override
   Widget build(BuildContext context) {
@@ -283,51 +309,69 @@ class SelectedPlayerCard extends SessionCard {
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       color: isSelected ? Colors.blue.shade100 : null,
       child: InkWell(
-        onTap: () => _handleTap(context),
-        child: ListTile(
-          title: Row(children: [
-            Expanded(child: Text('${isoFormatEpoch(session.startEpoch)} - ${maybeIsoFormatEpoch(session.stopEpoch, "ongoing")}', overflow: TextOverflow.ellipsis)),
-            Text('Session: ${session.sessionId}', style: Theme.of(context).textTheme.bodySmall),
-          ]),
-          subtitle: Consumer<TimeProvider>(
-            builder: (context, timeProvider, child) {
-              final dynamicValues = _calculateDynamicValues(timeProvider.currentTime);
-              return Row(children: <Widget>[
-                Expanded(flex: 1, child: Text('Duration: ${formatDuration(dynamicValues['duration'])}')),
-                Expanded(flex: 1, child: Text('Amount: ${formatMoney(dynamicValues['amount'])}', textAlign: TextAlign.right)),
-              ]);
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
+        onTap: () {
+          if (session.stopEpoch == null) {
+            _stopSession(context, session);
+          } else {
+            onSessionSelected?.call(session.sessionId);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (showPlayerName)
+                    Expanded(
+                      child: Text(
+                        session.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  Text(
+                    'Session: ${session.sessionId}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.startEpoch * 1000))} - ${session.stopEpoch == null ? "ongoing" : DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.stopEpoch! * 1000))}',
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Consumer<TimeProvider>(
+                    builder: (context, timeProvider, child) {
+                      final effectiveStopEpoch = session.stopEpoch ??
+                          (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
 
-class AllPlayersCard extends SessionCard {
-  const AllPlayersCard({super.key, required super.session, required super.isSelected, required super.onSessionSelected, required super.clubSessionStartTime});
+                      final effectiveStartEpoch = clubSessionStartDateTime != null
+                          ? max(session.startEpoch, clubSessionStartDateTime!.millisecondsSinceEpoch ~/ 1000)
+                          : session.startEpoch;
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      color: isSelected ? Colors.blue.shade100 : null,
-      child: InkWell(
-        onTap: () => _handleTap(context),
-        child: ListTile(
-          title: Row(children: [
-            Expanded(child: Text(session.name, overflow: TextOverflow.ellipsis)),
-            Text('Session: ${session.sessionId}', style: Theme.of(context).textTheme.bodySmall),
-          ]),
-          subtitle: Consumer<TimeProvider>(
-            builder: (context, timeProvider, child) {
-              final dynamicValues = _calculateDynamicValues(timeProvider.currentTime);
-              return Row(children: <Widget>[
-                Expanded(flex: 8, child: Text('${isoFormatEpoch(session.startEpoch)} - ${maybeIsoFormatEpoch(session.stopEpoch, "ongoing")}')),
-                Expanded(flex: 2, child: Text(formatDuration(dynamicValues['duration']), textAlign: TextAlign.right)),
-                Expanded(flex: 2, child: Text(formatMoney(dynamicValues['amount']), textAlign: TextAlign.right)),
-              ]);
-            },
+                      final durationInSeconds = max(0, effectiveStopEpoch - effectiveStartEpoch);
+                      final amount = (durationInSeconds / 3600.0) * session.rate;
+
+                      return Row(
+                        children: [
+                          Text('Duration: ${_formatDuration(durationInSeconds)}'),
+                          const SizedBox(width: 16),
+                          Text('Amount: ${_formatMaybeMoney(amount.roundToDouble())}'),
+                        ],
+                      );
+                    },
+                  ),
+                  Text('Balance: ${_formatMaybeMoney(session.balance)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
           ),
         ),
       ),
