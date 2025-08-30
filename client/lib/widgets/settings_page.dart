@@ -1,5 +1,3 @@
-// client/lib/widgets/settings_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,7 +23,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late TimeOfDay? _defaultSessionStartTime;
   late DateTime? _clockTime;
 
-  // Updated controllers for new settings
   late TextEditingController _localServerUrlController;
   late TextEditingController _localServerApiKeyController;
 
@@ -38,7 +35,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _localShowOnlyActiveSessions = settings.showOnlyActiveSessions;
     _defaultSessionStartTime = settings.defaultSessionStartTime;
 
-    // Initialize new controllers
     _localServerUrlController = TextEditingController(text: settings.localServerUrl);
     _localServerApiKeyController = TextEditingController(text: settings.localServerApiKey);
 
@@ -53,55 +49,47 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  /// Builds a standard title widget for the header of the bottom picker.
-  Widget _buildPickerHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 15,
-        ),
-      ),
-    );
-  }
-
   // A helper function to show the time picker
   void _showSessionTimePicker(BuildContext context) {
+    // CORRECTED: Use the 'pickerTitle' parameter with a Text widget.
     BottomPicker.time(
-      headerBuilder: (context) => _buildPickerHeader('Set Default Session Start Time'),
-      initialTime: Time(
-        hours: _defaultSessionStartTime?.hour     ?? 19,
-        minutes: _defaultSessionStartTime?.minute ?? 30,
+      pickerTitle: const Text(
+        'Set Default Session Start Time',
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
       ),
-      onSubmit: (pickedDateTime) {
-        if (pickedDateTime is DateTime) {
+      onSubmit: (index) {
+        if (index is DateTime) {
           setState(() {
-            _defaultSessionStartTime = TimeOfDay(hour: pickedDateTime.hour, minute: pickedDateTime.minute);
+            _defaultSessionStartTime = TimeOfDay(hour: index.hour, minute: index.minute);
           });
         }
       },
+      initialTime: Time(
+        hours: _defaultSessionStartTime?.hour ?? 19,
+        minutes: _defaultSessionStartTime?.minute ?? 30,
+      ),
       use24hFormat: true,
-      bottomPickerTheme: BottomPickerTheme.blue,
     ).show(context);
   }
 
   // A helper function to show the combined date and time picker
   void _showCombinedDateTimePicker(BuildContext context) {
+    // CORRECTED: Use the 'pickerTitle' parameter with a Text widget.
     BottomPicker.dateTime(
-      headerBuilder: (context) => _buildPickerHeader('Set Clock Time'),
-      initialDateTime: _clockTime ?? _timeProvider.currentTime,
-      minDateTime: DateTime(2025, 7, 1),
-      onSubmit: (pickedDateTime) {
-        if (pickedDateTime is DateTime) {
+      pickerTitle: const Text(
+        'Set Clock Time',
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+      ),
+      onSubmit: (index) {
+        if (index is DateTime) {
           setState(() {
-            _clockTime = pickedDateTime;
+            _clockTime = index;
           });
         }
       },
+      initialDateTime: _clockTime ?? _timeProvider.currentTime,
+      minDateTime: DateTime(2025, 7, 1),
       use24hFormat: true,
-      bottomPickerTheme: BottomPickerTheme.blue,
     ).show(context);
   }
 

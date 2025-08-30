@@ -2,11 +2,14 @@
 
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
+// Import the shared package to get the API key
+import 'package:shared/shared.dart';
 
 class AppSettingsProvider with ChangeNotifier {
   AppSettings _currentSettings = AppSettings(
-    localServerUrl: 'http://localhost:8080', // New default
-    localServerApiKey: '9af85ab7895eb6d8baceb0fe1203c96851c87bdbad9af5fd5d5d0de2a24dad428b5906722412bfa5b4fe3a9a07a7a24abea50cff4c9de08c02b8708871f1c2b1', // Default key
+    localServerUrl: 'http://127.0.0.1:8080', // Use explicit IP for localhost
+    // Use the imported constant for the default key
+    localServerApiKey: localApiKey,
     defaultSessionStartTime: const TimeOfDay(hour: 19, minute: 30),
   );
 
@@ -17,7 +20,6 @@ class AppSettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Helper method for toggling active sessions
   void setShowOnlyActiveSessions(bool value) {
     if (_currentSettings.showOnlyActiveSessions != value) {
       _currentSettings = _currentSettings.copyWith(showOnlyActiveSessions: value);
