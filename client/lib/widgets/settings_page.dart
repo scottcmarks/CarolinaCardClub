@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_picker/bottom_picker.dart';
-import 'package:bottom_picker/resources/arrays.dart';
 
 import '../models/app_settings.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -16,100 +16,96 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  // Local variables to hold temporary changes before applying
   late AppSettingsProvider _appSettingsProvider;
   late TimeProvider _timeProvider;
-  late bool _localShowOnlyActiveSessions;
+  late TextEditingController _serverUrlController;
+  late TextEditingController _apiKeyController;
   late TimeOfDay? _defaultSessionStartTime;
   late DateTime? _clockTime;
-
-  late TextEditingController _localServerUrlController;
-  late TextEditingController _localServerApiKeyController;
+  late String _preferredTheme;
 
   @override
   void initState() {
     super.initState();
-
     _appSettingsProvider = Provider.of<AppSettingsProvider>(context, listen: false);
     final settings = _appSettingsProvider.currentSettings;
-    _localShowOnlyActiveSessions = settings.showOnlyActiveSessions;
+    _serverUrlController = TextEditingController(text: settings.localServerUrl);
+    _apiKeyController = TextEditingController(text: settings.localServerApiKey);
     _defaultSessionStartTime = settings.defaultSessionStartTime;
-
-    _localServerUrlController = TextEditingController(text: settings.localServerUrl);
-    _localServerApiKeyController = TextEditingController(text: settings.localServerApiKey);
+    _preferredTheme = settings.preferredTheme;
 
     _timeProvider = Provider.of<TimeProvider>(context, listen: false);
-    _clockTime = null;
+    if (_timeProvider.offset != null) {
+      _clockTime = _timeProvider.currentTime;
+    } else {
+      _clockTime = null;
+    }
   }
 
   @override
   void dispose() {
-    _localServerUrlController.dispose();
-    _localServerApiKeyController.dispose();
+    _serverUrlController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
-  // A helper function to show the time picker
   void _showSessionTimePicker(BuildContext context) {
-    // CORRECTED: Use the 'pickerTitle' parameter with a Text widget.
     BottomPicker.time(
       pickerTitle: const Text(
         'Set Default Session Start Time',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue),
       ),
-      onSubmit: (index) {
-        if (index is DateTime) {
-          setState(() {
-            _defaultSessionStartTime = TimeOfDay(hour: index.hour, minute: index.minute);
-          });
-        }
-      },
       initialTime: Time(
         hours: _defaultSessionStartTime?.hour ?? 19,
         minutes: _defaultSessionStartTime?.minute ?? 30,
       ),
-      use24hFormat: true,
-    ).show(context);
-  }
-
-  // A helper function to show the combined date and time picker
-  void _showCombinedDateTimePicker(BuildContext context) {
-    // CORRECTED: Use the 'pickerTitle' parameter with a Text widget.
-    BottomPicker.dateTime(
-      pickerTitle: const Text(
-        'Set Clock Time',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-      ),
-      onSubmit: (index) {
-        if (index is DateTime) {
+      onSubmit: (pickedDateTime) {
+        if (pickedDateTime is DateTime) {
           setState(() {
-            _clockTime = index;
+            _defaultSessionStartTime =
+                TimeOfDay(hour: pickedDateTime.hour, minute: pickedDateTime.minute);
           });
         }
       },
-      initialDateTime: _clockTime ?? _timeProvider.currentTime,
-      minDateTime: DateTime(2025, 7, 1),
       use24hFormat: true,
     ).show(context);
   }
 
-  void _saveSettings() {
-    final newSettings = _appSettingsProvider.currentSettings.copyWith(
-      showOnlyActiveSessions: _localShowOnlyActiveSessions,
-      defaultSessionStartTime: _defaultSessionStartTime,
-      localServerUrl: _localServerUrlController.text,
-      localServerApiKey: _localServerApiKeyController.text,
-    );
-    _appSettingsProvider.updateSettings(newSettings);
+  void _showCombinedDateTimePicker(BuildContext context) {
+    BottomPicker.dateTime(
+      pickerTitle: const Text(
+        'Set Custom Clock Time',
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue),
+      ),
+      initialDateTime: _clockTime ?? _timeProvider.currentTime,
+      onSubmit: (pickedDateTime) {
+        if (pickedDateTime is DateTime) {
+          setState(() {
+            _clockTime = pickedDateTime;
+          });
+        }
+      },
+      use24hFormat: true,
+    ).show(context);
+  }
 
-    if (_clockTime != null) {
-      _timeProvider.setTime(_clockTime!);
+  void _handleReloadDatabase() async {
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    if (apiProvider.serverStatus != ServerStatus.connected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not connected to server.')),
+      );
+      return;
     }
 
-    if (mounted) {
-      Navigator.of(context).pop();
+    try {
+      await apiProvider.reloadServerDatabase();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings Saved')),
+        const SnackBar(content: Text('Server database reload command sent.')),
+      );
+    } catch (e) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
       );
     }
   }
@@ -123,60 +119,90 @@ class _SettingsPageState extends State<SettingsPage> {
       height: MediaQuery.of(context).size.height * 0.9,
       padding: const EdgeInsets.all(16.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
             'App Settings',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
           ),
           const Divider(),
-          Expanded(
-            child: ListView(
-              children: [
-                SwitchListTile(
-                  title: const Text('Show Only Active Sessions'),
-                  value: _localShowOnlyActiveSessions,
-                  onChanged: (bool value) {
-                    setState(() {
-                      _localShowOnlyActiveSessions = value;
-                    });
-                  },
-                ),
-                ListTile(
-                  title: const Text('Default Session Start Time'),
-                  trailing: TextButton(
-                    onPressed: () => _showSessionTimePicker(context),
-                    child: Text(_defaultSessionStartTime?.format(context) ?? 'Not set'),
-                  ),
-                ),
-                ListTile(
-                  title: const Text('Clock Time'),
-                  trailing: TextButton(
-                    onPressed: () => _showCombinedDateTimePicker(context),
-                    child: Text(
-                      _clockTime != null
-                          ? '${datePart.format(_clockTime!)} ${timePart.format(_clockTime!)}'
-                          : 'Set Time',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text('Server Configuration', style: Theme.of(context).textTheme.titleLarge),
-                const Divider(),
-                TextFormField(
-                  controller: _localServerUrlController,
-                  decoration: const InputDecoration(labelText: 'Local Server URL'),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _localServerApiKeyController,
-                  decoration: const InputDecoration(labelText: 'Local Server API Key'),
-                ),
-              ],
+          TextField(
+            controller: _serverUrlController,
+            decoration: const InputDecoration(labelText: 'Local Server URL'),
+          ),
+          TextField(
+            controller: _apiKeyController,
+            decoration: const InputDecoration(labelText: 'Local Server API Key'),
+            obscureText: true,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Preferred Theme'),
+            trailing: DropdownButton<String>(
+              value: _preferredTheme,
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() { _preferredTheme = newValue; });
+                }
+              },
+              items: <String>['light', 'dark']
+                  .map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value.substring(0, 1).toUpperCase() + value.substring(1)),
+                );
+              }).toList(),
             ),
           ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Default Session Start Time'),
+            trailing: TextButton(
+              onPressed: () => _showSessionTimePicker(context),
+              child: Text(_defaultSessionStartTime?.format(context) ?? 'Not set'),
+            ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Clock Time'),
+            trailing: TextButton(
+              onPressed: () => _showCombinedDateTimePicker(context),
+              child: Text(
+                _clockTime != null
+                    ? '${datePart.format(_clockTime!)} ${timePart.format(_clockTime!)}'
+                    : 'Use Real Time',
+              ),
+            ),
+          ),
+          const Spacer(),
           ElevatedButton(
-            onPressed: _saveSettings,
-            child: const Text('Save Settings'),
+            onPressed: _handleReloadDatabase,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade700),
+            child: const Text('Force Server to Reload Database'),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () {
+              final newSettings = _appSettingsProvider.currentSettings.copyWith(
+                localServerUrl: _serverUrlController.text,
+                localServerApiKey: _apiKeyController.text,
+                defaultSessionStartTime: _defaultSessionStartTime,
+                preferredTheme: _preferredTheme,
+              );
+              _appSettingsProvider.updateSettings(newSettings);
+
+              if (_clockTime != null) {
+                _timeProvider.setTime(_clockTime!);
+              } else {
+                _timeProvider.reset();
+              }
+
+              if (mounted) {
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Save and Close'),
           ),
         ],
       ),

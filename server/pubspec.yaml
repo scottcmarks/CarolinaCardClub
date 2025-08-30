@@ -1,17 +1,28 @@
 name: carolina_card_club_server
-description: A server for the Carolina Card Club application.
+description: The local server for the Carolina Card Club application.
 version: 1.0.0
+publish_to: 'none'
+
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.2.3 <4.0.0'
 
 dependencies:
-  http: ^1.2.1
-  path: ^1.9.0
+  # Web Server
   shelf: ^1.4.1
   shelf_router: ^1.1.4
-  shelf_web_socket: ^1.0.4
-  sqflite_common_ffi: ^2.3.3
+
+  # WebSocket Handling
+  shelf_web_socket: ^2.0.0
   web_socket_channel: ^2.4.0
+
+  # Database
+  sqflite_common_ffi: ^2.3.3
+  path: ^1.9.0
+
+  # Networking
+  http: ^1.2.1
+
+  # Local Shared Code
   shared:
     path: ../shared
 
