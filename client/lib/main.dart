@@ -1,4 +1,5 @@
-import 'dart:developer' as developer; // Import the developer library
+import 'dart:async';
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,24 +10,27 @@ import 'providers/time_provider.dart';
 import 'widgets/main_split_view_page.dart';
 
 void main() async {
-  // THE KEY CHANGE: This line will pause the app on launch and wait for a debugger.
-  developer.debugger();
-
-  // Ensure the Flutter binding is initialized.
+  // Use a completer to wait for the first frame to be rendered.
+  final Completer<void> firstFrameCompleter = Completer<void>();
   WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    firstFrameCompleter.complete();
+  });
 
-  // --- Create all providers before running the app ---
+  // Pre-load all providers before running the app.
   final appSettingsProvider = AppSettingsProvider();
   await appSettingsProvider.loadSettings();
+
   final apiProvider = ApiProvider(appSettingsProvider);
   final timeProvider = TimeProvider();
 
-  // Run the app with all providers already created.
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: timeProvider),
         ChangeNotifierProvider.value(value: appSettingsProvider),
+        ChangeNotifierProvider.value(value: apiProvider),
+        // Proxy provider is still useful for reacting to future settings changes.
         ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
           create: (context) => apiProvider,
           update: (context, appSettings, previousApiProvider) {
@@ -38,6 +42,7 @@ void main() async {
       child: const CarolinaCardClubApp(),
     ),
   );
+  await firstFrameCompleter.future;
 }
 
 class CarolinaCardClubApp extends StatefulWidget {
@@ -57,6 +62,7 @@ class _CarolinaCardClubAppState extends State<CarolinaCardClubApp> {
   }
 
   Future<void> _initializeApp() async {
+    // Settings are already loaded, we just initialize the API connection.
     await context.read<ApiProvider>().initialize();
   }
 
@@ -76,6 +82,7 @@ class _CarolinaCardClubAppState extends State<CarolinaCardClubApp> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return MaterialApp(
+            debugShowCheckedModeBanner: false,
             home: Scaffold(
               body: Center(
                 child: Column(
@@ -97,6 +104,7 @@ class _CarolinaCardClubAppState extends State<CarolinaCardClubApp> {
 
         if (snapshot.hasError) {
           return MaterialApp(
+            debugShowCheckedModeBanner: false,
             theme: ThemeData.light(),
             darkTheme: ThemeData.dark(),
             themeMode: ThemeMode.system,
@@ -111,6 +119,7 @@ class _CarolinaCardClubAppState extends State<CarolinaCardClubApp> {
           builder: (context, appSettings, child) {
             return MaterialApp(
               title: 'Carolina Card Club',
+              debugShowCheckedModeBanner: false,
               theme: appSettings.currentSettings.preferredTheme == 'dark'
                   ? ThemeData.dark()
                   : ThemeData.light(),
@@ -123,7 +132,7 @@ class _CarolinaCardClubAppState extends State<CarolinaCardClubApp> {
   }
 }
 
-// ... InitializationErrorScreen and ServerUrlUpdateDialog are unchanged ...
+/// A dedicated screen to show when the app fails to initialize.
 class InitializationErrorScreen extends StatelessWidget {
   final Object? error;
   final VoidCallback onRetry;
@@ -166,7 +175,8 @@ class InitializationErrorScreen extends StatelessWidget {
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 icon: const Icon(Icons.settings),
-                label: const Text('Change Settings & Retry'),
+                // THE REQUESTED CHANGE: Updated button text.
+                label: const Text('Start the Server or Change Settings & Retry'),
                 onPressed: () async {
                   final bool? shouldRetry = await showDialog<bool>(
                     context: context,
@@ -185,6 +195,7 @@ class InitializationErrorScreen extends StatelessWidget {
   }
 }
 
+/// A dialog that allows the user to update the server URL.
 class ServerUrlUpdateDialog extends StatefulWidget {
   const ServerUrlUpdateDialog({super.key});
 
@@ -218,7 +229,6 @@ class _ServerUrlUpdateDialogState extends State<ServerUrlUpdateDialog> {
     );
 
     settingsProvider.updateSettings(newSettings);
-
     Navigator.of(context).pop(true);
   }
 
@@ -230,7 +240,7 @@ class _ServerUrlUpdateDialogState extends State<ServerUrlUpdateDialog> {
         controller: _controller,
         decoration: const InputDecoration(
           labelText: 'Server URL',
-          hintText: 'http://120.0.1:8080',
+          hintText: 'http://127.0.0.1:8080',
         ),
         keyboardType: TextInputType.url,
       ),
