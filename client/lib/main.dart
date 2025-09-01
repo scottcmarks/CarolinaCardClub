@@ -1,5 +1,6 @@
-import 'dart:async';
-import 'dart:developer';
+// client/lib/main.dart
+
+import 'dart:developer'; // Import for the debugger() function
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,18 +11,12 @@ import 'providers/time_provider.dart';
 import 'widgets/main_split_view_page.dart';
 
 void main() async {
-  // Use a completer to wait for the first frame to be rendered.
-  final Completer<void> firstFrameCompleter = Completer<void>();
   WidgetsFlutterBinding.ensureInitialized();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    firstFrameCompleter.complete();
-  });
 
-  // Pre-load all providers before running the app.
+  // Pre-load settings so they are available from the start.
   final appSettingsProvider = AppSettingsProvider();
   await appSettingsProvider.loadSettings();
 
-  final apiProvider = ApiProvider(appSettingsProvider);
   final timeProvider = TimeProvider();
 
   runApp(
@@ -29,11 +24,24 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: timeProvider),
         ChangeNotifierProvider.value(value: appSettingsProvider),
-        ChangeNotifierProvider.value(value: apiProvider),
-        // Proxy provider is still useful for reacting to future settings changes.
         ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
-          create: (context) => apiProvider,
+          // 'create' is called once to build the initial ApiProvider.
+          create: (context) {
+            final apiProvider = ApiProvider(appSettingsProvider);
+            // Kick off the very first connection attempt.
+            // debugger();
+            apiProvider.initialize();
+            // THE FIX: Schedule initialize() to run after a 1-second delay.
+            // This detaches the start of the connection from the widget build cycle.
+            // Future.delayed(const Duration(seconds: 1), () {
+            //   print("--> [MAIN] Delay complete. Calling apiProvider.initialize().");
+            //   apiProvider.initialize();
+            // });
+            return apiProvider;
+          },
+          // 'update' is called whenever AppSettingsProvider notifies listeners.
           update: (context, appSettings, previousApiProvider) {
+            // This is the magic: it tells the ApiProvider about the new settings.
             previousApiProvider?.updateAppSettings(appSettings);
             return previousApiProvider!;
           },
@@ -42,90 +50,77 @@ void main() async {
       child: const CarolinaCardClubApp(),
     ),
   );
-  await firstFrameCompleter.future;
 }
 
-class CarolinaCardClubApp extends StatefulWidget {
+class CarolinaCardClubApp extends StatelessWidget {
   const CarolinaCardClubApp({super.key});
 
   @override
-  State<CarolinaCardClubApp> createState() => _CarolinaCardClubAppState();
-}
-
-class _CarolinaCardClubAppState extends State<CarolinaCardClubApp> {
-  late Future<void> _initFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _initFuture = _initializeApp();
-  }
-
-  Future<void> _initializeApp() async {
-    // Settings are already loaded, we just initialize the API connection.
-    await context.read<ApiProvider>().initialize();
-  }
-
-  void _retryInitialization() {
-    setState(() {
-      _initFuture = _initializeApp();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final serverUrl =
-        context.read<AppSettingsProvider>().currentSettings.localServerUrl;
+    // This correctly watches the provider for changes to its connectionFuture.
+    final apiProvider = context.watch<ApiProvider>();
 
     return FutureBuilder(
-      future: _initFuture,
+      future: apiProvider.connectionFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Connecting to server at...\n$serverUrl',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+        print(
+            '--> [MAIN] FutureBuilder rebuilding. State: ${snapshot.connectionState}, HasError: ${snapshot.hasError}');
 
         if (snapshot.hasError) {
+          print(
+              '--> [MAIN] FutureBuilder: STATE has ERROR. Building error screen. Error: ${snapshot.error}');
           return MaterialApp(
-            debugShowCheckedModeBanner: false,
             theme: ThemeData.light(),
             darkTheme: ThemeData.dark(),
             themeMode: ThemeMode.system,
             home: InitializationErrorScreen(
               error: snapshot.error,
-              onRetry: _retryInitialization,
+              onRetry: () {
+                print(
+                  '--> [MAIN] FutureBuilder: STATE has ERROR. Retrying...');
+              },
             ),
           );
         }
 
-        return Consumer<AppSettingsProvider>(
-          builder: (context, appSettings, child) {
-            return MaterialApp(
-              title: 'Carolina Card Club',
-              debugShowCheckedModeBanner: false,
-              theme: appSettings.currentSettings.preferredTheme == 'dark'
-                  ? ThemeData.dark()
-                  : ThemeData.light(),
-              home: const MainSplitViewPage(),
-            );
-          },
+        if (snapshot.connectionState == ConnectionState.done) {
+          print(
+              '--> [MAIN] FutureBuilder: STATE is DONE and has NO ERROR. Building main app.');
+          return Consumer<AppSettingsProvider>(
+            builder: (context, appSettings, child) {
+              return MaterialApp(
+                title: 'Carolina Card Club',
+                theme: appSettings.currentSettings.preferredTheme == 'dark'
+                    ? ThemeData.dark()
+                    : ThemeData.light(),
+                home: const MainSplitViewPage(),
+              );
+            },
+          );
+        }
+
+        // Otherwise, show the loading screen.
+        final serverUrl =
+            context.read<AppSettingsProvider>().currentSettings.localServerUrl;
+        print(
+            '--> [MAIN] FutureBuilder: STATE is WAITING. Building loading screen.');
+        return MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Connecting to server at...\n$serverUrl',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
@@ -145,6 +140,7 @@ class InitializationErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the current settings to display the failed URL.
     final settingsProvider = context.watch<AppSettingsProvider>();
     final failedUrl = settingsProvider.currentSettings.localServerUrl;
 
@@ -175,16 +171,13 @@ class InitializationErrorScreen extends StatelessWidget {
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 icon: const Icon(Icons.settings),
-                // THE REQUESTED CHANGE: Updated button text.
                 label: const Text('Start the Server or Change Settings & Retry'),
                 onPressed: () async {
-                  final bool? shouldRetry = await showDialog<bool>(
+                  await showDialog<bool>(
                     context: context,
                     builder: (context) => const ServerUrlUpdateDialog(),
                   );
-                  if (shouldRetry == true) {
-                    onRetry();
-                  }
+                  // No need to call onRetry, as the provider handles the reconnect.
                 },
               ),
             ],
@@ -209,6 +202,7 @@ class _ServerUrlUpdateDialogState extends State<ServerUrlUpdateDialog> {
   @override
   void initState() {
     super.initState();
+    // Pre-fill the text field with the current server URL.
     final initialUrl =
         context.read<AppSettingsProvider>().currentSettings.localServerUrl;
     _controller = TextEditingController(text: initialUrl);
@@ -224,12 +218,17 @@ class _ServerUrlUpdateDialogState extends State<ServerUrlUpdateDialog> {
     final settingsProvider = context.read<AppSettingsProvider>();
     final newUrl = _controller.text;
 
+    // Create a new settings object with the updated URL.
     final newSettings = settingsProvider.currentSettings.copyWith(
       localServerUrl: newUrl,
     );
 
+    // Update the provider. This also saves it to storage and triggers the
+    // ApiProvider to reconnect via the ChangeNotifierProxyProvider.
     settingsProvider.updateSettings(newSettings);
-    Navigator.of(context).pop(true);
+
+    // Pop the dialog.
+    Navigator.of(context).pop();
   }
 
   @override
@@ -246,12 +245,12 @@ class _ServerUrlUpdateDialogState extends State<ServerUrlUpdateDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: _saveAndClose,
-          child: const Text('Save & Retry'),
+          child: const Text('Save'),
         ),
       ],
     );
