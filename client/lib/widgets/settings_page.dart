@@ -35,11 +35,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _preferredTheme = settings.preferredTheme;
 
     _timeProvider = Provider.of<TimeProvider>(context, listen: false);
-    if (_timeProvider.offset != null) {
-      _clockTime = _timeProvider.currentTime;
-    } else {
-      _clockTime = null;
-    }
+    final currentOffset = _timeProvider.offset;
+    _clockTime = currentOffset == Duration.zero ? null : _timeProvider.currentTime;
   }
 
   @override
@@ -59,13 +56,16 @@ class _SettingsPageState extends State<SettingsPage> {
         hours: _defaultSessionStartTime?.hour ?? 19,
         minutes: _defaultSessionStartTime?.minute ?? 30,
       ),
-      onSubmit: (pickedDateTime) {
-        if (pickedDateTime is DateTime) {
-          setState(() {
-            _defaultSessionStartTime =
-                TimeOfDay(hour: pickedDateTime.hour, minute: pickedDateTime.minute);
-          });
-        }
+      onSubmit: (pickedTime) {
+        // THE NEW FIX: Use a post-frame callback to ensure the picker is
+        // fully disposed before we call setState.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && pickedTime is DateTime) {
+            setState(() {
+              _defaultSessionStartTime = TimeOfDay(hour: pickedTime.hour, minute: pickedTime.minute);
+            });
+          }
+        });
       },
       use24hFormat: true,
     ).show(context);
@@ -79,11 +79,14 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       initialDateTime: _clockTime ?? _timeProvider.currentTime,
       onSubmit: (pickedDateTime) {
-        if (pickedDateTime is DateTime) {
-          setState(() {
-            _clockTime = pickedDateTime;
-          });
-        }
+        // THE NEW FIX: Use a post-frame callback here as well.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && pickedDateTime is DateTime) {
+            setState(() {
+              _clockTime = pickedDateTime;
+            });
+          }
+        });
       },
       use24hFormat: true,
     ).show(context);
@@ -92,21 +95,27 @@ class _SettingsPageState extends State<SettingsPage> {
   void _handleReloadDatabase() async {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     if (apiProvider.serverStatus != ServerStatus.connected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not connected to server.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not connected to server.')),
+        );
+      }
       return;
     }
 
     try {
       await apiProvider.reloadServerDatabase();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Server database reload command sent.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Server database reload command sent.')),
+        );
+      }
     } catch (e) {
+      if (mounted) {
        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+      }
     }
   }
 
@@ -175,6 +184,18 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
+          if (_clockTime != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: OutlinedButton(
+                onPressed: () {
+                  setState(() {
+                    _clockTime = null;
+                  });
+                },
+                child: const Text('Reset Clock to Real Time'),
+              ),
+            ),
           const Spacer(),
           ElevatedButton(
             onPressed: _handleReloadDatabase,
