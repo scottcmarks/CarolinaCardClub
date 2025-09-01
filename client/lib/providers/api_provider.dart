@@ -28,20 +28,19 @@ class ApiProvider with ChangeNotifier {
   bool _isClosing = false;
   bool _mounted = true;
 
+  late Future<void> connectionFuture;
+
   ServerStatus get serverStatus => _serverStatus;
   String? get lastError => _lastError;
   String? get connectingUrl => _connectingUrl;
 
-  late Future<void> connectionFuture;
-
   ApiProvider(this._appSettingsProvider) {
-    // THE FIX: Initialize connectionFuture with a placeholder Future that never
-    // completes. This satisfies the 'late' keyword's contract immediately.
     connectionFuture = Completer<void>().future;
   }
 
   void initialize() {
     connectionFuture = connect();
+    notifyListeners();
   }
 
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
@@ -50,7 +49,7 @@ class ApiProvider with ChangeNotifier {
     final newUrl = _appSettingsProvider.currentSettings.localServerUrl;
 
     if (oldUrl != newUrl) {
-      print('--> [API_PROVIDER] Server URL changed. Forcing reconnect...');
+      print('--> Server URL changed. Forcing reconnect...');
       connectionFuture = connect();
       notifyListeners();
     }
@@ -70,7 +69,7 @@ class ApiProvider with ChangeNotifier {
     await disconnect();
 
     if (attemptId != _connectionAttempt) {
-      print('--> [API_PROVIDER] Connection attempt #$attemptId was cancelled before starting.');
+      print('--> Connection attempt #$attemptId was cancelled before starting.');
       return;
     }
 
@@ -80,34 +79,24 @@ class ApiProvider with ChangeNotifier {
     _safeNotifyListeners();
 
     final serverUrl = _connectingUrl!;
-    print('--> [API_PROVIDER] Attempt #$attemptId: Attempting to connect to $serverUrl...');
+    print('--> Attempt #$attemptId: Attempting to connect to $serverUrl...');
 
     try {
       final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
-      print('--> [API_PROVIDER] Attempting to connect to $serverUrl: $wsUrl');
       _channel = IOWebSocketChannel.connect(
         wsUrl,
-        connectTimeout: const Duration(seconds: 5),
+        connectTimeout: const Duration(seconds: 10),
       );
-
-      // try {
-      //   await _channel!.ready;
-      // } catch (e) {
-      //   print('--> [API_PROVIDER] FAILED to get channel ready: $e');
-      //   throw e;
-      // };
-      await _channel!.ready;
 
       final handshakeCompleter = Completer<void>();
 
-      print('--> [API_PROVIDER] Attempting to listen for handshake...');
       _streamSubscription = _channel!.stream.listen(
         (message) {
           if (!handshakeCompleter.isCompleted) {
             try {
               final decoded = jsonDecode(message as String);
               if (decoded['type'] == 'ack') {
-                print('--> [API_PROVIDER] Handshake successful.');
+                print('--> Attempt #$attemptId: Handshake successful.');
                 handshakeCompleter.complete();
               } else {
                 handshakeCompleter.completeError(
@@ -125,7 +114,7 @@ class ApiProvider with ChangeNotifier {
           if (!handshakeCompleter.isCompleted) {
             handshakeCompleter.completeError(error);
           } else {
-            print('--> [API_PROVIDER] WebSocket connection error after handshake: $error');
+            print('--> WebSocket connection error after handshake: $error');
             disconnect();
           }
         },
@@ -134,7 +123,7 @@ class ApiProvider with ChangeNotifier {
             handshakeCompleter
                 .completeError(Exception('Connection closed during handshake.'));
           } else {
-            print('--> [API_PROVIDER] WebSocket connection closed by server after handshake.');
+            print('--> WebSocket connection closed by server after handshake.');
             disconnect();
           }
         },
@@ -145,32 +134,37 @@ class ApiProvider with ChangeNotifier {
       if (attemptId == _connectionAttempt) {
         _serverStatus = ServerStatus.connected;
       }
-    } on TimeoutException catch (e) {
-      print('--> [API_PROVIDER] Attempt #$attemptId: TIMED OUT connecting to $serverUrl');
+    } on WebSocketChannelException catch (e) {
+      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (WebSocketChannelException): $e');
       if (attemptId == _connectionAttempt) {
         _serverStatus = ServerStatus.failed;
-        _lastError = 'TIMED OUT connecting to $serverUrl' ;; // e.toString();
+        _lastError = e.message ?? "WebSocket connection failed.";
+        await _cleanupConnection();
+        throw e;
+      }
+    } on TimeoutException catch (e) {
+      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (TimeoutException): $e');
+      if (attemptId == _connectionAttempt) {
+        _serverStatus = ServerStatus.failed;
+        _lastError = "Connection timed out.";
         await _cleanupConnection();
         throw e;
       }
     } catch (e) {
-      print('--> [API_PROVIDER] Attempt #$attemptId: FAILED to connect to $serverUrl: $e');
+      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (Unknown Error): $e');
       if (attemptId == _connectionAttempt) {
         _serverStatus = ServerStatus.failed;
-        _lastError = 'FAILED to connect to $serverUrl' ;; // e.toString();
+        _lastError = "An unknown error occurred: ${e.toString()}";
         await _cleanupConnection();
         throw e;
       }
     } finally {
-      // THE FIX: Only call notifyListeners on the SUCCESS path.
-      // If the connection failed, the Future's error state is the only
-      // notification the UI needs, which prevents a double rebuild.
       if (attemptId == _connectionAttempt && _serverStatus == ServerStatus.connected) {
-        print('--> [API_PROVIDER] Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
+        print('--> Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
         _connectingUrl = null;
         _safeNotifyListeners();
       } else if (attemptId != _connectionAttempt) {
-         print('--> [API_PROVIDER] Attempt #$attemptId: A newer attempt has started. Discarding result.');
+         print('--> Attempt #$attemptId: A newer attempt has started. Discarding result.');
       }
     }
   }
@@ -181,19 +175,19 @@ class ApiProvider with ChangeNotifier {
     try {
       await _streamSubscription?.cancel();
       _streamSubscription = null;
-      await _channel?.sink.close().timeout(const Duration(seconds: 2));
-      print('--> [API_PROVIDER] Channel closed.');
+      await _channel?.sink.close().timeout(const Duration(seconds: 1));
+      print('--> Channel closed.');
     } on TimeoutException {
-      print('--> [API_PROVIDER] Channel close timed out. Proceeding anyway.');
+      print('--> Channel close timed out. Proceeding anyway.');
     } catch (e) {
-      print('--> [API_PROVIDER] Error closing channel: $e');
+      print('--> Error closing channel: $e');
     }
     _channel = null;
     _isClosing = false;
   }
 
   Future<void> disconnect() async {
-    print('--> [API_PROVIDER] Disconnecting...');
+    print('--> Disconnecting...');
     await _cleanupConnection();
     if (_serverStatus != ServerStatus.disconnected) {
       _serverStatus = ServerStatus.disconnected;
@@ -241,7 +235,7 @@ class ApiProvider with ChangeNotifier {
       'params': params,
     }));
 
-    return completer.future.timeout(const Duration(seconds: 10),
+    return completer.future.timeout(const Duration(seconds: 15),
         onTimeout: () {
       _requests.remove(requestId);
       throw TimeoutException(
@@ -258,8 +252,14 @@ class ApiProvider with ChangeNotifier {
         .toList();
   }
 
-  Future<List<SessionPanelItem>> fetchSessionPanelList({int? playerId}) async {
-    final result = await _sendCommand('getSessions', {'playerId': playerId});
+  // THE FIX: Added a new 'onlyActive' parameter to the method signature.
+  Future<List<SessionPanelItem>> fetchSessionPanelList(
+      {int? playerId, bool onlyActive = false}) async {
+    // THE FIX: Pass the 'onlyActive' flag to the server in the parameters map.
+    print('-->  fetchSessionPanelList: playerId: ${playerId}, onlyActive: ${onlyActive} ...');
+    final result = await _sendCommand(
+        'getSessions', {'playerId': playerId, 'onlyActive': onlyActive});
+    print('-->  fetchSessionPanelList ... result = ${result}');
     return (result as List)
         .map((item) => SessionPanelItem.fromMap(item))
         .toList();

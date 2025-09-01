@@ -22,20 +22,19 @@ void main() async {
   final router = Router()
     ..all('/ws', _webSocketHandler);
 
-  // *** NEW: Middleware to log WebSocket connection IPs ***
   final ipLoggingMiddleware = createMiddleware(requestHandler: (Request request) {
     if (request.headers['connection'] == 'Upgrade' && request.headers['upgrade'] == 'websocket') {
       final connectionInfo = request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
       final address = connectionInfo?.remoteAddress.address ?? 'unknown';
       print('✓ WebSocket connection attempt from $address');
     }
-    return null; // Continue to the next handler
+    return null;
   });
 
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
-      .addMiddleware(ipLoggingMiddleware) // Add our new middleware
+      .addMiddleware(ipLoggingMiddleware)
       .addHandler(router);
 
   final server = await io.serve(handler, '0.0.0.0', 8080);
@@ -73,7 +72,8 @@ Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message)
         payload = await _getPlayers();
         break;
       case 'getSessions':
-        payload = await _getSessions(params?['playerId']);
+        // THE FIX: Pass the entire params map to the handler.
+        payload = await _getSessions(params);
         break;
       case 'addSession':
         payload = {'sessionId': await _addSession(params!)};
@@ -164,12 +164,33 @@ Future<List<Map<String, Object?>>> _getPlayers() async {
   return await db.query('Player_Selection_List');
 }
 
-Future<List<Map<String, Object?>>> _getSessions(int? playerId) async {
+// THE FIX: This function now dynamically builds its query based on parameters.
+Future<List<Map<String, Object?>>> _getSessions(Map<String, dynamic>? params) async {
   final db = await _db;
+
+  final int? playerId = params?['playerId'];
+  final bool onlyActive = params?['onlyActive'] ?? false;
+
+  List<String> whereClauses = [];
+  List<dynamic> whereArgs = [];
+
   if (playerId != null) {
-     return await db.query('Session_Panel_List', where: 'Player_Id = ?', whereArgs: [playerId], orderBy: 'Start_Epoch DESC');
+    whereClauses.add('Player_Id = ?');
+    whereArgs.add(playerId);
   }
-  return await db.query('Session_Panel_List', orderBy: 'Start_Epoch DESC');
+
+  if (onlyActive) {
+    whereClauses.add('Stop_Epoch IS NULL');
+  }
+
+  String? whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
+
+  return await db.query(
+    'Session_Panel_List',
+    where: whereString,
+    whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+    orderBy: 'Start_Epoch DESC',
+  );
 }
 
 Future<int> _addSession(Map<String, dynamic> sessionData) async {
