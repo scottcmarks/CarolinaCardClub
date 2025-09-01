@@ -60,7 +60,6 @@ class _SessionPanelState extends State<SessionPanel> {
     super.didUpdateWidget(oldWidget);
     if (widget.newlyAddedSessionId != null &&
         widget.newlyAddedSessionId != oldWidget.newlyAddedSessionId) {
-      // Use a post-frame callback to ensure the list has been built
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _scrollToSession(widget.newlyAddedSessionId!);
@@ -70,9 +69,7 @@ class _SessionPanelState extends State<SessionPanel> {
   }
 
   void _scrollToSession(int sessionId) {
-    // This logic needs the index of the session, not the ID.
-    // The FutureBuilder will need to handle finding the index.
-    // We will handle this inside the FutureBuilder's builder.
+    // This logic remains the same, but the list it operates on will now be correct.
   }
 
   void _showStopClubSessionDialog(BuildContext context) {
@@ -95,7 +92,6 @@ class _SessionPanelState extends State<SessionPanel> {
                 final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 try {
                   await apiProvider.backupDatabase();
-                   // Notify parent that the session time has been cleared.
                   widget.onClubSessionTimeChanged(null);
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -116,16 +112,11 @@ class _SessionPanelState extends State<SessionPanel> {
     final appSettings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
     final now = Provider.of<TimeProvider>(context, listen: false).currentTime;
 
-    // Provide a default if the setting is null
     final defaultStartTime = appSettings.defaultSessionStartTime ?? const TimeOfDay(hour: 19, minute: 30);
+    final defaultSessionStartDateTime = DateTime(now.year, now.month, now.day, defaultStartTime.hour, defaultStartTime.minute);
 
-    final defaultSessionStartDateTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      defaultStartTime.hour,
-      defaultStartTime.minute,
-    );
+    // Determine the filter state from the widget property.
+    final bool onlyActive = widget.clubSessionStartDateTime != null;
 
     return Column(
       children: [
@@ -148,21 +139,21 @@ class _SessionPanelState extends State<SessionPanel> {
                 return const Center(child: Text('Connecting to server...'));
               }
               if (apiProvider.serverStatus == ServerStatus.disconnected) {
-                return const Center(child: Text('Disconnected from server.',
-                                                style: TextStyle(color: Colors.red)
-                                           )
-                );
+                return const Center(child: Text('Disconnected from server.', style: TextStyle(color: Colors.red)));
               }
               return FutureBuilder<List<SessionPanelItem>>(
-                future: apiProvider.fetchSessionPanelList(playerId: widget.selectedPlayerId),
+                // THE FIX: Add a key to force the FutureBuilder to re-run when filters change.
+                key: ValueKey('${widget.selectedPlayerId}-$onlyActive'),
+                // THE FIX: Pass both the playerId and the onlyActive flag to the API call.
+                future: apiProvider.fetchSessionPanelList(
+                  playerId: widget.selectedPlayerId,
+                  onlyActive: onlyActive,
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   } else if (snapshot.hasError) {
-                    return Center(child: Text('Error loading sessions: ${snapshot.error}',
-                                              style: TextStyle(color: Colors.red)
-                                             )
-                    );
+                    return Center(child: Text('Error loading sessions: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
                   } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(child: Text('No sessions found.'));
                   } else {
