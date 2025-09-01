@@ -42,9 +42,9 @@ void main() async {
 
   print('✓ Secure WebSocket Server listening on port ${server.port}');
   print('---');
-  print('On other devices, connect clients to http://$serverAddress:${server.port}');
-  print('Find this address using "ifconfig" (macOS/Linux) or "ipconfig" (Windows).');
-  print('---');
+  // print('On other devices, connect clients to http://$serverAddress:${server.port}');
+  // print('Find this address using "ifconfig" (macOS/Linux) or "ipconfig" (Windows).');
+  // print('---');
 }
 
 Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message) async {
@@ -215,7 +215,7 @@ Future<Map<String, Object?>> _addPayment(Map<String, dynamic> paymentData) async
 }
 
 Future<void> _backupDatabase() async {
-  print('--- Backup requested ---');
+  // print('--- Backup requested ---');
   final dbPath = (await _db).path;
   await _database?.close();
   _database = null;

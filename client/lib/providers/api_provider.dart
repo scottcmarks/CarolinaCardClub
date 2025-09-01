@@ -256,10 +256,10 @@ class ApiProvider with ChangeNotifier {
   Future<List<SessionPanelItem>> fetchSessionPanelList(
       {int? playerId, bool onlyActive = false}) async {
     // THE FIX: Pass the 'onlyActive' flag to the server in the parameters map.
-    print('-->  fetchSessionPanelList: playerId: ${playerId}, onlyActive: ${onlyActive} ...');
+    // print('-->  fetchSessionPanelList: playerId: ${playerId}, onlyActive: ${onlyActive} ...');
     final result = await _sendCommand(
         'getSessions', {'playerId': playerId, 'onlyActive': onlyActive});
-    print('-->  fetchSessionPanelList ... result = ${result}');
+    // print('-->  fetchSessionPanelList ... result = ${result}');
     return (result as List)
         .map((item) => SessionPanelItem.fromMap(item))
         .toList();
