@@ -1,5 +1,3 @@
-// client/lib/models/app_settings.dart
-
 import 'package:flutter/material.dart';
 
 /// A data class to hold all user-configurable application settings.

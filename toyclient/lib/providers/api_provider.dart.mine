@@ -1,0 +1,135 @@
+// lib/providers/api_provider.dart
+
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+import './app_settings_provider.dart';
+
+enum ConnectionStatus { connecting, connected, disconnecting, disconnected, failed }
+
+class ApiProvider with ChangeNotifier {
+  AppSettingsProvider _appSettingsProvider;
+  WebSocketChannel? _channel;
+  ConnectionStatus _status = ConnectionStatus.disconnected;
+  String? _lastError;
+  String? _connectingUrl;
+
+  ConnectionStatus get status => _status;
+  String? get lastError => _lastError;
+  String? get connectingUrl => _connectingUrl;
+
+  ApiProvider(this._appSettingsProvider);
+
+  void updateAppSettings(AppSettingsProvider newSettings) {
+    _appSettingsProvider = newSettings;
+  }
+
+  /// Helper to clean up connection resources without changing state.
+  Future<void> _notifyStatus(ConnectionStatus newStatus) async {
+    if (_status != newStatus) {
+      _status = newStatus;
+      notifyListeners();
+    }
+  }
+
+  bool _isClosing = false;
+  /// Helper to clean up connection resources without changing state.
+  Future<void> _cleanupConnection(ConnectionStatus newStatus) async {
+    if (_isClosing) {
+      print('--> [TOY] Channel already closing.');
+      return;
+    }
+    _isClosing = true;
+    try {
+      await _channel?.sink.close().timeout(const Duration(seconds: 1));
+      print('--> [TOY] Channel closed.');
+    } on TimeoutException {
+      // The channel did not close within the specified time, so move on.
+      print('--> [TOY] Channel close timed out. Proceeding anyway.');
+    } catch (e) {
+      // Handle other potential errors during the closing process.
+      print('--> [TOY] Error closing channel: $e');
+    }
+    if (!(_status == ConnectionStatus.disconnected && newStatus == ConnectionStatus.failed)) {
+        _notifyStatus(newStatus);
+    }
+    _channel = null;
+    _isClosing = false;
+  }
+
+  Future<void> connect(String url) async {
+    if (_status == ConnectionStatus.connecting && url == _connectingUrl) return;
+
+    // Disconnect first to ensure a clean state before proceeding.
+    await disconnect();
+
+    // Now, set the "connecting" state and notify the UI.
+    _connectingUrl = url;
+    _lastError = null;
+    _notifyStatus(ConnectionStatus.connecting);
+
+    print('--> [TOY] Attempting to connect to $url...');
+    try {
+      final wsUrl = Uri.parse(url.replaceFirst('http', 'ws') + '/ws');
+      _channel = IOWebSocketChannel.connect(
+        wsUrl,
+        connectTimeout: const Duration(seconds: 5),
+      );
+
+      await _channel!.ready;
+      final completer = Completer<void>();
+      final sub = _channel!.stream.listen(
+        (message) {
+          try {
+            final decoded = jsonDecode(message as String);
+            if (decoded['type'] == 'ack' && !completer.isCompleted) {
+              completer.complete();
+            }
+          } catch (e) {
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('Invalid handshake message'));
+            }
+          }
+        },
+        onError: (error) {
+          if (!completer.isCompleted) completer.completeError(error);
+        },
+        onDone: () {
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Connection closed during handshake'));
+          }
+        },
+      );
+
+      await completer.future;
+      sub.cancel();
+
+      print('--> [TOY] Connection successful to $url.');
+      // On success, update the status but do NOT notify yet.
+      _notifyStatus(ConnectionStatus.connected);
+    } on TimeoutException catch (e) {
+      print('--> [TOY] FAILED to connect to $url: timed out.');
+      // On failure, update the status and error, but do NOT notify yet.
+      _lastError = 'Timed out';
+      await _cleanupConnection(ConnectionStatus.failed);
+    } catch (e) {
+      print('--> [TOY] FAILED to connect to $url: $e');
+      _lastError = e.toString();
+      await _cleanupConnection(ConnectionStatus.failed);
+    } finally {
+      // The finally block is the single source of truth for the final
+      // UI update. It will notify with either the 'connected' or 'failed' status.
+      _connectingUrl = null;
+    }
+  }
+
+  Future<void> disconnect() async {
+    print('--> [TOY] Disconnecting...');
+    await _cleanupConnection(ConnectionStatus.disconnecting);
+    print('--> [TOY] Disconnected.');
+    _notifyStatus(ConnectionStatus.disconnected);
+  }
+}

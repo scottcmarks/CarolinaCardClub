@@ -148,7 +148,10 @@ class _SessionPanelState extends State<SessionPanel> {
                 return const Center(child: Text('Connecting to server...'));
               }
               if (apiProvider.serverStatus == ServerStatus.disconnected) {
-                return const Center(child: Text('Disconnected from server.', style: TextStyle(color: Colors.red)));
+                return const Center(child: Text('Disconnected from server.',
+                                                style: TextStyle(color: Colors.red)
+                                           )
+                );
               }
               return FutureBuilder<List<SessionPanelItem>>(
                 future: apiProvider.fetchSessionPanelList(playerId: widget.selectedPlayerId),
@@ -156,7 +159,10 @@ class _SessionPanelState extends State<SessionPanel> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   } else if (snapshot.hasError) {
-                    return Center(child: Text('Error loading sessions: ${snapshot.error}', style: TextStyle(color: Colors.red)));
+                    return Center(child: Text('Error loading sessions: ${snapshot.error}',
+                                              style: TextStyle(color: Colors.red)
+                                             )
+                    );
                   } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(child: Text('No sessions found.'));
                   } else {
