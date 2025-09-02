@@ -23,7 +23,11 @@ class ApiProvider with ChangeNotifier {
 
   ServerStatus _serverStatus = ServerStatus.disconnected;
   String? _lastError;
-  String? _connectingUrl;
+
+  // THE FIX: The provider now maintains its own state for the URL it's
+  // currently connected to or trying to connect to.
+  String? _currentConnectionUrl;
+
   int _connectionAttempt = 0;
   bool _isClosing = false;
   bool _mounted = true;
@@ -32,7 +36,7 @@ class ApiProvider with ChangeNotifier {
 
   ServerStatus get serverStatus => _serverStatus;
   String? get lastError => _lastError;
-  String? get connectingUrl => _connectingUrl;
+  String? get connectingUrl => _currentConnectionUrl;
 
   ApiProvider(this._appSettingsProvider) {
     connectionFuture = Completer<void>().future;
@@ -44,11 +48,12 @@ class ApiProvider with ChangeNotifier {
   }
 
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
-    final oldUrl = _appSettingsProvider.currentSettings.localServerUrl;
     _appSettingsProvider = newSettingsProvider;
     final newUrl = _appSettingsProvider.currentSettings.localServerUrl;
 
-    if (oldUrl != newUrl) {
+    // THE FIX: The comparison is now between the new URL from settings and
+    // the provider's own internal state. This works correctly.
+    if (_currentConnectionUrl != newUrl) {
       print('--> Server URL changed. Forcing reconnect...');
       connectionFuture = connect();
       notifyListeners();
@@ -74,11 +79,12 @@ class ApiProvider with ChangeNotifier {
     }
 
     _serverStatus = ServerStatus.connecting;
-    _connectingUrl = _appSettingsProvider.currentSettings.localServerUrl;
+    // "Latch" the URL for this specific connection attempt.
+    _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
     _lastError = null;
     _safeNotifyListeners();
 
-    final serverUrl = _connectingUrl!;
+    final serverUrl = _currentConnectionUrl!;
     print('--> Attempt #$attemptId: Attempting to connect to $serverUrl...');
 
     try {
@@ -161,7 +167,6 @@ class ApiProvider with ChangeNotifier {
     } finally {
       if (attemptId == _connectionAttempt && _serverStatus == ServerStatus.connected) {
         print('--> Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
-        _connectingUrl = null;
         _safeNotifyListeners();
       } else if (attemptId != _connectionAttempt) {
          print('--> Attempt #$attemptId: A newer attempt has started. Discarding result.');
@@ -252,14 +257,10 @@ class ApiProvider with ChangeNotifier {
         .toList();
   }
 
-  // THE FIX: Added a new 'onlyActive' parameter to the method signature.
   Future<List<SessionPanelItem>> fetchSessionPanelList(
       {int? playerId, bool onlyActive = false}) async {
-    // THE FIX: Pass the 'onlyActive' flag to the server in the parameters map.
-    // print('-->  fetchSessionPanelList: playerId: ${playerId}, onlyActive: ${onlyActive} ...');
     final result = await _sendCommand(
         'getSessions', {'playerId': playerId, 'onlyActive': onlyActive});
-    // print('-->  fetchSessionPanelList ... result = ${result}');
     return (result as List)
         .map((item) => SessionPanelItem.fromMap(item))
         .toList();
