@@ -1,15 +1,31 @@
 // lib/providers/api_provider.dart
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'app_settings_provider.dart';
 import 'db_connection_provider.dart';
 
-/// A specific implementation of the DbConnectionProvider.
-/// It handles API-specific messages and reacts to changes in AppSettingsProvider.
-class ApiProvider extends DbConnectionProvider {
-  AppSettingsProvider _appSettingsProvider;
+/// This provider now uses composition ("has-a") instead of inheritance.
+/// It manages an instance of DbConnectionProvider and delegates calls to it.
+class ApiProvider with ChangeNotifier {
+  final DbConnectionProvider _connectionProvider;
 
-  ApiProvider(this._appSettingsProvider) : super(_handleApiMessage);
+  // Public getters to expose the connection status to the UI.
+  // These delegate the call to the internal connection provider.
+  ConnectionStatus get status => _connectionProvider.status;
+  String? get lastError => _connectionProvider.lastError;
+  String? get connectingUrl => _connectionProvider.connectingUrl;
+  String? get connectedUrl => _connectionProvider.connectedUrl;
+
+  ApiProvider(AppSettingsProvider appSettingsProvider)
+      : _connectionProvider = DbConnectionProvider(_handleApiMessage) {
+    // Listen for changes on the connection provider and notify our own listeners.
+    // This ensures the UI, which listens to ApiProvider, will update.
+    _connectionProvider.addListener(notifyListeners);
+
+    // Initial sync
+    updateAppSettings(appSettingsProvider);
+  }
 
   static void _handleApiMessage(dynamic message) {
     try {
@@ -20,32 +36,20 @@ class ApiProvider extends DbConnectionProvider {
     }
   }
 
-  /// This method now contains the connection logic. It's called by the
-  /// ChangeNotifierProxyProvider whenever the AppSettingsProvider changes.
+  /// This method is called by the ChangeNotifierProxyProvider.
+  /// Its only job is to pass the new URL to the connection provider.
   void updateAppSettings(AppSettingsProvider newSettings) {
-    _appSettingsProvider = newSettings;
-
-    // THE FIX: If the settings provider is still loading, do nothing.
-    // The proxy provider will call this method again once loading is complete.
     if (newSettings.isLoading) {
       return;
     }
-
     final newUrl = newSettings.currentSettings.serverUrl;
+    _connectionProvider.setServerUrl(newUrl);
+  }
 
-    // Do nothing if the settings change but the URL is the same as the active one.
-    if (newUrl == connectedUrl && status == ConnectionStatus.connected) {
-      return;
-    }
-
-    if (newUrl.isEmpty) {
-      // If the desired URL is empty, ensure we are disconnected.
-      if (status != ConnectionStatus.disconnected) {
-        disconnect();
-      }
-    } else {
-      // If there is a new URL, connect to it.
-      connect(newUrl);
-    }
+  // When this provider is disposed, we also need to dispose the one it owns.
+  @override
+  void dispose() {
+    _connectionProvider.dispose();
+    super.dispose();
   }
 }
