@@ -6,15 +6,22 @@ $db_file = 'CarolinaCardClub.db';
 $backup_dir = 'backups/';
 
 // --- SECURITY ---
-// Define your secret key. The client app MUST send this key to upload.
-// REPLACE THIS with your own long, random string.
-$secret_api_key = "31221da269c89d6e770cd96ad259433dffedd1f75250597cff4114144086129797bf09ab6fff19234e9674d7e48e428cd8aeb8a5a23a36abcd705acae8d1c030";
+// Define your secret key. The client app MUST send this key for uploads AND downloads.
+$secret_api_key = "31221da269c89d6e770cd96ad259433dffedd1f75250597cff41141440861297".
+                  "97bf09ab6fff19234e9674d7e48e428cd8aeb8a5a23a36abcd705acae8d1c030";
 
 // Check the request method (GET or POST)
 $request_method = $_SERVER['REQUEST_METHOD'];
 
 if ($request_method === 'GET') {
     // --- Handle Download Request ---
+
+    // SECURITY CHECK: Verify the secret key from the query parameter.
+    if (!isset($_GET['apiKey']) || $_GET['apiKey'] !== $secret_api_key) {
+        header("HTTP/1.1 403 Forbidden");
+        die("Error: Invalid or missing API key for download.");
+    }
+
     if (file_exists($db_file)) {
         header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
@@ -33,10 +40,10 @@ if ($request_method === 'GET') {
 } elseif ($request_method === 'POST') {
     // --- Handle Upload Request ---
 
-    // SECURITY CHECK: Verify the secret key.
+    // SECURITY CHECK: Verify the secret key from the POST data.
     if (!isset($_POST['apiKey']) || $_POST['apiKey'] !== $secret_api_key) {
         header("HTTP/1.1 403 Forbidden");
-        die("Error: Invalid or missing API key.");
+        die("Error: Invalid or missing API key for upload.");
     }
 
     // Check if the 'database' file field is part of the upload

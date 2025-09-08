@@ -42,9 +42,6 @@ void main() async {
 
   print('✓ Secure WebSocket Server listening on port ${server.port}');
   print('---');
-  // print('On other devices, connect clients to http://$serverAddress:${server.port}');
-  // print('Find this address using "ifconfig" (macOS/Linux) or "ipconfig" (Windows).');
-  // print('---');
 }
 
 Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message) async {
@@ -72,7 +69,6 @@ Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message)
         payload = await _getPlayers();
         break;
       case 'getSessions':
-        // THE FIX: Pass the entire params map to the handler.
         payload = await _getSessions(params);
         break;
       case 'addSession':
@@ -164,7 +160,6 @@ Future<List<Map<String, Object?>>> _getPlayers() async {
   return await db.query('Player_Selection_List');
 }
 
-// THE FIX: This function now dynamically builds its query based on parameters.
 Future<List<Map<String, Object?>>> _getSessions(Map<String, dynamic>? params) async {
   final db = await _db;
 
@@ -215,7 +210,6 @@ Future<Map<String, Object?>> _addPayment(Map<String, dynamic> paymentData) async
 }
 
 Future<void> _backupDatabase() async {
-  // print('--- Backup requested ---');
   final dbPath = (await _db).path;
   await _database?.close();
   _database = null;
@@ -243,9 +237,11 @@ Future<void> _backupDatabase() async {
 Future<void> _downloadDatabase() async {
   final dbFile = File(p.join(Directory.current.path, dbFileName));
   try {
-    print('--- Downloading database from $downloadUrl ---');
-    final response =
-        await http.get(Uri.parse(downloadUrl)).timeout(const Duration(seconds: 15));
+    // Construct the URL with the apiKey as a query parameter.
+    final downloadUri = Uri.parse('$downloadUrl?apiKey=$remoteApiKey');
+    print('--- Downloading database from $downloadUri ---');
+
+    final response = await http.get(downloadUri).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       await dbFile.writeAsBytes(response.bodyBytes);
       print('✓ Database download complete.');
