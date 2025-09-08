@@ -239,7 +239,7 @@ class _ServerUrlUpdateDialogState extends State<ServerUrlUpdateDialog> {
         controller: _controller,
         decoration: const InputDecoration(
           labelText: 'Server URL',
-          hintText: 'http://127.0.0.1:8080',
+          hintText: 'http://127.0.0.1:5109',
         ),
         keyboardType: TextInputType.url,
       ),

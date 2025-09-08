@@ -94,7 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _handleReloadDatabase() async {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-    if (apiProvider.serverStatus != ServerStatus.connected) {
+    if (apiProvider.connectionStatus != ConnectionStatus.connected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Not connected to server.')),

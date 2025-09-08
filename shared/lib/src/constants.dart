@@ -16,7 +16,7 @@ const String localApiKey =
     '8b5906722412bfa5b4fe3a9a07a7a24abea50cff4c9de08c02b8708871f1c2b1';
 
 // -- Default Settings
-const String defaultServerUrl     = 'http://localhost:8080';
+const String defaultServerUrl     = 'http://localhost:5109';
 const String defaultTheme         = 'light';
 const int defaultSessionHour   = 19;
 const int defaultSessionMinute = 30;
