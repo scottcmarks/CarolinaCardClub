@@ -30,10 +30,10 @@ class PlayerPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final apiProvider = Provider.of<ApiProvider>(context);
 
-    if (apiProvider.serverStatus == ServerStatus.connecting) {
+    if (apiProvider.connectionStatus == ConnectionStatus.connecting) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (apiProvider.serverStatus == ServerStatus.disconnected) {
+    if (apiProvider.connectionStatus == ConnectionStatus.disconnected) {
       return const Center(
           child: Text('Disconnected from server.',
               style: TextStyle(color: Colors.red)));

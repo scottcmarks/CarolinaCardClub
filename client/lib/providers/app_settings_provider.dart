@@ -30,11 +30,11 @@ class AppSettingsProvider with ChangeNotifier {
       _prefs = await SharedPreferences.getInstance();
 
       // Read each setting from storage, providing a default value if not found.
-      final serverUrl = _prefs.getString('localServerUrl') ?? 'http://127.0.0.1:8080';
+      final serverUrl = _prefs.getString('localServerUrl') ?? defaultServerUrl;
       final apiKey = _prefs.getString('localServerApiKey') ?? localApiKey; // From shared package
-      final theme = _prefs.getString('preferredTheme') ?? 'light';
-      final sessionHour = _prefs.getInt('sessionHour') ?? 19;
-      final sessionMinute = _prefs.getInt('sessionMinute') ?? 30;
+      final theme = _prefs.getString('preferredTheme') ?? defaultTheme;
+      final sessionHour = _prefs.getInt('sessionHour') ?? defaultSessionHour;
+      final sessionMinute = _prefs.getInt('sessionMinute') ?? defaultSessionMinute;
 
       _currentSettings = AppSettings(
         localServerUrl: serverUrl,

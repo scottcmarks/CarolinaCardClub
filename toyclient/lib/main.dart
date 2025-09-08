@@ -2,9 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared/shared.dart';
 
 import 'providers/app_settings_provider.dart';
-import 'providers/api_provider.dart'; // Import the new provider file
+import 'providers/api_provider.dart';
+import 'providers/db_connection_provider.dart'; // Import the new base provider
 
 // --- Main App Setup ---
 
@@ -15,6 +17,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
+        // The proxy provider now constructs our new, leaner ApiProvider
         ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
           create: (context) => ApiProvider(context.read<AppSettingsProvider>()),
           update: (_, appSettings, previousApiProvider) {
@@ -58,24 +61,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.dispose();
   }
 
-  /// Centralized handler for managing connection state from the UI.
+  /// This handler is now even simpler thanks to the new setServerUrl method.
   void _handleConnectionChange(String newUrl, bool selected) {
     final settingsProvider = context.read<AppSettingsProvider>();
-    final apiProvider = context.read<ApiProvider>();
-
-    if (selected) {
-      // A box was checked. Update URL via copyWith and connect.
-      final newSettings =
-          settingsProvider.currentSettings.copyWith(serverUrl: newUrl);
-      settingsProvider.updateSettings(newSettings);
-      apiProvider.connect(newUrl);
-    } else {
-      // A box was unchecked. Clear the URL and disconnect.
-      final newSettings =
-          settingsProvider.currentSettings.copyWith(serverUrl: '');
-      settingsProvider.updateSettings(newSettings);
-      apiProvider.disconnect();
-    }
+    settingsProvider.setServerUrl(selected ? newUrl : '');
   }
 
   @override
@@ -91,12 +80,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
       );
     }
 
-    // Use the new 'currentSettings' getter
+    // Use the 'currentSettings' getter
     final currentUrl = appSettings.currentSettings.serverUrl;
 
     // Sync the controller's text with the loaded settings.
-    // This logic ensures the text field shows the correct URL unless it's a preset.
-    if (currentUrl != 'http://127.0.0.1:8080' &&
+    if (currentUrl != defaultServerUrl &&
         _customUrlController.text != currentUrl) {
       _customUrlController.text = currentUrl;
     }
@@ -112,15 +100,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
                 style: TextStyle(fontSize: 18)),
             const SizedBox(height: 16),
             ConnectionCheckbox(
-              label: 'http://127.0.0.1:8080',
-              value: currentUrl == 'http://127.0.0.1:8080' &&
+              label: defaultServerUrl,
+              value: currentUrl == defaultServerUrl &&
                   (api.status == ConnectionStatus.connected ||
                       api.status == ConnectionStatus.connecting),
               status: api.status,
-              isActiveUrl: currentUrl == 'http://127.0.0.1:8080',
+              isActiveUrl: currentUrl == defaultServerUrl,
               onChanged: (bool? selected) {
-                _handleConnectionChange(
-                    'http://127.0.0.1:8080', selected ?? false);
+                _handleConnectionChange(defaultServerUrl, selected ?? false);
               },
             ),
             const SizedBox(height: 8),
@@ -161,7 +148,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
             const Text('Connection Status:',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            StatusIndicator(),
+            const StatusIndicator(),
           ],
         ),
       ),
@@ -206,6 +193,8 @@ class ConnectionCheckbox extends StatelessWidget {
 }
 
 class StatusIndicator extends StatelessWidget {
+  const StatusIndicator({super.key});
+
   @override
   Widget build(BuildContext context) {
     final api = context.watch<ApiProvider>();

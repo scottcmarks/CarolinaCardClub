@@ -27,9 +27,8 @@ class AppSettingsProvider with ChangeNotifier {
     // We don't notify at the start, to avoid a flicker on app start.
 
     final prefs = await SharedPreferences.getInstance();
-    // Load the saved server URL, defaulting to an empty string.
+    // Load the saved server URL, defaulting value in shared constants.
     final serverUrl = prefs.getString(_serverUrlKey) ?? defaultServerUrl;
-
     _currentSettings = AppSettings.defaults().copyWith(serverUrl: serverUrl);
     _isLoading = false;
     notifyListeners(); // Notify that loading is complete and UI can be built.
@@ -42,11 +41,19 @@ class AppSettingsProvider with ChangeNotifier {
   }
 
   /// Updates the application settings, persists them, and notifies listeners.
+  /// This now uses a robust, value-based comparison.
   Future<void> updateSettings(AppSettings newSettings) async {
-    if (_currentSettings.serverUrl != newSettings.serverUrl) {
+    if (_currentSettings != newSettings) {
       _currentSettings = newSettings;
       notifyListeners();
       await _saveSettings();
     }
+  }
+
+  /// A convenience method to update only the server URL.
+  /// It handles the copyWith and updateSettings calls internally.
+  void setServerUrl(String newUrl) {
+    final newSettings = currentSettings.copyWith(serverUrl: newUrl);
+    updateSettings(newSettings);
   }
 }

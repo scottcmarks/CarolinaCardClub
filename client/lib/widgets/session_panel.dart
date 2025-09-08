@@ -135,10 +135,10 @@ class _SessionPanelState extends State<SessionPanel> {
         Expanded(
           child: Consumer<ApiProvider>(
             builder: (context, apiProvider, child) {
-              if (apiProvider.serverStatus == ServerStatus.connecting) {
+              if (apiProvider.connectionStatus == ConnectionStatus.connecting) {
                 return const Center(child: Text('Connecting to server...'));
               }
-              if (apiProvider.serverStatus == ServerStatus.disconnected) {
+              if (apiProvider.connectionStatus == ConnectionStatus.disconnected) {
                 return const Center(child: Text('Disconnected from server.', style: TextStyle(color: Colors.red)));
               }
               return FutureBuilder<List<SessionPanelItem>>(

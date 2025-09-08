@@ -37,7 +37,7 @@ void main() async {
       .addMiddleware(ipLoggingMiddleware)
       .addHandler(router);
 
-  final server = await io.serve(handler, '0.0.0.0', 8080);
+  final server = await io.serve(handler, '0.0.0.0', 5109);
   final serverAddress = server.address.host;
 
   print('✓ Secure WebSocket Server listening on port ${server.port}');

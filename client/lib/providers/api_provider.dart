@@ -12,7 +12,7 @@ import '../models/session_panel_item.dart';
 import '../models/session.dart';
 import 'app_settings_provider.dart';
 
-enum ServerStatus { disconnected, connecting, connected, failed }
+enum ConnectionStatus { disconnected, connecting, connected, failed }
 
 class ApiProvider with ChangeNotifier {
   AppSettingsProvider _appSettingsProvider;
@@ -21,7 +21,7 @@ class ApiProvider with ChangeNotifier {
   WebSocketChannel? _channel;
   StreamSubscription? _streamSubscription;
 
-  ServerStatus _serverStatus = ServerStatus.disconnected;
+  ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
   String? _lastError;
 
   // THE FIX: The provider now maintains its own state for the URL it's
@@ -34,7 +34,7 @@ class ApiProvider with ChangeNotifier {
 
   late Future<void> connectionFuture;
 
-  ServerStatus get serverStatus => _serverStatus;
+  ConnectionStatus get connectionStatus => _connectionStatus;
   String? get lastError => _lastError;
   String? get connectingUrl => _currentConnectionUrl;
 
@@ -78,7 +78,7 @@ class ApiProvider with ChangeNotifier {
       return;
     }
 
-    _serverStatus = ServerStatus.connecting;
+    _connectionStatus = ConnectionStatus.connecting;
     // "Latch" the URL for this specific connection attempt.
     _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
     _lastError = null;
@@ -138,12 +138,12 @@ class ApiProvider with ChangeNotifier {
       await handshakeCompleter.future;
 
       if (attemptId == _connectionAttempt) {
-        _serverStatus = ServerStatus.connected;
+        _connectionStatus = ConnectionStatus.connected;
       }
     } on WebSocketChannelException catch (e) {
       print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (WebSocketChannelException): $e');
       if (attemptId == _connectionAttempt) {
-        _serverStatus = ServerStatus.failed;
+        _connectionStatus = ConnectionStatus.failed;
         _lastError = e.message ?? "WebSocket connection failed.";
         await _cleanupConnection();
         throw e;
@@ -151,7 +151,7 @@ class ApiProvider with ChangeNotifier {
     } on TimeoutException catch (e) {
       print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (TimeoutException): $e');
       if (attemptId == _connectionAttempt) {
-        _serverStatus = ServerStatus.failed;
+        _connectionStatus = ConnectionStatus.failed;
         _lastError = "Connection timed out.";
         await _cleanupConnection();
         throw e;
@@ -159,13 +159,13 @@ class ApiProvider with ChangeNotifier {
     } catch (e) {
       print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (Unknown Error): $e');
       if (attemptId == _connectionAttempt) {
-        _serverStatus = ServerStatus.failed;
+        _connectionStatus = ConnectionStatus.failed;
         _lastError = "An unknown error occurred: ${e.toString()}";
         await _cleanupConnection();
         throw e;
       }
     } finally {
-      if (attemptId == _connectionAttempt && _serverStatus == ServerStatus.connected) {
+      if (attemptId == _connectionAttempt && _connectionStatus == ConnectionStatus.connected) {
         print('--> Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
         _safeNotifyListeners();
       } else if (attemptId != _connectionAttempt) {
@@ -194,8 +194,8 @@ class ApiProvider with ChangeNotifier {
   Future<void> disconnect() async {
     print('--> Disconnecting...');
     await _cleanupConnection();
-    if (_serverStatus != ServerStatus.disconnected) {
-      _serverStatus = ServerStatus.disconnected;
+    if (_connectionStatus != ConnectionStatus.disconnected) {
+      _connectionStatus = ConnectionStatus.disconnected;
       _safeNotifyListeners();
     }
   }
@@ -225,7 +225,7 @@ class ApiProvider with ChangeNotifier {
 
   Future<dynamic> _sendCommand(
       String command, [Map<String, dynamic>? params]) async {
-    if (serverStatus != ServerStatus.connected) {
+    if (connectionStatus != ConnectionStatus.connected) {
       throw Exception('Not connected to the server.');
     }
     final requestId = _uuid.v4();

@@ -40,10 +40,10 @@ class AppSettings {
   /// initialization errors.
   factory AppSettings.defaults() {
     return AppSettings(
-      localServerUrl: 'http://127.0.0.1:8080',
-      localServerApiKey: '', // Default to empty; loaded from storage later.
-      preferredTheme: 'light',
-      defaultSessionStartTime: const TimeOfDay(hour: 19, minute: 30),
+      localServerUrl: defaultServerUrl,
+      localServerApiKey: localApiKey,
+      preferredTheme: defaultTheme,
+      defaultSessionStartTime: const TimeOfDay(hour: defaultSessionHour, minute: defaultSessionMinute),
     );
   }
 }
