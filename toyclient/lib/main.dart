@@ -9,6 +9,8 @@ import 'providers/api_provider.dart'; // Import the new provider file
 // --- Main App Setup ---
 
 void main() {
+  // ensureInitialized is needed for async operations before runApp
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     MultiProvider(
       providers: [
@@ -48,8 +50,7 @@ class ConnectionPage extends StatefulWidget {
 }
 
 class _ConnectionPageState extends State<ConnectionPage> {
-  final _customUrlController =
-      TextEditingController(text: 'http://127.0.0.2:8080');
+  final _customUrlController = TextEditingController();
 
   @override
   void dispose() {
@@ -57,11 +58,48 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.dispose();
   }
 
+  /// Centralized handler for managing connection state from the UI.
+  void _handleConnectionChange(String newUrl, bool selected) {
+    final settingsProvider = context.read<AppSettingsProvider>();
+    final apiProvider = context.read<ApiProvider>();
+
+    if (selected) {
+      // A box was checked. Update URL via copyWith and connect.
+      final newSettings =
+          settingsProvider.currentSettings.copyWith(serverUrl: newUrl);
+      settingsProvider.updateSettings(newSettings);
+      apiProvider.connect(newUrl);
+    } else {
+      // A box was unchecked. Clear the URL and disconnect.
+      final newSettings =
+          settingsProvider.currentSettings.copyWith(serverUrl: '');
+      settingsProvider.updateSettings(newSettings);
+      apiProvider.disconnect();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final api = context.watch<ApiProvider>();
     final appSettings = context.watch<AppSettingsProvider>();
-    final currentUrl = appSettings.settings.serverUrl;
+
+    // Show a loading screen until the initial settings are loaded from storage.
+    if (appSettings.isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Toy WebSocket Client')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Use the new 'currentSettings' getter
+    final currentUrl = appSettings.currentSettings.serverUrl;
+
+    // Sync the controller's text with the loaded settings.
+    // This logic ensures the text field shows the correct URL unless it's a preset.
+    if (currentUrl != 'http://127.0.0.1:8080' &&
+        _customUrlController.text != currentUrl) {
+      _customUrlController.text = currentUrl;
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Toy WebSocket Client')),
@@ -81,13 +119,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
               status: api.status,
               isActiveUrl: currentUrl == 'http://127.0.0.1:8080',
               onChanged: (bool? selected) {
-                final newUrl = 'http://127.0.0.1:8080';
-                context.read<AppSettingsProvider>().setServerUrl(newUrl);
-                if (selected ?? false) {
-                  context.read<ApiProvider>().connect(newUrl);
-                } else {
-                  context.read<ApiProvider>().disconnect();
-                }
+                _handleConnectionChange(
+                    'http://127.0.0.1:8080', selected ?? false);
               },
             ),
             const SizedBox(height: 8),
@@ -96,18 +129,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
                 ConnectionCheckbox(
                   label: 'Custom URL:',
                   value: currentUrl == _customUrlController.text &&
+                      currentUrl.isNotEmpty &&
                       (api.status == ConnectionStatus.connected ||
                           api.status == ConnectionStatus.connecting),
                   status: api.status,
                   isActiveUrl: currentUrl == _customUrlController.text,
                   onChanged: (bool? selected) {
-                    final newUrl = _customUrlController.text;
-                    context.read<AppSettingsProvider>().setServerUrl(newUrl);
-                    if (selected ?? false) {
-                      context.read<ApiProvider>().connect(newUrl);
-                    } else {
-                      context.read<ApiProvider>().disconnect();
-                    }
+                    _handleConnectionChange(
+                        _customUrlController.text, selected ?? false);
                   },
                 ),
                 const SizedBox(width: 8),
@@ -118,6 +147,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 8),
                     ),
+                    onSubmitted: (newUrl) {
+                      // Allow connecting by pressing Enter in the text field
+                      _handleConnectionChange(newUrl, true);
+                    },
                   ),
                 ),
               ],
@@ -193,9 +226,6 @@ class StatusIndicator extends StatelessWidget {
                 style: const TextStyle(fontSize: 16)),
           ],
         );
-      // case ConnectionStatus.disconnecting:
-      //   return Text('Status: Disconnecting ...',
-      //       style: const TextStyle(color: Colors.orange, fontSize: 16));
       case ConnectionStatus.disconnected:
         return const Text('Status: Disconnected',
             style: TextStyle(fontSize: 16));

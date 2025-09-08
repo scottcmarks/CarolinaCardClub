@@ -113,6 +113,12 @@ class ApiProvider with ChangeNotifier {
       // On success, update the status but do NOT notify yet.
       _status = ConnectionStatus.connected;
 
+    } on TimeoutException catch (e) {
+      print('--> [TOY] Attempt #$attemptId: FAILED to connect to $url: timed out. (1)');
+      // On failure, update the status and error, but do NOT notify yet.
+      _status = ConnectionStatus.failed;
+      _lastError = "Timed out";
+      await _cleanupConnection();
     } catch (e) {
       print('--> [TOY] Attempt #$attemptId: FAILED to connect to $url: $e');
       // On failure, update the status and error, but do NOT notify yet.

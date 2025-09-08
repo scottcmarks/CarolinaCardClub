@@ -13,6 +13,7 @@ dependencies:
 
   provider: ^6.1.2
   web_socket_channel: ^2.4.5
+  shared_preferences: ^2.2.3 # Added for persistence
 
   # This is the key change. It tells Flutter to use the local 'shared' package.
   shared:

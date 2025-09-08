@@ -7,17 +7,26 @@ class AppSettings {
   final String serverUrl;
   final String apiKey;
 
-  // Constructor now requires both parameters.
   AppSettings({
     required this.serverUrl,
     required this.apiKey,
   });
 
-  // A factory constructor to create default settings.
   factory AppSettings.defaults() {
     return AppSettings(
       serverUrl: '', // Starts with no server URL.
       apiKey: localApiKey, // Initializes with the key from the real shared module.
+    );
+  }
+
+  /// Creates a copy of this AppSettings but with the given fields replaced with the new values.
+  AppSettings copyWith({
+    String? serverUrl,
+    String? apiKey,
+  }) {
+    return AppSettings(
+      serverUrl: serverUrl ?? this.serverUrl,
+      apiKey: apiKey ?? this.apiKey,
     );
   }
 }
