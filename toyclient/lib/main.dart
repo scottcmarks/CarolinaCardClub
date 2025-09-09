@@ -6,7 +6,7 @@ import 'package:shared/shared.dart';
 
 import 'providers/app_settings_provider.dart';
 import 'providers/api_provider.dart';
-import 'providers/db_connection_provider.dart'; // Import the new base provider
+import 'package:shared/providers/db_connection_provider.dart'; // Import the new base provider
 
 // --- Main App Setup ---
 

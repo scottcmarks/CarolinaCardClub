@@ -3,7 +3,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'app_settings_provider.dart';
-import 'db_connection_provider.dart';
+import 'package:shared/providers/db_connection_provider.dart';
 
 /// This provider now uses composition ("has-a") instead of inheritance.
 /// It manages an instance of DbConnectionProvider and delegates calls to it.
