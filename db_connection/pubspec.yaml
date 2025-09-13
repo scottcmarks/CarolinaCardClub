@@ -1,0 +1,16 @@
+name: db_connection
+description: Database connection with Change Notification created for the Carolina Card Club project.
+version: 1.0.0
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Core App Utilities
+  uuid: ^4.4.0 # For generating unique request IDs
+
+  # WebSocket Communication
+  web_socket_channel: ^2.4.0 # For real-time communication with the server
