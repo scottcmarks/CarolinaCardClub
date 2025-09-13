@@ -1,7 +1,26 @@
 #!/bin/bash
-rm -rf /Users/scott/Library/Containers/com.magnolia-heights.carolinaCardClub/Data/Documents/CarolinaCardClub.db
-case "${1}" in
-    -c|--clean) flutter clean; ;;
-    *) ;;
-esac
-flutter run -d macos
+
+declare clean=no
+declare release=no
+
+while [[ "${1}" != "" ]]
+do
+    case "${1}" in
+        -c|--clean            ) clean=yes;   shift; ;;
+        -r|--release|--nodebug) release=yes; shift; ;;
+        -d|--debug            ) release=no;  shift; ;;
+                             *) ;;
+    esac
+done
+
+if [[ "${clean}" == "yes" ]]
+then
+    flutter clean
+fi
+
+if [[ "${release}" == "yes" ]]
+then
+    flutter run -d macos --release
+else
+    flutter run -d macos
+fi

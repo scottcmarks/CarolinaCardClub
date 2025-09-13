@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:shared/shared.dart';
+
 /// A data class to hold all user-configurable application settings.
 ///
 /// This class is immutable. To change a setting, create a new instance
