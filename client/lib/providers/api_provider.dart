@@ -24,12 +24,13 @@ class ApiProvider with ChangeNotifier {
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
   String? _lastError;
 
-  // THE FIX: The provider now maintains its own state for the URL it's
-  // currently connected to or trying to connect to.
   String? _currentConnectionUrl;
 
-  int _connectionAttempt = 0;
-  bool _isClosing = false;
+  // A bit of bogosity setting up a "closing" of "connection attempt 0"
+  // as the initial state
+  int _connectionAttempt = -1;
+  bool _isClosing = true;
+
   bool _mounted = true;
 
   late Future<void> connectionFuture;
@@ -85,7 +86,7 @@ class ApiProvider with ChangeNotifier {
     _safeNotifyListeners();
 
     final serverUrl = _currentConnectionUrl!;
-    print('--> Attempt #$attemptId: Attempting to connect to $serverUrl...');
+    // print('--> Attempt #$attemptId: Attempting to connect to $serverUrl...');
 
     try {
       final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
@@ -102,7 +103,7 @@ class ApiProvider with ChangeNotifier {
             try {
               final decoded = jsonDecode(message as String);
               if (decoded['type'] == 'ack') {
-                print('--> Attempt #$attemptId: Handshake successful.');
+                // print('--> Attempt #$attemptId: Handshake successful.');
                 handshakeCompleter.complete();
               } else {
                 handshakeCompleter.completeError(
@@ -141,7 +142,7 @@ class ApiProvider with ChangeNotifier {
         _connectionStatus = ConnectionStatus.connected;
       }
     } on WebSocketChannelException catch (e) {
-      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (WebSocketChannelException): $e');
+      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl: $e');
       if (attemptId == _connectionAttempt) {
         _connectionStatus = ConnectionStatus.failed;
         _lastError = e.message ?? "WebSocket connection failed.";
@@ -166,7 +167,7 @@ class ApiProvider with ChangeNotifier {
       }
     } finally {
       if (attemptId == _connectionAttempt && _connectionStatus == ConnectionStatus.connected) {
-        print('--> Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
+        // print('--> Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
         _safeNotifyListeners();
       } else if (attemptId != _connectionAttempt) {
          print('--> Attempt #$attemptId: A newer attempt has started. Discarding result.');

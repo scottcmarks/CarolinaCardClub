@@ -63,8 +63,8 @@ class CarolinaCardClubApp extends StatelessWidget {
     return FutureBuilder(
       future: apiProvider.connectionFuture,
       builder: (context, snapshot) {
-        print(
-            '--> [MAIN] FutureBuilder rebuilding. State: ${snapshot.connectionState}, HasError: ${snapshot.hasError}');
+        // print(
+        //     '--> [MAIN] FutureBuilder rebuilding. State: ${snapshot.connectionState}, HasError: ${snapshot.hasError}');
 
         if (snapshot.hasError) {
           print(
@@ -84,8 +84,8 @@ class CarolinaCardClubApp extends StatelessWidget {
         }
 
         if (snapshot.connectionState == ConnectionState.done) {
-          print(
-              '--> [MAIN] FutureBuilder: STATE is DONE and has NO ERROR. Building main app.');
+          // print(
+          //     '--> [MAIN] FutureBuilder: STATE is DONE and has NO ERROR. Building main app.');
           return Consumer<AppSettingsProvider>(
             builder: (context, appSettings, child) {
               return MaterialApp(

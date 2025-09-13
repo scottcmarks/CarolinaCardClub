@@ -17,6 +17,8 @@ dependencies:
   equatable: ^2.0.5 # Added for value equality
 
   # This is the key change. It tells Flutter to use the local 'shared' package.
+  db_connection:
+    path: ../db_connection
   shared:
     path: ../shared
 
