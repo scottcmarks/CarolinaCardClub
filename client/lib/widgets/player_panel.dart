@@ -1,16 +1,14 @@
 // client/lib/widgets/player_panel.dart
 
-import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../models/payment.dart';
+import '../models/player_selection_item.dart';
+import '../models/session.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
-import '../models/player_selection_item.dart';
-import '../models/payment.dart';
-import '../models/session.dart';
 
 class PlayerPanel extends StatelessWidget {
   final int? selectedPlayerId;
@@ -93,10 +91,8 @@ class PlayerCard extends StatefulWidget {
 }
 
 class _PlayerCardState extends State<PlayerCard> {
-  Future<void> _startNewSession(BuildContext context, PlayerSelectionItem player) async {
-    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-
+  Future<void> _startNewSession(ApiProvider apiProvider,
+      TimeProvider timeProvider, PlayerSelectionItem player) async {
     try {
       final now = timeProvider.currentTime;
       final sessionStart = widget.clubSessionStartDateTime != null &&
@@ -109,7 +105,11 @@ class _PlayerCardState extends State<PlayerCard> {
         startEpoch: sessionStart.millisecondsSinceEpoch ~/ 1000,
       );
       final newSessionId = await apiProvider.addSession(newSession);
-      widget.onSessionAdded?.call(newSessionId);
+
+      // Check if the widget is still mounted before calling the callback
+      if (mounted) {
+        widget.onSessionAdded?.call(newSessionId);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -125,6 +125,9 @@ class _PlayerCardState extends State<PlayerCard> {
     if (player.balance < 0) {
       amountController.text = (-player.balance).toStringAsFixed(2);
     }
+
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
     showDialog(
       context: context,
@@ -152,32 +155,34 @@ class _PlayerCardState extends State<PlayerCard> {
               onPressed: () async {
                 final double? amount = double.tryParse(amountController.text);
                 if (amount != null && amount > 0) {
-                  final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-                  final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-
                   final newPayment = Payment(
                     playerId: player.playerId,
                     amount: amount,
-                    epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                    epoch:
+                        timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                   );
 
                   try {
-                    // *** FIX IS HERE ***
-                    // We now call .toMap() on the Payment object
-                    final updatedPlayer = await apiProvider.addPayment(newPayment.toMap());
+                    final updatedPlayer =
+                        await apiProvider.addPayment(newPayment.toMap());
+
+                    // Use dialogContext to pop
                     Navigator.of(dialogContext).pop();
 
                     if (startSessionAfter && updatedPlayer.balance >= 0) {
-                      await _startNewSession(context, updatedPlayer);
+                      await _startNewSession(
+                          apiProvider, timeProvider, updatedPlayer);
                     } else if (startSessionAfter) {
-                      _showAddMoneyDialog(context, updatedPlayer, startSessionAfter: true);
+                      // Pass the original context for showing the next dialog
+                      _showAddMoneyDialog(context, updatedPlayer,
+                          startSessionAfter: true);
                     }
                   } catch (e) {
-                     if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Failed to add payment: $e')),
-                        );
-                     }
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to add payment: $e')),
+                      );
+                    }
                   }
                 }
               },
@@ -189,10 +194,16 @@ class _PlayerCardState extends State<PlayerCard> {
   }
 
   void _showPlayerMenu(BuildContext context) {
+    // *** THE FIX IS HERE ***
+    // Get the providers *before* calling showDialog, using the valid context.
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         final canStartSession = widget.clubSessionStartDateTime != null;
+
         if (widget.player.balance < 0) {
           return AlertDialog(
             backgroundColor: Colors.red.shade100,
@@ -226,7 +237,9 @@ class _PlayerCardState extends State<PlayerCard> {
                     child: const Text('Open a new session'),
                     onPressed: () async {
                       Navigator.of(dialogContext).pop();
-                      await _startNewSession(context, widget.player);
+                      // The captured providers are used here, which is safe.
+                      await _startNewSession(
+                          apiProvider, timeProvider, widget.player);
                     }),
               TextButton(
                   child: const Text('Add Money'),
@@ -256,7 +269,8 @@ class _PlayerCardState extends State<PlayerCard> {
       color: cardColor,
       shape: widget.isSelected
           ? RoundedRectangleBorder(
-              side: BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
+              side:
+                  BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
               borderRadius: BorderRadius.circular(4.0),
             )
           : null,
