@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 
 import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/session_filter_provider.dart';
+import '../providers/time_provider.dart';
 import 'main_split_view_page.dart';
 import 'settings_page.dart';
 
@@ -13,31 +15,43 @@ class CarolinaCardClubApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppSettingsProvider>(
-      builder: (context, appSettings, _) {
-        return MaterialApp(
-          title: 'Carolina Card Club',
-          theme: ThemeData.light(),
-          darkTheme: ThemeData.dark(),
-          themeMode: appSettings.currentSettings.preferredTheme == 'dark'
-              ? ThemeMode.dark
-              : ThemeMode.light,
-          // Use a FutureBuilder to wait for settings to load
-          home: FutureBuilder(
-            future: appSettings.initializationComplete,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.done) {
-                // Settings are loaded, now handle the connection
-                return const ConnectionHandler();
-              }
-              // While settings are loading, show a spinner
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            },
-          ),
-        );
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
+        ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
+          create: (context) => ApiProvider(
+              Provider.of<AppSettingsProvider>(context, listen: false)),
+          update: (_, appSettings, apiProvider) {
+            apiProvider?.updateAppSettings(appSettings);
+            return apiProvider!;
+          },
+        ),
+        ChangeNotifierProvider(create: (_) => TimeProvider()),
+        ChangeNotifierProvider(create: (_) => SessionFilterProvider()),
+      ],
+      child: Consumer<AppSettingsProvider>(
+        builder: (context, appSettings, _) {
+          return MaterialApp(
+            title: 'Carolina Card Club',
+            theme: ThemeData.light(),
+            darkTheme: ThemeData.dark(),
+            themeMode: appSettings.currentSettings.preferredTheme == 'dark'
+                ? ThemeMode.dark
+                : ThemeMode.light,
+            home: FutureBuilder(
+              future: appSettings.initializationComplete,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done) {
+                  return const ConnectionHandler();
+                }
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -50,18 +64,22 @@ class ConnectionHandler extends StatefulWidget {
 }
 
 class _ConnectionHandlerState extends State<ConnectionHandler> {
-  bool _isDialogShowing = false;
+  bool _dialogIsShowing = false;
 
   @override
   void initState() {
     super.initState();
-    Provider.of<ApiProvider>(context, listen: false).initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<ApiProvider>(context, listen: false).initialize();
+      }
+    });
   }
 
-  void _showSettingsDialog(BuildContext context) {
-    // This ensures we don't try to show a dialog when one is already visible
-    if (_isDialogShowing) return;
-    _isDialogShowing = true;
+  void _showSettingsDialogIfNeeded(BuildContext context) {
+    // This logic prevents the dialog from showing multiple times.
+    if (_dialogIsShowing) return;
+    _dialogIsShowing = true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -72,8 +90,8 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
             return const ServerSettingsDialog();
           },
         ).then((_) {
-           // When the dialog is dismissed, reset the flag
-          _isDialogShowing = false;
+          // Reset the flag when the dialog is dismissed.
+          _dialogIsShowing = false;
         });
       }
     });
@@ -85,6 +103,10 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
       builder: (context, api, _) {
         switch (api.connectionStatus) {
           case ConnectionStatus.connected:
+            // If we connect successfully, make sure the dialog isn't showing.
+            if (_dialogIsShowing) {
+              Navigator.of(context).pop();
+            }
             return const MainSplitViewPage();
           case ConnectionStatus.connecting:
             return const Scaffold(
@@ -92,9 +114,7 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
             );
           case ConnectionStatus.failed:
           case ConnectionStatus.disconnected:
-            // The connection has failed, show the dialog.
-            _showSettingsDialog(context);
-            // And show a helpful message on the screen behind the dialog.
+            _showSettingsDialogIfNeeded(context);
             return Scaffold(
               appBar: AppBar(title: const Text('Connection Failed')),
               body: Center(

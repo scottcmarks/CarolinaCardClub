@@ -1,0 +1,2 @@
+#!/bin/bash
+flutter devices | sed -n 's/.*\(K7[0-9A-Z]*\).*android-arm64.*/\1/p'

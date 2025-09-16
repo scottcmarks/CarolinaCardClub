@@ -1,3 +1,5 @@
+// client/lib/providers/api_provider.dart
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -26,11 +28,8 @@ class ApiProvider with ChangeNotifier {
 
   String? _currentConnectionUrl;
 
-  // A bit of bogosity setting up a "closing" of "connection attempt 0"
-  // as the initial state
   int _connectionAttempt = -1;
   bool _isClosing = true;
-
   bool _mounted = true;
 
   late Future<void> connectionFuture;
@@ -39,25 +38,30 @@ class ApiProvider with ChangeNotifier {
   String? get lastError => _lastError;
   String? get connectingUrl => _currentConnectionUrl;
 
+  // *** FIX #1: Initialize the current URL in the constructor ***
   ApiProvider(this._appSettingsProvider) {
+    _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
     connectionFuture = Completer<void>().future;
   }
 
   void initialize() {
     connectionFuture = connect();
-    notifyListeners();
   }
 
+  // *** FIX #2: Make the update logic robust ***
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
-    _appSettingsProvider = newSettingsProvider;
-    final newUrl = _appSettingsProvider.currentSettings.localServerUrl;
+    final newUrl = newSettingsProvider.currentSettings.localServerUrl;
 
-    // THE FIX: The comparison is now between the new URL from settings and
-    // the provider's own internal state. This works correctly.
+    // This comparison is now safe and will only trigger on a real change.
     if (_currentConnectionUrl != newUrl) {
-      print('--> Server URL changed. Forcing reconnect...');
+      print(
+          '--> Server URL changed from "$_currentConnectionUrl" to "$newUrl". Forcing reconnect...');
+      _appSettingsProvider = newSettingsProvider;
+      _currentConnectionUrl = newUrl; // Keep our state in sync
       connectionFuture = connect();
-      notifyListeners();
+    } else {
+      // If the URL is the same, we only need to update our internal reference.
+      _appSettingsProvider = newSettingsProvider;
     }
   }
 
@@ -75,18 +79,18 @@ class ApiProvider with ChangeNotifier {
     await disconnect();
 
     if (attemptId != _connectionAttempt) {
-      print('--> Connection attempt #$attemptId was cancelled before starting.');
+      print(
+          '--> Connection attempt #$attemptId was cancelled before starting.');
       return;
     }
 
     _connectionStatus = ConnectionStatus.connecting;
-    // "Latch" the URL for this specific connection attempt.
-    _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
+    _currentConnectionUrl =
+        _appSettingsProvider.currentSettings.localServerUrl;
     _lastError = null;
     _safeNotifyListeners();
 
     final serverUrl = _currentConnectionUrl!;
-    // print('--> Attempt #$attemptId: Attempting to connect to $serverUrl...');
 
     try {
       final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
@@ -103,15 +107,14 @@ class ApiProvider with ChangeNotifier {
             try {
               final decoded = jsonDecode(message as String);
               if (decoded['type'] == 'ack') {
-                // print('--> Attempt #$attemptId: Handshake successful.');
                 handshakeCompleter.complete();
               } else {
                 handshakeCompleter.completeError(
                     Exception('Invalid handshake message from server.'));
               }
             } catch (e) {
-              handshakeCompleter
-                  .completeError(Exception('Failed to parse handshake message: $e'));
+              handshakeCompleter.completeError(
+                  Exception('Failed to parse handshake message: $e'));
             }
           } else {
             _handleServerMessage(message);
@@ -130,7 +133,8 @@ class ApiProvider with ChangeNotifier {
             handshakeCompleter
                 .completeError(Exception('Connection closed during handshake.'));
           } else {
-            print('--> WebSocket connection closed by server after handshake.');
+            print(
+                '--> WebSocket connection closed by server after handshake.');
             disconnect();
           }
         },
@@ -142,36 +146,25 @@ class ApiProvider with ChangeNotifier {
         _connectionStatus = ConnectionStatus.connected;
       }
     } on WebSocketChannelException catch (e) {
-      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl: $e');
       if (attemptId == _connectionAttempt) {
         _connectionStatus = ConnectionStatus.failed;
         _lastError = e.message ?? "WebSocket connection failed.";
         await _cleanupConnection();
-        throw e;
       }
-    } on TimeoutException catch (e) {
-      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (TimeoutException): $e');
+    } on TimeoutException catch (_) {
       if (attemptId == _connectionAttempt) {
         _connectionStatus = ConnectionStatus.failed;
         _lastError = "Connection timed out.";
         await _cleanupConnection();
-        throw e;
       }
     } catch (e) {
-      print('--> Attempt #$attemptId: FAILED to connect to $serverUrl (Unknown Error): $e');
       if (attemptId == _connectionAttempt) {
         _connectionStatus = ConnectionStatus.failed;
         _lastError = "An unknown error occurred: ${e.toString()}";
         await _cleanupConnection();
-        throw e;
       }
     } finally {
-      if (attemptId == _connectionAttempt && _connectionStatus == ConnectionStatus.connected) {
-        // print('--> Attempt #$attemptId: This is the latest attempt and it succeeded. Updating UI state.');
-        _safeNotifyListeners();
-      } else if (attemptId != _connectionAttempt) {
-         print('--> Attempt #$attemptId: A newer attempt has started. Discarding result.');
-      }
+      _safeNotifyListeners();
     }
   }
 
@@ -182,18 +175,16 @@ class ApiProvider with ChangeNotifier {
       await _streamSubscription?.cancel();
       _streamSubscription = null;
       await _channel?.sink.close().timeout(const Duration(seconds: 1));
-      print('--> Channel closed.');
     } on TimeoutException {
-      print('--> Channel close timed out. Proceeding anyway.');
+      // Ignore
     } catch (e) {
-      print('--> Error closing channel: $e');
+      // Ignore
     }
     _channel = null;
     _isClosing = false;
   }
 
   Future<void> disconnect() async {
-    print('--> Disconnecting...');
     await _cleanupConnection();
     if (_connectionStatus != ConnectionStatus.disconnected) {
       _connectionStatus = ConnectionStatus.disconnected;
