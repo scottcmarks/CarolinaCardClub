@@ -284,9 +284,12 @@ class _PlayerCardState extends State<PlayerCard> {
           }
         },
         child: ListTile(
-          title: Text(widget.player.name),
-          subtitle:
-              Text('Balance: \$${widget.player.balance.toStringAsFixed(2)}'),
+          title: Text(
+            widget.player.name,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          // subtitle:
+          //     Text('Balance: \$${widget.player.balance.toStringAsFixed(2)}'),
         ),
       ),
     );
