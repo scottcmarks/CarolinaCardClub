@@ -10,7 +10,7 @@ import '../models/session.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 
-class PlayerPanel extends StatelessWidget {
+class PlayerPanel extends StatefulWidget {
   final int? selectedPlayerId;
   final ValueChanged<int?>? onPlayerSelected;
   final ValueChanged<int>? onSessionAdded;
@@ -25,72 +25,10 @@ class PlayerPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final apiProvider = Provider.of<ApiProvider>(context);
-
-    if (apiProvider.connectionStatus == ConnectionStatus.connecting) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (apiProvider.connectionStatus == ConnectionStatus.disconnected) {
-      return const Center(
-          child: Text('Disconnected from server.',
-              style: TextStyle(color: Colors.red)));
-    }
-
-    return FutureBuilder<List<PlayerSelectionItem>>(
-      future: apiProvider.fetchPlayerSelectionList(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(
-              child: Text('Error loading players: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red)));
-        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No players found.'));
-        } else {
-          List<PlayerSelectionItem> players = snapshot.data!;
-          return ListView.builder(
-            key: const PageStorageKey<String>('PlayerListScrollPosition'),
-            itemCount: players.length,
-            itemBuilder: (context, index) {
-              final player = players[index];
-              return PlayerCard(
-                player: player,
-                isSelected: player.playerId == selectedPlayerId,
-                onPlayerSelected: onPlayerSelected,
-                onSessionAdded: onSessionAdded,
-                clubSessionStartDateTime: clubSessionStartDateTime,
-              );
-            },
-          );
-        }
-      },
-    );
-  }
+  State<PlayerPanel> createState() => _PlayerPanelState();
 }
 
-class PlayerCard extends StatefulWidget {
-  final PlayerSelectionItem player;
-  final bool isSelected;
-  final ValueChanged<int?>? onPlayerSelected;
-  final ValueChanged<int>? onSessionAdded;
-  final DateTime? clubSessionStartDateTime;
-
-  const PlayerCard({
-    super.key,
-    required this.player,
-    required this.isSelected,
-    this.onPlayerSelected,
-    this.onSessionAdded,
-    this.clubSessionStartDateTime,
-  });
-
-  @override
-  State<PlayerCard> createState() => _PlayerCardState();
-}
-
-class _PlayerCardState extends State<PlayerCard> {
+class _PlayerPanelState extends State<PlayerPanel> {
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
     try {
@@ -106,31 +44,29 @@ class _PlayerCardState extends State<PlayerCard> {
       );
       final newSessionId = await apiProvider.addSession(newSession);
 
-      // Check if the widget is still mounted before calling the callback
-      if (mounted) {
-        widget.onSessionAdded?.call(newSessionId);
-      }
+      if (!mounted) return;
+      widget.onSessionAdded?.call(newSessionId);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error starting session: $e')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error starting session: $e')),
+      );
     }
   }
 
-  void _showAddMoneyDialog(BuildContext context, PlayerSelectionItem player,
+  // FIX: Removed BuildContext parameter. It will now use the State's own context.
+  void _showAddMoneyDialog(
+      ApiProvider apiProvider,
+      TimeProvider timeProvider,
+      PlayerSelectionItem player,
       {required bool startSessionAfter}) {
     final TextEditingController amountController = TextEditingController();
     if (player.balance < 0) {
       amountController.text = (-player.balance).toStringAsFixed(2);
     }
 
-    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-
     showDialog(
-      context: context,
+      context: context, // Uses the stable context from _PlayerPanelState
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text('Add Money for ${player.name}'),
@@ -166,23 +102,23 @@ class _PlayerCardState extends State<PlayerCard> {
                     final updatedPlayer =
                         await apiProvider.addPayment(newPayment.toMap());
 
-                    // Use dialogContext to pop
                     Navigator.of(dialogContext).pop();
+                    if (!mounted) return;
 
                     if (startSessionAfter && updatedPlayer.balance >= 0) {
                       await _startNewSession(
                           apiProvider, timeProvider, updatedPlayer);
                     } else if (startSessionAfter) {
-                      // Pass the original context for showing the next dialog
-                      _showAddMoneyDialog(context, updatedPlayer,
+                      // FIX: Call no longer passes context
+                      _showAddMoneyDialog(apiProvider, timeProvider,
+                          updatedPlayer,
                           startSessionAfter: true);
                     }
                   } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to add payment: $e')),
-                      );
-                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to add payment: $e')),
+                    );
                   }
                 }
               },
@@ -193,23 +129,22 @@ class _PlayerCardState extends State<PlayerCard> {
     );
   }
 
-  void _showPlayerMenu(BuildContext context) {
-    // *** THE FIX IS HERE ***
-    // Get the providers *before* calling showDialog, using the valid context.
+  // FIX: Removed BuildContext parameter.
+  void _showPlayerMenu(PlayerSelectionItem player) {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
     showDialog(
-      context: context,
+      context: context, // Uses the stable context from _PlayerPanelState
       builder: (BuildContext dialogContext) {
         final canStartSession = widget.clubSessionStartDateTime != null;
 
-        if (widget.player.balance < 0) {
+        if (player.balance < 0) {
           return AlertDialog(
             backgroundColor: Colors.red.shade100,
             title: const Text('Negative Balance'),
             content: Text(
-                'The current balance for ${widget.player.name} is negative.\nPlease add money to continue.'),
+                'The current balance for ${player.name} is negative.\nPlease add money to continue.'),
             actions: [
               TextButton(
                   child: const Text('Cancel'),
@@ -221,7 +156,10 @@ class _PlayerCardState extends State<PlayerCard> {
                   child: const Text('Add Money'),
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
-                    _showAddMoneyDialog(context, widget.player,
+                    if (!mounted) return;
+                    // FIX: Call no longer passes context
+                    _showAddMoneyDialog(apiProvider, timeProvider,
+                        player,
                         startSessionAfter: canStartSession);
                   }),
             ],
@@ -229,7 +167,7 @@ class _PlayerCardState extends State<PlayerCard> {
         } else {
           return AlertDialog(
             backgroundColor: Colors.green.shade100,
-            title: Text('Player Menu for ${widget.player.name}'),
+            title: Text('Player Menu for ${player.name}'),
             content: const Text('What would you like to do?'),
             actions: [
               if (canStartSession)
@@ -237,15 +175,18 @@ class _PlayerCardState extends State<PlayerCard> {
                     child: const Text('Open a new session'),
                     onPressed: () async {
                       Navigator.of(dialogContext).pop();
-                      // The captured providers are used here, which is safe.
+                      if (!mounted) return;
                       await _startNewSession(
-                          apiProvider, timeProvider, widget.player);
+                          apiProvider, timeProvider, player);
                     }),
               TextButton(
                   child: const Text('Add Money'),
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
-                    _showAddMoneyDialog(context, widget.player,
+                    if (!mounted) return;
+                    // FIX: Call no longer passes context
+                    _showAddMoneyDialog(apiProvider, timeProvider,
+                        player,
                         startSessionAfter: false);
                   }),
             ],
@@ -257,17 +198,81 @@ class _PlayerCardState extends State<PlayerCard> {
 
   @override
   Widget build(BuildContext context) {
+    final apiProvider = Provider.of<ApiProvider>(context);
+
+    if (apiProvider.connectionStatus == ConnectionStatus.connecting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (apiProvider.connectionStatus == ConnectionStatus.disconnected) {
+      return const Center(
+          child: Text('Disconnected from server.',
+              style: TextStyle(color: Colors.red)));
+    }
+
+    return FutureBuilder<List<PlayerSelectionItem>>(
+      future: apiProvider.fetchPlayerSelectionList(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(
+              child: Text('Error loading players: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.red)));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No players found.'));
+        } else {
+          List<PlayerSelectionItem> players = snapshot.data!;
+          return ListView.builder(
+            key: const PageStorageKey<String>('PlayerListScrollPosition'),
+            itemCount: players.length,
+            itemBuilder: (context, index) {
+              final player = players[index];
+              return PlayerCard(
+                player: player,
+                isSelected: player.playerId == widget.selectedPlayerId,
+                onTap: () {
+                  if (player.playerId == widget.selectedPlayerId) {
+                    widget.onPlayerSelected?.call(null);
+                  } else {
+                    widget.onPlayerSelected?.call(player.playerId);
+                    // FIX: Call no longer passes context
+                    _showPlayerMenu(player);
+                  }
+                },
+              );
+            },
+          );
+        }
+      },
+    );
+  }
+}
+
+class PlayerCard extends StatelessWidget {
+  final PlayerSelectionItem player;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const PlayerCard({
+    super.key,
+    required this.player,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     Color? cardColor;
-    if (widget.player.balance > 0) {
+    if (player.balance > 0) {
       cardColor = Colors.green.shade100;
-    } else if (widget.player.balance < 0) {
+    } else if (player.balance < 0) {
       cardColor = Colors.red.shade100;
     }
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       color: cardColor,
-      shape: widget.isSelected
+      shape: isSelected
           ? RoundedRectangleBorder(
               side:
                   BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
@@ -275,21 +280,12 @@ class _PlayerCardState extends State<PlayerCard> {
             )
           : null,
       child: InkWell(
-        onTap: () {
-          if (widget.isSelected) {
-            widget.onPlayerSelected?.call(null);
-          } else {
-            widget.onPlayerSelected?.call(widget.player.playerId);
-            _showPlayerMenu(context);
-          }
-        },
+        onTap: onTap,
         child: ListTile(
           title: Text(
-            widget.player.name,
+            player.name,
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          // subtitle:
-          //     Text('Balance: \$${widget.player.balance.toStringAsFixed(2)}'),
         ),
       ),
     );
