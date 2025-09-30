@@ -1,0 +1,5 @@
+#!/bin/bash
+./email_list
+open -F "https://gmail.com"
+exit 0
+

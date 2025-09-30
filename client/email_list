@@ -1,0 +1,4 @@
+#!/bin/bash
+. venv/bin/activate
+cd assets
+../email_list_to_clipboard.py
