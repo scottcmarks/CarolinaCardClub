@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/payment.dart';
@@ -134,6 +135,12 @@ class _PlayerPanelState extends State<PlayerPanel> {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
+    // Create the currency formatter
+    final currencyFormatter =
+        NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final formattedBalance = currencyFormatter.format(player.balance);
+    final titleText = '${player.name}: balance is $formattedBalance';
+
     showDialog(
       context: context, // Uses the stable context from _PlayerPanelState
       builder: (BuildContext dialogContext) {
@@ -142,9 +149,8 @@ class _PlayerPanelState extends State<PlayerPanel> {
         if (player.balance < 0) {
           return AlertDialog(
             backgroundColor: Colors.red.shade100,
-            title: const Text('Negative Balance'),
-            content: Text(
-                'The current balance for ${player.name} is negative.\nPlease add money to continue.'),
+            title: Text(titleText), // Updated Title
+            content: const Text('Please add money to continue.'),
             actions: [
               TextButton(
                   child: const Text('Cancel'),
@@ -158,8 +164,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
                     Navigator.of(dialogContext).pop();
                     if (!mounted) return;
                     // FIX: Call no longer passes context
-                    _showAddMoneyDialog(apiProvider, timeProvider,
-                        player,
+                    _showAddMoneyDialog(apiProvider, timeProvider, player,
                         startSessionAfter: canStartSession);
                   }),
             ],
@@ -167,7 +172,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
         } else {
           return AlertDialog(
             backgroundColor: Colors.green.shade100,
-            title: Text('Player Menu for ${player.name}'),
+            title: Text(titleText), // Updated Title
             content: const Text('What would you like to do?'),
             actions: [
               if (canStartSession)
@@ -176,8 +181,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
                     onPressed: () async {
                       Navigator.of(dialogContext).pop();
                       if (!mounted) return;
-                      await _startNewSession(
-                          apiProvider, timeProvider, player);
+                      await _startNewSession(apiProvider, timeProvider, player);
                     }),
               TextButton(
                   child: const Text('Add Money'),
@@ -185,8 +189,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
                     Navigator.of(dialogContext).pop();
                     if (!mounted) return;
                     // FIX: Call no longer passes context
-                    _showAddMoneyDialog(apiProvider, timeProvider,
-                        player,
+                    _showAddMoneyDialog(apiProvider, timeProvider, player,
                         startSessionAfter: false);
                   }),
             ],
