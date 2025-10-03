@@ -222,25 +222,27 @@ class _PlayerPanelState extends State<PlayerPanel> {
           return const Center(child: Text('No players found.'));
         } else {
           List<PlayerSelectionItem> players = snapshot.data!;
-          return ListView.builder(
+          return SingleChildScrollView(
             key: const PageStorageKey<String>('PlayerListScrollPosition'),
-            itemCount: players.length,
-            itemBuilder: (context, index) {
-              final player = players[index];
-              return PlayerCard(
-                player: player,
-                isSelected: player.playerId == widget.selectedPlayerId,
-                onTap: () {
-                  if (player.playerId == widget.selectedPlayerId) {
-                    widget.onPlayerSelected?.call(null);
-                  } else {
-                    widget.onPlayerSelected?.call(player.playerId);
-                    // FIX: Call no longer passes context
-                    _showPlayerMenu(player);
-                  }
-                },
-              );
-            },
+            child: IntrinsicWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: players.map((player) {
+                  return PlayerCard(
+                    player: player,
+                    isSelected: player.playerId == widget.selectedPlayerId,
+                    onTap: () {
+                      if (player.playerId == widget.selectedPlayerId) {
+                        widget.onPlayerSelected?.call(null);
+                      } else {
+                        widget.onPlayerSelected?.call(player.playerId);
+                        _showPlayerMenu(player);
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
           );
         }
       },
@@ -282,9 +284,12 @@ class PlayerCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
           title: Text(
             player.name,
             style: Theme.of(context).textTheme.titleLarge,
+            softWrap: false,
+            maxLines: 1,
           ),
         ),
       ),
