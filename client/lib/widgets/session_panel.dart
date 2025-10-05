@@ -13,7 +13,7 @@ import '../providers/time_provider.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
 
-// Helper Functions
+// Helper Functions remain the same
 String _formatMaybeMoney(double? price) {
   if (price == null) return '';
   return '\$${price.toStringAsFixed(2)}';
@@ -24,10 +24,6 @@ String _formatDuration(int totalSeconds) {
   final int hours = totalMinutes ~/ 60;
   final int minutes = totalMinutes.remainder(60);
   return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
-}
-
-String _formatMaybeDuration(int? maybeSeconds) {
-  return (maybeSeconds != null) ? _formatDuration(maybeSeconds) : '';
 }
 
 class SessionPanel extends StatefulWidget {
@@ -56,8 +52,30 @@ class _SessionPanelState extends State<SessionPanel> {
   final ItemScrollController _scrollController = ItemScrollController();
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This will run once when the widget is first built.
+    // We use addPostFrameCallback to ensure the provider is available.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _updateSessionFilter();
+      }
+    });
+  }
+
+  @override
   void didUpdateWidget(covariant SessionPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    final bool oldOnlyActive = oldWidget.clubSessionStartDateTime != null;
+    final bool newOnlyActive = widget.clubSessionStartDateTime != null;
+
+    // If the filters have changed, tell the provider to fetch new data.
+    if (oldWidget.selectedPlayerId != widget.selectedPlayerId || oldOnlyActive != newOnlyActive) {
+      _updateSessionFilter();
+    }
+
+    // Handle scrolling to a newly added session
     if (widget.newlyAddedSessionId != null &&
         widget.newlyAddedSessionId != oldWidget.newlyAddedSessionId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -68,14 +86,31 @@ class _SessionPanelState extends State<SessionPanel> {
     }
   }
 
+  void _updateSessionFilter() {
+    // Use listen:false because we're in a lifecycle method.
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    apiProvider.fetchSessionPanelList(
+      playerId: widget.selectedPlayerId,
+      onlyActive: widget.clubSessionStartDateTime != null,
+    );
+  }
+
   void _scrollToSession(int sessionId) {
-    // This logic remains the same, but the list it operates on will now be correct.
+    final sessions = Provider.of<ApiProvider>(context, listen: false).sessions;
+    final index = sessions.indexWhere((s) => s.sessionId == sessionId);
+    if (index != -1 && mounted && _scrollController.isAttached) {
+      _scrollController.scrollTo(
+        index: index,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   void _showStopClubSessionDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('End Club Session?'),
           content: const Text(
@@ -83,12 +118,12 @@ class _SessionPanelState extends State<SessionPanel> {
           actions: [
             TextButton(
               child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 final apiProvider = Provider.of<ApiProvider>(context, listen: false);
                 try {
                   await apiProvider.backupDatabase();
@@ -108,15 +143,13 @@ class _SessionPanelState extends State<SessionPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final apiProvider = Provider.of<ApiProvider>(context);
     final appSettings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
     final now = Provider.of<TimeProvider>(context, listen: false).currentTime;
-
     final defaultStartTime = appSettings.defaultSessionStartTime ?? const TimeOfDay(hour: 19, minute: 30);
     final defaultSessionStartDateTime = DateTime(now.year, now.month, now.day, defaultStartTime.hour, defaultStartTime.minute);
 
-    // Determine the filter state from the widget property.
-    final bool onlyActive = widget.clubSessionStartDateTime != null;
+    // MODIFICATION: Watch the provider for changes.
+    final apiProvider = context.watch<ApiProvider>();
 
     return Column(
       children: [
@@ -133,64 +166,43 @@ class _SessionPanelState extends State<SessionPanel> {
         ),
         const Divider(),
         Expanded(
-          child: Consumer<ApiProvider>(
-            builder: (context, apiProvider, child) {
-              if (apiProvider.connectionStatus == ConnectionStatus.connecting) {
-                return const Center(child: Text('Connecting to server...'));
-              }
-              if (apiProvider.connectionStatus == ConnectionStatus.disconnected) {
-                return const Center(child: Text('Disconnected from server.', style: TextStyle(color: Colors.red)));
-              }
-              return FutureBuilder<List<SessionPanelItem>>(
-                // THE FIX: Add a key to force the FutureBuilder to re-run when filters change.
-                key: ValueKey('${widget.selectedPlayerId}-$onlyActive'),
-                // THE FIX: Pass both the playerId and the onlyActive flag to the API call.
-                future: apiProvider.fetchSessionPanelList(
-                  playerId: widget.selectedPlayerId,
-                  onlyActive: onlyActive,
-                ),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  } else if (snapshot.hasError) {
-                    return Center(child: Text('Error loading sessions: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
-                  } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No sessions found.'));
-                  } else {
-                    List<SessionPanelItem> sessions = snapshot.data!;
-                     if (widget.newlyAddedSessionId != null) {
-                      final index = sessions.indexWhere((s) => s.sessionId == widget.newlyAddedSessionId);
-                      if (index != -1) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                           if (mounted && _scrollController.isAttached) {
-                            _scrollController.scrollTo(
-                              index: index,
-                              duration: const Duration(milliseconds: 500),
-                              curve: Curves.easeInOut,
-                            );
-                           }
-                        });
-                      }
-                    }
-                    return ScrollablePositionedList.builder(
-                      itemScrollController: _scrollController,
-                      key: const PageStorageKey<String>('SessionListScrollPosition'),
-                      itemCount: sessions.length,
-                      itemBuilder: (context, index) {
-                        final session = sessions[index];
-                        final isSelected = session.sessionId == widget.selectedSessionId;
-                        return SessionCard(
-                          session: session,
-                          isSelected: isSelected,
-                          onSessionSelected: widget.onSessionSelected,
-                          clubSessionStartDateTime: widget.clubSessionStartDateTime,
-                          showPlayerName: widget.selectedPlayerId == null,
-                        );
+          child: Builder(
+            builder: (context) {
+              // Handle connection states
+              switch (apiProvider.connectionStatus) {
+                case ConnectionStatus.connecting:
+                  return const Center(child: CircularProgressIndicator());
+                case ConnectionStatus.disconnected:
+                  return const Center(child: Text('Disconnected from server.', style: TextStyle(color: Colors.red)));
+                case ConnectionStatus.failed:
+                  return Center(
+                    child: Text('Connection failed: ${apiProvider.lastError}', style: const TextStyle(color: Colors.red)),
+                  );
+                case ConnectionStatus.connected:
+                  // Get session list directly from provider.
+                  final sessions = apiProvider.sessions;
+
+                  if (sessions.isEmpty) {
+                     return const Center(child: Text('No sessions found.'));
+                  }
+
+                  return ScrollablePositionedList.builder(
+                    itemScrollController: _scrollController,
+                    key: const PageStorageKey<String>('SessionListScrollPosition'),
+                    itemCount: sessions.length,
+                    itemBuilder: (context, index) {
+                      final session = sessions[index];
+                      final isSelected = session.sessionId == widget.selectedSessionId;
+                      return SessionCard(
+                        session: session,
+                        isSelected: isSelected,
+                        onSessionSelected: widget.onSessionSelected,
+                        clubSessionStartDateTime: widget.clubSessionStartDateTime,
+                        showPlayerName: widget.selectedPlayerId == null,
+                      );
                       },
                     );
-                  }
-                },
-              );
+              }
             },
           ),
         ),
@@ -265,14 +277,14 @@ class SessionCard extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text('Stop Session for ${session.name}?'),
           content: const Text('Are you sure you want to stop this session?'),
           actions: [
             TextButton(
               child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
               child: const Text('OK'),
@@ -285,9 +297,9 @@ class SessionCard extends StatelessWidget {
                      stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                    );
                    await apiProvider.updateSession(fullSession);
-                   Navigator.of(context).pop();
+                   Navigator.of(dialogContext).pop();
                  } catch (e) {
-                   Navigator.of(context).pop();
+                   Navigator.of(dialogContext).pop();
                    ScaffoldMessenger.of(context).showSnackBar(
                      SnackBar(content: Text('Failed to stop session: $e')),
                    );
@@ -364,8 +376,9 @@ class SessionCard extends StatelessWidget {
                       );
                     },
                   ),
-                  Text('Balance: ${_formatMaybeMoney(session.balance)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (session.stopEpoch == null)
+                    Text('Balance: ${_formatMaybeMoney(session.balance)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
             ],

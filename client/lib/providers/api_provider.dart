@@ -25,20 +25,29 @@ class ApiProvider with ChangeNotifier {
 
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
   String? _lastError;
-
   String? _currentConnectionUrl;
-
   int _connectionAttempt = -1;
   bool _isClosing = true;
   bool _mounted = true;
 
   late Future<void> connectionFuture;
 
+  // --- STATE MANAGEMENT ---
+  // Hold the data within the provider.
+  List<PlayerSelectionItem> _players = [];
+  List<SessionPanelItem> _sessions = [];
+  // Store the last used filters to allow for automatic refreshing.
+  int? _lastSessionPlayerIdFilter;
+  bool _lastSessionActiveOnlyFilter = false;
+
+  // Public getters for the UI to access the data.
+  List<PlayerSelectionItem> get players => _players;
+  List<SessionPanelItem> get sessions => _sessions;
   ConnectionStatus get connectionStatus => _connectionStatus;
   String? get lastError => _lastError;
   String? get connectingUrl => _currentConnectionUrl;
+  // --- END STATE MANAGEMENT ---
 
-  // *** FIX #1: Initialize the current URL in the constructor ***
   ApiProvider(this._appSettingsProvider) {
     _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
     connectionFuture = Completer<void>().future;
@@ -46,21 +55,29 @@ class ApiProvider with ChangeNotifier {
 
   void initialize() {
     connectionFuture = connect();
+    // Fetch initial data once connected.
+    connectionFuture.then((_) {
+      if (connectionStatus == ConnectionStatus.connected) {
+        fetchPlayerSelectionList();
+        fetchSessionPanelList();
+      }
+    });
   }
 
-  // *** FIX #2: Make the update logic robust ***
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
     final newUrl = newSettingsProvider.currentSettings.localServerUrl;
-
-    // This comparison is now safe and will only trigger on a real change.
     if (_currentConnectionUrl != newUrl) {
       print(
           '--> Server URL changed from "$_currentConnectionUrl" to "$newUrl". Forcing reconnect...');
       _appSettingsProvider = newSettingsProvider;
-      _currentConnectionUrl = newUrl; // Keep our state in sync
-      connectionFuture = connect();
+      _currentConnectionUrl = newUrl;
+      connectionFuture = connect().then((_) {
+        if (connectionStatus == ConnectionStatus.connected) {
+          fetchPlayerSelectionList();
+          fetchSessionPanelList();
+        }
+      });
     } else {
-      // If the URL is the same, we only need to update our internal reference.
       _appSettingsProvider = newSettingsProvider;
     }
   }
@@ -73,6 +90,7 @@ class ApiProvider with ChangeNotifier {
     });
   }
 
+  // ... connect, disconnect, _cleanupConnection methods remain the same ...
   Future<void> connect() async {
     final int attemptId = ++_connectionAttempt;
 
@@ -192,6 +210,7 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
+
   void _handleServerMessage(dynamic message) {
     try {
       final decoded = jsonDecode(message as String);
@@ -208,7 +227,13 @@ class ApiProvider with ChangeNotifier {
           }
         }
       } else if (type == 'broadcast' && decoded['event'] == 'update') {
-        _safeNotifyListeners();
+        // **MODIFICATION**: The server told us data changed. Refresh everything.
+        print("--> Received 'update' broadcast from server. Refreshing data...");
+        fetchPlayerSelectionList();
+        fetchSessionPanelList(
+          playerId: _lastSessionPlayerIdFilter,
+          onlyActive: _lastSessionActiveOnlyFilter,
+        );
       }
     } catch (e) {
       print('Error handling server message: $e');
@@ -218,7 +243,11 @@ class ApiProvider with ChangeNotifier {
   Future<dynamic> _sendCommand(
       String command, [Map<String, dynamic>? params]) async {
     if (connectionStatus != ConnectionStatus.connected) {
-      throw Exception('Not connected to the server.');
+      // Wait for the connection to complete before sending command
+      await connectionFuture;
+      if (connectionStatus != ConnectionStatus.connected) {
+        throw Exception('Not connected to the server.');
+      }
     }
     final requestId = _uuid.v4();
     final completer = Completer<dynamic>();
@@ -240,24 +269,39 @@ class ApiProvider with ChangeNotifier {
     });
   }
 
-  // --- Public API Methods ---
+  // --- Public API Methods (Now they update internal state) ---
 
-  Future<List<PlayerSelectionItem>> fetchPlayerSelectionList() async {
-    final result = await _sendCommand('getPlayers');
-    return (result as List)
-        .map((item) => PlayerSelectionItem.fromMap(item))
-        .toList();
+  Future<void> fetchPlayerSelectionList() async {
+    try {
+      final result = await _sendCommand('getPlayers');
+      _players = (result as List)
+          .map((item) => PlayerSelectionItem.fromMap(item))
+          .toList();
+      _safeNotifyListeners();
+    } catch (e) {
+      print('Failed to fetch player list: $e');
+    }
   }
 
-  Future<List<SessionPanelItem>> fetchSessionPanelList(
+  Future<void> fetchSessionPanelList(
       {int? playerId, bool onlyActive = false}) async {
-    final result = await _sendCommand(
-        'getSessions', {'playerId': playerId, 'onlyActive': onlyActive});
-    return (result as List)
-        .map((item) => SessionPanelItem.fromMap(item))
-        .toList();
+    // Store the latest filters
+    _lastSessionPlayerIdFilter = playerId;
+    _lastSessionActiveOnlyFilter = onlyActive;
+    try {
+      final result = await _sendCommand(
+          'getSessions', {'playerId': playerId, 'onlyActive': onlyActive});
+      _sessions = (result as List)
+          .map((item) => SessionPanelItem.fromMap(item))
+          .toList();
+      _safeNotifyListeners();
+    } catch (e) {
+      print('Failed to fetch session list: $e');
+    }
   }
 
+  // Mutation methods no longer need to manually refresh,
+  // the server broadcast will handle it.
   Future<int> addSession(Session session) async {
     final result = await _sendCommand('addSession', session.toMap());
     return result['sessionId'];
