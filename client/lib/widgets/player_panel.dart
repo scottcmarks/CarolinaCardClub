@@ -30,6 +30,8 @@ class PlayerPanel extends StatefulWidget {
 }
 
 class _PlayerPanelState extends State<PlayerPanel> {
+  // Methods like _startNewSession and _showAddMoneyDialog remain largely the same,
+  // but they now trigger automatic UI updates across the app when they call apiProvider methods.
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
     try {
@@ -55,7 +57,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
     }
   }
 
-  // FIX: Removed BuildContext parameter. It will now use the State's own context.
   void _showAddMoneyDialog(
       ApiProvider apiProvider,
       TimeProvider timeProvider,
@@ -67,7 +68,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
     }
 
     showDialog(
-      context: context, // Uses the stable context from _PlayerPanelState
+      context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text('Add Money for ${player.name}'),
@@ -110,7 +111,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
                       await _startNewSession(
                           apiProvider, timeProvider, updatedPlayer);
                     } else if (startSessionAfter) {
-                      // FIX: Call no longer passes context
                       _showAddMoneyDialog(apiProvider, timeProvider,
                           updatedPlayer,
                           startSessionAfter: true);
@@ -130,26 +130,24 @@ class _PlayerPanelState extends State<PlayerPanel> {
     );
   }
 
-  // FIX: Removed BuildContext parameter.
   void _showPlayerMenu(PlayerSelectionItem player) {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-    // Create the currency formatter
     final currencyFormatter =
         NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final formattedBalance = currencyFormatter.format(player.balance);
     final titleText = '${player.name}: balance is $formattedBalance';
 
     showDialog(
-      context: context, // Uses the stable context from _PlayerPanelState
+      context: context,
       builder: (BuildContext dialogContext) {
         final canStartSession = widget.clubSessionStartDateTime != null;
 
         if (player.balance < 0) {
           return AlertDialog(
             backgroundColor: Colors.red.shade100,
-            title: Text(titleText), // Updated Title
+            title: Text(titleText),
             content: const Text('Please add money to continue.'),
             actions: [
               TextButton(
@@ -163,7 +161,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
                     if (!mounted) return;
-                    // FIX: Call no longer passes context
                     _showAddMoneyDialog(apiProvider, timeProvider, player,
                         startSessionAfter: canStartSession);
                   }),
@@ -172,10 +169,12 @@ class _PlayerPanelState extends State<PlayerPanel> {
         } else {
           return AlertDialog(
             backgroundColor: Colors.green.shade100,
-            title: Text(titleText), // Updated Title
-            content: const Text('What would you like to do?'),
+            title: Text(titleText),
+            content: player.hasActiveSession
+                ? const Text('This player already has an active session.')
+                : const Text('What would you like to do?'),
             actions: [
-              if (canStartSession)
+              if (canStartSession && !player.hasActiveSession)
                 TextButton(
                     child: const Text('Open a new session'),
                     onPressed: () async {
@@ -188,7 +187,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
                     if (!mounted) return;
-                    // FIX: Call no longer passes context
                     _showAddMoneyDialog(apiProvider, timeProvider, player,
                         startSessionAfter: false);
                   }),
@@ -201,55 +199,53 @@ class _PlayerPanelState extends State<PlayerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final apiProvider = Provider.of<ApiProvider>(context);
+    // MODIFICATION: Watch the provider for changes.
+    final apiProvider = context.watch<ApiProvider>();
 
-    if (apiProvider.connectionStatus == ConnectionStatus.connecting) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (apiProvider.connectionStatus == ConnectionStatus.disconnected) {
-      return const Center(
-          child: Text('Disconnected from server.',
-              style: TextStyle(color: Colors.red)));
-    }
+    // Handle connection states
+    switch (apiProvider.connectionStatus) {
+      case ConnectionStatus.connecting:
+        return const Center(child: CircularProgressIndicator());
+      case ConnectionStatus.disconnected:
+        return const Center(
+            child: Text('Disconnected from server.',
+                style: TextStyle(color: Colors.red)));
+      case ConnectionStatus.failed:
+        return Center(
+          child: Text('Connection failed: ${apiProvider.lastError}',
+              style: const TextStyle(color: Colors.red)),
+        );
+      case ConnectionStatus.connected:
+        // Get the player list directly from the provider.
+        final players = apiProvider.players;
 
-    return FutureBuilder<List<PlayerSelectionItem>>(
-      future: apiProvider.fetchPlayerSelectionList(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(
-              child: Text('Error loading players: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red)));
-        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        if (players.isEmpty) {
           return const Center(child: Text('No players found.'));
-        } else {
-          List<PlayerSelectionItem> players = snapshot.data!;
-          return SingleChildScrollView(
-            key: const PageStorageKey<String>('PlayerListScrollPosition'),
-            child: IntrinsicWidth(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: players.map((player) {
-                  return PlayerCard(
-                    player: player,
-                    isSelected: player.playerId == widget.selectedPlayerId,
-                    onTap: () {
-                      if (player.playerId == widget.selectedPlayerId) {
-                        widget.onPlayerSelected?.call(null);
-                      } else {
-                        widget.onPlayerSelected?.call(player.playerId);
-                        _showPlayerMenu(player);
-                      }
-                    },
-                  );
-                }).toList(),
-              ),
-            ),
-          );
         }
-      },
-    );
+
+        return SingleChildScrollView(
+          key: const PageStorageKey<String>('PlayerListScrollPosition'),
+          child: IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: players.map((player) {
+                return PlayerCard(
+                  player: player,
+                  isSelected: player.playerId == widget.selectedPlayerId,
+                  onTap: () {
+                    if (player.playerId == widget.selectedPlayerId) {
+                      widget.onPlayerSelected?.call(null);
+                    } else {
+                      widget.onPlayerSelected?.call(player.playerId);
+                      _showPlayerMenu(player);
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        );
+    }
   }
 }
 

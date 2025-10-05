@@ -2,12 +2,14 @@
 class PlayerSelectionItem {
   final int playerId;
   final String name;
-  final double balance; // Assuming balance can be null or a double
+  final double balance;
+  final bool hasActiveSession; // Renamed from isActive
 
   PlayerSelectionItem({
     required this.playerId,
     required this.name,
     required this.balance,
+    required this.hasActiveSession, // Renamed in constructor
   });
 
   // Factory method to create a PlayerSelectionItem from a map (database row)
@@ -15,7 +17,11 @@ class PlayerSelectionItem {
     return PlayerSelectionItem(
       playerId: map['Player_Id'],
       name: map['Name'] ?? 'Unnamed',
-      balance: (map['Balance'] is int) ? (map['Balance'] as int).toDouble() : map['Balance'] ?? 0.0, // Handle potential int type for balance
+      balance: (map['Balance'] is int)
+          ? (map['Balance'] as int).toDouble()
+          : map['Balance'] ?? 0.0,
+      // Logic now assigns to the renamed field
+      hasActiveSession: (map['Active'] ?? 0) == 1,
     );
   }
 }
