@@ -38,9 +38,8 @@ void main() async {
       .addHandler(router);
 
   final server = await io.serve(handler, '0.0.0.0', 5109);
-  final serverAddress = server.address.host;
 
-  print('✓ Secure WebSocket Server listening on port ${server.port}');
+  print('✓ Secure WebSocket Server listening for any host port ${server.port}');
   print('---');
 }
 
@@ -239,7 +238,8 @@ Future<void> _downloadDatabase() async {
   try {
     // Construct the URL with the apiKey as a query parameter.
     final downloadUri = Uri.parse('$downloadUrl?apiKey=$remoteApiKey');
-    print('--- Downloading database from $downloadUri ---');
+    // print('--- Downloading database from $downloadUri ---');
+    print('--- Downloading database from $downloadUrl ---');
 
     final response = await http.get(downloadUri).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
