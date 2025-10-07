@@ -32,21 +32,16 @@ class ApiProvider with ChangeNotifier {
 
   late Future<void> connectionFuture;
 
-  // --- STATE MANAGEMENT ---
-  // Hold the data within the provider.
   List<PlayerSelectionItem> _players = [];
   List<SessionPanelItem> _sessions = [];
-  // Store the last used filters to allow for automatic refreshing.
   int? _lastSessionPlayerIdFilter;
   bool _lastSessionActiveOnlyFilter = false;
 
-  // Public getters for the UI to access the data.
   List<PlayerSelectionItem> get players => _players;
   List<SessionPanelItem> get sessions => _sessions;
   ConnectionStatus get connectionStatus => _connectionStatus;
   String? get lastError => _lastError;
   String? get connectingUrl => _currentConnectionUrl;
-  // --- END STATE MANAGEMENT ---
 
   ApiProvider(this._appSettingsProvider) {
     _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
@@ -55,13 +50,18 @@ class ApiProvider with ChangeNotifier {
 
   void initialize() {
     connectionFuture = connect();
-    // Fetch initial data once connected.
-    connectionFuture.then((_) {
+    connectionFuture.then((_) async {
       if (connectionStatus == ConnectionStatus.connected) {
-        fetchPlayerSelectionList();
-        fetchSessionPanelList();
+        await fetchPlayerSelectionList();
+        await fetchSessionPanelList();
       }
     });
+  }
+
+  // **NEW**: A dedicated method to force a reconnection attempt.
+  void retryConnection() {
+    // Re-run the same logic as the initial startup.
+    initialize();
   }
 
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
@@ -71,12 +71,8 @@ class ApiProvider with ChangeNotifier {
           '--> Server URL changed from "$_currentConnectionUrl" to "$newUrl". Forcing reconnect...');
       _appSettingsProvider = newSettingsProvider;
       _currentConnectionUrl = newUrl;
-      connectionFuture = connect().then((_) {
-        if (connectionStatus == ConnectionStatus.connected) {
-          fetchPlayerSelectionList();
-          fetchSessionPanelList();
-        }
-      });
+      // When the URL changes, the proxy provider will force a reconnect.
+      retryConnection();
     } else {
       _appSettingsProvider = newSettingsProvider;
     }
@@ -90,35 +86,25 @@ class ApiProvider with ChangeNotifier {
     });
   }
 
-  // ... connect, disconnect, _cleanupConnection methods remain the same ...
   Future<void> connect() async {
     final int attemptId = ++_connectionAttempt;
-
     await disconnect();
-
     if (attemptId != _connectionAttempt) {
-      print(
-          '--> Connection attempt #$attemptId was cancelled before starting.');
       return;
     }
-
     _connectionStatus = ConnectionStatus.connecting;
     _currentConnectionUrl =
         _appSettingsProvider.currentSettings.localServerUrl;
     _lastError = null;
     _safeNotifyListeners();
-
     final serverUrl = _currentConnectionUrl!;
-
     try {
       final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
       _channel = IOWebSocketChannel.connect(
         wsUrl,
         connectTimeout: const Duration(seconds: 10),
       );
-
       final handshakeCompleter = Completer<void>();
-
       _streamSubscription = _channel!.stream.listen(
         (message) {
           if (!handshakeCompleter.isCompleted) {
@@ -142,7 +128,6 @@ class ApiProvider with ChangeNotifier {
           if (!handshakeCompleter.isCompleted) {
             handshakeCompleter.completeError(error);
           } else {
-            print('--> WebSocket connection error after handshake: $error');
             disconnect();
           }
         },
@@ -151,34 +136,18 @@ class ApiProvider with ChangeNotifier {
             handshakeCompleter
                 .completeError(Exception('Connection closed during handshake.'));
           } else {
-            print(
-                '--> WebSocket connection closed by server after handshake.');
             disconnect();
           }
         },
       );
-
       await handshakeCompleter.future;
-
       if (attemptId == _connectionAttempt) {
         _connectionStatus = ConnectionStatus.connected;
-      }
-    } on WebSocketChannelException catch (e) {
-      if (attemptId == _connectionAttempt) {
-        _connectionStatus = ConnectionStatus.failed;
-        _lastError = e.message ?? "WebSocket connection failed.";
-        await _cleanupConnection();
-      }
-    } on TimeoutException catch (_) {
-      if (attemptId == _connectionAttempt) {
-        _connectionStatus = ConnectionStatus.failed;
-        _lastError = "Connection timed out.";
-        await _cleanupConnection();
       }
     } catch (e) {
       if (attemptId == _connectionAttempt) {
         _connectionStatus = ConnectionStatus.failed;
-        _lastError = "An unknown error occurred: ${e.toString()}";
+        _lastError = "Connection error: ${e.toString()}";
         await _cleanupConnection();
       }
     } finally {
@@ -193,8 +162,6 @@ class ApiProvider with ChangeNotifier {
       await _streamSubscription?.cancel();
       _streamSubscription = null;
       await _channel?.sink.close().timeout(const Duration(seconds: 1));
-    } on TimeoutException {
-      // Ignore
     } catch (e) {
       // Ignore
     }
@@ -209,7 +176,6 @@ class ApiProvider with ChangeNotifier {
       _safeNotifyListeners();
     }
   }
-
 
   void _handleServerMessage(dynamic message) {
     try {
@@ -227,8 +193,6 @@ class ApiProvider with ChangeNotifier {
           }
         }
       } else if (type == 'broadcast' && decoded['event'] == 'update') {
-        // **MODIFICATION**: The server told us data changed. Refresh everything.
-        print("--> Received 'update' broadcast from server. Refreshing data...");
         fetchPlayerSelectionList();
         fetchSessionPanelList(
           playerId: _lastSessionPlayerIdFilter,
@@ -243,7 +207,6 @@ class ApiProvider with ChangeNotifier {
   Future<dynamic> _sendCommand(
       String command, [Map<String, dynamic>? params]) async {
     if (connectionStatus != ConnectionStatus.connected) {
-      // Wait for the connection to complete before sending command
       await connectionFuture;
       if (connectionStatus != ConnectionStatus.connected) {
         throw Exception('Not connected to the server.');
@@ -269,8 +232,6 @@ class ApiProvider with ChangeNotifier {
     });
   }
 
-  // --- Public API Methods (Now they update internal state) ---
-
   Future<void> fetchPlayerSelectionList() async {
     try {
       final result = await _sendCommand('getPlayers');
@@ -280,12 +241,12 @@ class ApiProvider with ChangeNotifier {
       _safeNotifyListeners();
     } catch (e) {
       print('Failed to fetch player list: $e');
+      rethrow;
     }
   }
 
   Future<void> fetchSessionPanelList(
       {int? playerId, bool onlyActive = false}) async {
-    // Store the latest filters
     _lastSessionPlayerIdFilter = playerId;
     _lastSessionActiveOnlyFilter = onlyActive;
     try {
@@ -297,32 +258,48 @@ class ApiProvider with ChangeNotifier {
       _safeNotifyListeners();
     } catch (e) {
       print('Failed to fetch session list: $e');
+      rethrow;
     }
   }
 
-  // Mutation methods no longer need to manually refresh,
-  // the server broadcast will handle it.
   Future<int> addSession(Session session) async {
     final result = await _sendCommand('addSession', session.toMap());
+    await fetchPlayerSelectionList();
+    await fetchSessionPanelList(
+        playerId: _lastSessionPlayerIdFilter,
+        onlyActive: _lastSessionActiveOnlyFilter);
     return result['sessionId'];
   }
 
   Future<void> updateSession(Session session) async {
     await _sendCommand('updateSession', session.toMap());
+    await fetchPlayerSelectionList();
+    await fetchSessionPanelList(
+        playerId: _lastSessionPlayerIdFilter,
+        onlyActive: _lastSessionActiveOnlyFilter);
   }
 
   Future<PlayerSelectionItem> addPayment(
       Map<String, dynamic> paymentMap) async {
     final result = await _sendCommand('addPayment', paymentMap);
+    await fetchPlayerSelectionList();
     return PlayerSelectionItem.fromMap(result);
   }
 
   Future<void> backupDatabase() async {
     await _sendCommand('backupDatabase');
+    await fetchPlayerSelectionList();
+    await fetchSessionPanelList(
+        playerId: _lastSessionPlayerIdFilter,
+        onlyActive: _lastSessionActiveOnlyFilter);
   }
 
   Future<void> reloadServerDatabase() async {
     await _sendCommand('reloadDatabase');
+    await fetchPlayerSelectionList();
+    await fetchSessionPanelList(
+        playerId: _lastSessionPlayerIdFilter,
+        onlyActive: _lastSessionActiveOnlyFilter);
   }
 
   @override
