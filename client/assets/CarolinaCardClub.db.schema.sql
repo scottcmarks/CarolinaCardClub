@@ -112,21 +112,33 @@ MAX(s.Start_Epoch) as Most_Recent_Start_Epoch
 FROM Session as s
 GROUP BY s.Player_Id
 ORDER BY s.Start_Epoch DESC;
+CREATE VIEW "Player_Most_Recent_Session_Stop_Epoch" AS
+SELECT
+s.Player_Id as Player_Id,
+s.Session_Id as Session_Id,
+CASE WHEN MAX(IFNULL(s.Stop_Epoch,99999999999))==99999999999 THEN NULL ELSE MAX(IFNULL(s.Stop_Epoch,99999999999)) END  as Most_Recent_Stop_Epoch
+FROM Session as s
+GROUP BY s.Player_Id
+ORDER BY IFNULL(Most_Recent_Stop_Epoch,99999999999) DESC;
 CREATE VIEW "Player_Selection_List" AS
 SELECT
   p.Player_Id,
   IFNULL(p.NickName, p.Name) as Name,
-  IFNULL(b.Balance,0.00) as Balance
+  IFNULL(b.Balance,0.00) as Balance,
+  start.Most_Recent_Start_Epoch is not NULL AND stop.Most_Recent_Stop_Epoch is NULL as Active
  FROM
    Player as p
   LEFT JOIN
-  Player_Most_Recent_Session_Start_Epoch as s
-  ON p.Player_Id == s.Player_Id
+  Player_Most_Recent_Session_Start_Epoch as start
+  ON p.Player_Id == start.Player_Id
+  LEFT JOIN
+  Player_Most_Recent_Session_Stop_Epoch as stop
+  ON p.Player_Id == stop.Player_Id
  LEFT JOIN
    Player_Balance as b
 ON p.Player_Id == b.Player_Id
 WHERE p.Phone_number is NOT NULL AND p.Phone_number != '***MISSING***' and p.Flag is  NULL
-ORDER by s.Most_Recent_Start_Epoch DESC, p.Player_Category_Id ASC, Name ASC;
+ORDER BY start.Most_Recent_Start_Epoch IS NULL, p.Player_Category_Id ASC, Name ASC;
 CREATE VIEW "Player_Total_Payment" AS
 SELECT p.Player_Id, IFNULL(SUM(pmt.Amount),0) as Total_Payment
 FROM  Player as p LEFT JOIN Payment as pmt ON p.Player_Id == pmt.Player_Id
@@ -224,7 +236,9 @@ JOIN Session_Amount_List as sal
 JOIN Player_Balance as pb
 WHERE sl.Session_Id == sal.Session_Id
 AND sl.Player_Id == pb.Player_Id
-ORDER BY CASE WHEN sl.Stop_Epoch IS NULL THEN 0 ELSE 1 END;
+ORDER BY CASE WHEN sl.Stop_Epoch IS NULL THEN 0 ELSE 1 END,
+         sal.Rate,
+         sl.Name;
 CREATE VIEW "Session_Rate_List" AS
 SELECT
  s.Session_Id,
