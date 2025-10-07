@@ -8,6 +8,16 @@ import '../models/app_settings.dart';
 import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
 
+Future<void> showServerSettingsDialog(BuildContext context) async {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext context) {
+      return const ServerSettingsDialog();
+    },
+  );
+}
+
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
@@ -27,12 +37,7 @@ class SettingsPage extends StatelessWidget {
             ),
             leading: const Icon(Icons.storage),
             onTap: () {
-              showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return const ServerSettingsDialog();
-                },
-              );
+              showServerSettingsDialog(context);
             },
           ),
         ],
@@ -78,6 +83,7 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
   Widget build(BuildContext context) {
     final appSettingsProvider =
         Provider.of<AppSettingsProvider>(context, listen: false);
+    // **MODIFICATION**: Get the ApiProvider here.
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
 
     return AlertDialog(
@@ -127,12 +133,17 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
                   appSettingsProvider.currentSettings.preferredTheme,
             );
 
+            // First, save the settings. This will trigger the update in the
+            // proxy provider if the URL has changed.
             appSettingsProvider.updateSettings(newSettings);
-            apiProvider.connect();
+
+            // **THE FIX**: Explicitly call our new retry method. This ensures
+            // a connection is always attempted, even if the URL hasn't changed.
+            apiProvider.retryConnection();
 
             Navigator.of(context).pop();
           },
-          child: Text(_isUrlChanged ? 'Save' : 'Retry'),
+          child: Text(_isUrlChanged ? 'Save & Reconnect' : 'Retry'),
         ),
       ],
     );
