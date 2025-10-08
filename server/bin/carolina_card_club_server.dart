@@ -113,7 +113,7 @@ Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message)
 }
 
 
-final _webSocketHandler = webSocketHandler((WebSocketChannel webSocket, {String? protocol}) {
+final _webSocketHandler = webSocketHandler((WebSocketChannel webSocket, String? protocol) {
   print('✓ Client connection established.');
   _clients.add(webSocket);
 
