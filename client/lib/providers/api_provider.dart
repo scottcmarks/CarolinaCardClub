@@ -47,6 +47,13 @@ class ApiProvider with ChangeNotifier {
   }
 
   void initialize() {
+    if (_connectionStatus == ConnectionStatus.connecting || _connectionStatus == ConnectionStatus.connected) {
+      return;
+    }
+    _connectionStatus = ConnectionStatus.connecting;
+    _lastError = null;
+    notifyListeners();
+
     connectionFuture = connect();
     connectionFuture.then((_) async {
       if (connectionStatus == ConnectionStatus.connected) {
@@ -63,7 +70,7 @@ class ApiProvider with ChangeNotifier {
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
     final newUrl = newSettingsProvider.currentSettings.localServerUrl;
     if (_currentConnectionUrl != newUrl) {
-      debugPrint( // <-- FIXED
+      debugPrint(
           '--> Server URL changed from "$_currentConnectionUrl" to "$newUrl". Forcing reconnect...');
       _appSettingsProvider = newSettingsProvider;
       _currentConnectionUrl = newUrl;
@@ -82,19 +89,20 @@ class ApiProvider with ChangeNotifier {
   }
 
   Future<void> connect() async {
+    // **THE FIX**: Start a timer to measure how long connection takes.
+    final stopwatch = Stopwatch()..start();
+
     final int attemptId = ++_connectionAttempt;
     await disconnect();
     if (attemptId != _connectionAttempt) {
       return;
     }
-    _connectionStatus = ConnectionStatus.connecting;
+
     _currentConnectionUrl =
         _appSettingsProvider.currentSettings.localServerUrl;
-    _lastError = null;
-    _safeNotifyListeners();
     final serverUrl = _currentConnectionUrl!;
+
     try {
-      // **FIXED**: Use string interpolation.
       final wsUrl = Uri.parse('${serverUrl.replaceFirst('http', 'ws')}/ws');
       _channel = IOWebSocketChannel.connect(
         wsUrl,
@@ -147,6 +155,13 @@ class ApiProvider with ChangeNotifier {
         await _cleanupConnection();
       }
     } finally {
+      // **THE FIX**: Enforce a minimum display time for the spinner.
+      final elapsed = stopwatch.elapsedMilliseconds;
+      const minDisplayTime = 500; // milliseconds
+      if (elapsed < minDisplayTime) {
+        await Future.delayed(Duration(milliseconds: minDisplayTime - elapsed));
+      }
+
       _safeNotifyListeners();
     }
   }
@@ -196,7 +211,7 @@ class ApiProvider with ChangeNotifier {
         );
       }
     } catch (e) {
-      debugPrint('Error handling server message: $e'); // <-- FIXED
+      debugPrint('Error handling server message: $e');
     }
   }
 
@@ -236,7 +251,7 @@ class ApiProvider with ChangeNotifier {
           .toList();
       _safeNotifyListeners();
     } catch (e) {
-      debugPrint('Failed to fetch player list: $e'); // <-- FIXED
+      debugPrint('Failed to fetch player list: $e');
       rethrow;
     }
   }
@@ -253,7 +268,7 @@ class ApiProvider with ChangeNotifier {
           .toList();
       _safeNotifyListeners();
     } catch (e) {
-      debugPrint('Failed to fetch session list: $e'); // <-- FIXED
+      debugPrint('Failed to fetch session list: $e');
       rethrow;
     }
   }
