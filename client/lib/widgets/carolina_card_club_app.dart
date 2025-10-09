@@ -7,7 +7,7 @@ import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
 import 'connection_failed_widget.dart';
 import 'main_split_view_page.dart';
-import 'settings_page.dart'; // Import for the new dialog function
+import 'settings_page.dart';
 
 class CarolinaCardClubApp extends StatelessWidget {
   const CarolinaCardClubApp({super.key});
@@ -48,9 +48,6 @@ class ConnectionHandler extends StatefulWidget {
 }
 
 class _ConnectionHandlerState extends State<ConnectionHandler> {
-  // Flag to prevent multiple dialogs is no longer needed here,
-  // as the dialog is only shown on an explicit user tap.
-
   @override
   Widget build(BuildContext context) {
     return Consumer<ApiProvider>(
@@ -60,6 +57,8 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
             return const MainSplitViewPage();
 
           case ConnectionStatus.connecting:
+            // **CLEANUP**: Revert to using a Scaffold, which is more conventional
+            // for a full-screen loading state now that the timing is fixed.
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
@@ -69,10 +68,7 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
             return Scaffold(
               body: ConnectionFailedWidget(
                 errorMessage: api.lastError ?? 'Could not connect to the server.',
-                // **THE FIX**: The "Retry" button now calls the specific dialog function.
-                onRetry: () {
-                  showServerSettingsDialog(context);
-                },
+                onRetry: () => showServerSettingsDialog(context),
               ),
             );
         }
