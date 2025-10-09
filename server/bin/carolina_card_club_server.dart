@@ -38,8 +38,9 @@ void main() async {
       .addHandler(router);
 
   final server = await io.serve(handler, '0.0.0.0', 5109);
+  final serverAddress = server.address.host;
 
-  print('✓ Secure WebSocket Server listening for any host port ${server.port}');
+  print('✓ Secure WebSocket Server listening on port ${server.port}');
   print('---');
 }
 
@@ -77,12 +78,17 @@ Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message)
         await _updateSession(params!);
         payload = {'status': 'ok'};
         break;
+      case 'stopAllSessions':
+        await _stopAllSessions(params!);
+        payload = {'status': 'ok'};
+        break;
       case 'addPayment':
         payload = await _addPayment(params!);
         break;
       case 'backupDatabase':
         await _backupDatabase();
         payload = {'status': 'ok'};
+        _broadcastUpdate();
         break;
       case 'reloadDatabase':
         await _reloadDatabase();
@@ -200,6 +206,23 @@ Future<void> _updateSession(Map<String, dynamic> sessionData) async {
   _broadcastUpdate();
 }
 
+Future<void> _stopAllSessions(Map<String, dynamic> params) async {
+  final db = await _db;
+  final int? stopEpoch = params['stopEpoch'];
+  if (stopEpoch == null) {
+    throw Exception('stopEpoch parameter is required for stopAllSessions');
+  }
+
+  await db.update(
+    'Session',
+    {'Stop_Epoch': stopEpoch},
+    where: 'Stop_Epoch IS NULL',
+  );
+  // **THE FIX**: Do NOT broadcast here. The client that initiated the
+  // action will handle its own refresh after the full sequence is complete.
+  // _broadcastUpdate();
+}
+
 Future<Map<String, Object?>> _addPayment(Map<String, dynamic> paymentData) async {
   final db = await _db;
   await db.insert('Payment', paymentData);
@@ -236,10 +259,8 @@ Future<void> _backupDatabase() async {
 Future<void> _downloadDatabase() async {
   final dbFile = File(p.join(Directory.current.path, dbFileName));
   try {
-    // Construct the URL with the apiKey as a query parameter.
     final downloadUri = Uri.parse('$downloadUrl?apiKey=$remoteApiKey');
-    // print('--- Downloading database from $downloadUri ---');
-    print('--- Downloading database from $downloadUrl ---');
+    print('--- Downloading database from $downloadUri ---');
 
     final response = await http.get(downloadUri).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {

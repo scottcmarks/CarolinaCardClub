@@ -58,9 +58,7 @@ class ApiProvider with ChangeNotifier {
     });
   }
 
-  // **NEW**: A dedicated method to force a reconnection attempt.
   void retryConnection() {
-    // Re-run the same logic as the initial startup.
     initialize();
   }
 
@@ -71,7 +69,6 @@ class ApiProvider with ChangeNotifier {
           '--> Server URL changed from "$_currentConnectionUrl" to "$newUrl". Forcing reconnect...');
       _appSettingsProvider = newSettingsProvider;
       _currentConnectionUrl = newUrl;
-      // When the URL changes, the proxy provider will force a reconnect.
       retryConnection();
     } else {
       _appSettingsProvider = newSettingsProvider;
@@ -279,6 +276,21 @@ class ApiProvider with ChangeNotifier {
         onlyActive: _lastSessionActiveOnlyFilter);
   }
 
+  Future<void> stopAllSessions(DateTime stopTime) async {
+    final stopEpoch = stopTime.millisecondsSinceEpoch ~/ 1000;
+    // Step 1: Tell the server to stop all sessions.
+    await _sendCommand('stopAllSessions', {'stopEpoch': stopEpoch});
+
+    // **THE CHANGE**: Step 2: If the first step succeeds, back up the database.
+    await backupDatabase();
+
+    // Step 3: Refresh the client UI with the new data.
+    await fetchPlayerSelectionList();
+    await fetchSessionPanelList(
+        playerId: _lastSessionPlayerIdFilter,
+        onlyActive: _lastSessionActiveOnlyFilter);
+  }
+
   Future<PlayerSelectionItem> addPayment(
       Map<String, dynamic> paymentMap) async {
     final result = await _sendCommand('addPayment', paymentMap);
@@ -288,10 +300,6 @@ class ApiProvider with ChangeNotifier {
 
   Future<void> backupDatabase() async {
     await _sendCommand('backupDatabase');
-    await fetchPlayerSelectionList();
-    await fetchSessionPanelList(
-        playerId: _lastSessionPlayerIdFilter,
-        onlyActive: _lastSessionActiveOnlyFilter);
   }
 
   Future<void> reloadServerDatabase() async {
