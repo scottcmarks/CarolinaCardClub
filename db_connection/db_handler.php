@@ -52,16 +52,26 @@ if ($request_method === 'GET') {
         die("Error: File upload failed with error code: " . $_FILES['database']['error']);
     }
 
-    $timestamp = date("Y-m-d_H-i-s");
-    $original_filename = basename($_FILES["database"]["name"]);
-    $target_file = $backup_dir . $timestamp . "_" . $original_filename;
+    // **MODIFICATION**: Implement the correct save/overwrite logic.
 
-    if (move_uploaded_file($_FILES['database']['tmp_name'], $target_file)) {
+    // 1. First, back up the CURRENT main database file before we overwrite it.
+    if (file_exists($db_file)) {
+        $timestamp = date("Y-m-d_H-i-s");
+        $backup_path = $backup_dir . $timestamp . "_" . basename($db_file);
+        if (!copy($db_file, $backup_path)) {
+            header("HTTP/1.1 500 Internal Server Error");
+            die("Error: Could not back up the existing database file before overwriting.");
+        }
+    }
+
+    // 2. Now, move the newly uploaded file to replace the main database file.
+    // The target is now the main $db_file, not the backup directory.
+    if (move_uploaded_file($_FILES['database']['tmp_name'], $db_file)) {
         header("HTTP/1.1 200 OK");
-        echo "Success: File uploaded and saved as " . basename($target_file);
+        echo "Success: The main database has been updated with the uploaded file.";
     } else {
         header("HTTP/1.1 500 Internal Server Error");
-        echo "Error: Could not move uploaded file. Check permissions and paths.";
+        echo "Error: Could not move uploaded file to replace main database. Check permissions and paths.";
     }
 } else {
     header("HTTP/1.1 405 Method Not Allowed");

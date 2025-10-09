@@ -38,7 +38,7 @@ void main() async {
       .addHandler(router);
 
   final server = await io.serve(handler, '0.0.0.0', 5109);
-  final serverAddress = server.address.host;
+  // final serverAddress = server.address.host;
 
   print('✓ Secure WebSocket Server listening on port ${server.port}');
   print('---');
@@ -139,7 +139,7 @@ final _webSocketHandler = webSocketHandler((WebSocketChannel webSocket, String? 
 });
 
 void _broadcastUpdate() {
-  print('-> Broadcasting update to ${_clients.length} clients...');
+  // print('-> Broadcasting update to ${_clients.length} client${_clients.length==1 ? "" : "s"}...');
   final message = jsonEncode({'type': 'broadcast', 'event': 'update'});
   for (final client in _clients.toList()) {
     try {
@@ -218,9 +218,6 @@ Future<void> _stopAllSessions(Map<String, dynamic> params) async {
     {'Stop_Epoch': stopEpoch},
     where: 'Stop_Epoch IS NULL',
   );
-  // **THE FIX**: Do NOT broadcast here. The client that initiated the
-  // action will handle its own refresh after the full sequence is complete.
-  // _broadcastUpdate();
 }
 
 Future<Map<String, Object?>> _addPayment(Map<String, dynamic> paymentData) async {
@@ -260,7 +257,7 @@ Future<void> _downloadDatabase() async {
   final dbFile = File(p.join(Directory.current.path, dbFileName));
   try {
     final downloadUri = Uri.parse('$downloadUrl?apiKey=$remoteApiKey');
-    print('--- Downloading database from $downloadUri ---');
+    print('--- Downloading database from $downloadUrl ---');
 
     final response = await http.get(downloadUri).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {

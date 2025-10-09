@@ -1,10 +1,9 @@
+// client/lib/providers/time_provider.dart
 
-import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart'; // For formatting the time
-import 'package:provider/provider.dart';
+
 import 'package:flutter/foundation.dart'; // Required for ChangeNotifier
+import 'package:flutter/material.dart';
 
 
 class TimeProvider with ChangeNotifier {

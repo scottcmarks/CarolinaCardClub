@@ -13,7 +13,6 @@ import '../providers/time_provider.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
 
-// Helper Functions
 String _formatMaybeMoney(double? price) {
   if (price == null) return '';
   return '\$${price.toStringAsFixed(2)}';
@@ -33,7 +32,6 @@ class SessionPanel extends StatefulWidget {
   final int? newlyAddedSessionId;
   final DateTime? clubSessionStartDateTime;
   final ValueChanged<DateTime?> onClubSessionTimeChanged;
-  // The onRetryConnection parameter is removed from here
 
   const SessionPanel({
     super.key,
@@ -43,7 +41,6 @@ class SessionPanel extends StatefulWidget {
     this.newlyAddedSessionId,
     required this.clubSessionStartDateTime,
     required this.onClubSessionTimeChanged,
-    // The onRetryConnection parameter is removed from here
   });
 
   @override
@@ -66,14 +63,11 @@ class _SessionPanelState extends State<SessionPanel> {
   @override
   void didUpdateWidget(covariant SessionPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-
     final bool oldOnlyActive = oldWidget.clubSessionStartDateTime != null;
     final bool newOnlyActive = widget.clubSessionStartDateTime != null;
-
     if (oldWidget.selectedPlayerId != widget.selectedPlayerId || oldOnlyActive != newOnlyActive) {
       _updateSessionFilter();
     }
-
     if (widget.newlyAddedSessionId != null &&
         widget.newlyAddedSessionId != oldWidget.newlyAddedSessionId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -123,12 +117,21 @@ class _SessionPanelState extends State<SessionPanel> {
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                Navigator.of(dialogContext).pop();
+                // **THE FIX**: Capture context-dependent objects before the await.
+                final navigator = Navigator.of(dialogContext);
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+
                 try {
                   await apiProvider.stopAllSessions(timeProvider.currentTime);
+
+                  // Use the captured variables after the await.
+                  navigator.pop();
+                  if (!mounted) return;
                   widget.onClubSessionTimeChanged(null);
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  navigator.pop();
+                  if (!mounted) return;
+                  scaffoldMessenger.showSnackBar(
                     SnackBar(content: Text('Error stopping sessions: $e')),
                   );
                 }
@@ -164,8 +167,6 @@ class _SessionPanelState extends State<SessionPanel> {
         ),
         const Divider(),
         Expanded(
-          // Since the parent ConnectionHandler now handles non-connected states,
-          // we can assume the status is 'connected' here and simplify the UI.
           child: Builder(
             builder: (context) {
               final sessions = apiProvider.sessions;
@@ -276,6 +277,10 @@ class SessionCard extends StatelessWidget {
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
+                 // **THE FIX**: Capture context-dependent objects before the await.
+                 final navigator = Navigator.of(dialogContext);
+                 final scaffoldMessenger = ScaffoldMessenger.of(context);
+
                  try {
                    final fullSession = Session(
                      sessionId: session.sessionId,
@@ -284,10 +289,14 @@ class SessionCard extends StatelessWidget {
                      stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                    );
                    await apiProvider.updateSession(fullSession);
-                   Navigator.of(dialogContext).pop();
+
+                   // Use the captured variables after the await.
+                   navigator.pop();
                  } catch (e) {
-                   Navigator.of(dialogContext).pop();
-                   ScaffoldMessenger.of(context).showSnackBar(
+                   navigator.pop();
+                   // Check if the widget is still in the tree before showing a snackbar.
+                   if (!scaffoldMessenger.mounted) return;
+                   scaffoldMessenger.showSnackBar(
                      SnackBar(content: Text('Failed to stop session: $e')),
                    );
                  }
@@ -346,14 +355,11 @@ class SessionCard extends StatelessWidget {
                     builder: (context, timeProvider, child) {
                       final effectiveStopEpoch = session.stopEpoch ??
                           (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
-
                       final effectiveStartEpoch = clubSessionStartDateTime != null
                           ? max(session.startEpoch, clubSessionStartDateTime!.millisecondsSinceEpoch ~/ 1000)
                           : session.startEpoch;
-
                       final durationInSeconds = max(0, effectiveStopEpoch - effectiveStartEpoch);
                       final amount = (durationInSeconds / 3600.0) * session.rate;
-
                       return Row(
                         children: [
                           Text('Duration: ${_formatDuration(durationInSeconds)}'),
