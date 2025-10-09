@@ -58,3 +58,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local Database used by macOS version
+server/CarolinaCardClub.db
