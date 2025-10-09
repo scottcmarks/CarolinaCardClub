@@ -25,6 +25,8 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -40,6 +42,115 @@ class SettingsPage extends StatelessWidget {
             leading: const Icon(Icons.storage),
             onTap: () {
               showServerSettingsDialog(context);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            title: const Text('Revert Changes and Reload from Cloud'),
+            subtitle: Text(
+              'Overwrite server data with the latest cloud backup',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            leading: const Icon(Icons.cloud_download),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (BuildContext dialogContext) {
+                  return AlertDialog(
+                    title: const Text('Revert and Reload?'),
+                    content: const Text(
+                        'This will replace all current server data with the last cloud backup. Are you sure?'),
+                    actions: [
+                      TextButton(
+                        child: const Text('Cancel'),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                      ),
+                      FilledButton(
+                        child: const Text('Load'),
+                        onPressed: () async {
+                          final scaffoldMessenger = ScaffoldMessenger.of(context);
+                          final rootNavigator = Navigator.of(context);
+
+                          Navigator.of(dialogContext).pop();
+                          rootNavigator.pop();
+
+                          try {
+                            await apiProvider.reloadServerDatabase();
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(
+                                backgroundColor: Colors.green,
+                                content: Text('Successfully loaded data from cloud.'),
+                              ),
+                            );
+                          } catch (e) {
+                             scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                backgroundColor: Colors.red,
+                                content: Text('Failed to load from cloud: $e'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+          // **NEW "SAVE CURRENT STATE" BUTTON**
+          const Divider(),
+          ListTile(
+            title: const Text('Save Current State'),
+            subtitle: Text(
+              'Uploads the current server data to the cloud backup',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            leading: const Icon(Icons.cloud_upload),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (BuildContext dialogContext) {
+                  return AlertDialog(
+                    title: const Text('Save to Cloud?'),
+                    content: const Text(
+                        'This will overwrite the last cloud backup with the current server data. Are you sure?'),
+                    actions: [
+                      TextButton(
+                        child: const Text('Cancel'),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                      ),
+                      FilledButton(
+                        child: const Text('Save'),
+                        onPressed: () async {
+                          final scaffoldMessenger = ScaffoldMessenger.of(context);
+                          final rootNavigator = Navigator.of(context);
+
+                          Navigator.of(dialogContext).pop();
+                          rootNavigator.pop();
+
+                          try {
+                            await apiProvider.backupDatabase();
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(
+                                backgroundColor: Colors.green,
+                                content: Text('Successfully saved data to cloud.'),
+                              ),
+                            );
+                          } catch (e) {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                backgroundColor: Colors.red,
+                                content: Text('Failed to save to cloud: $e'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
             },
           ),
           const Divider(),
@@ -60,7 +171,6 @@ class SettingsPage extends StatelessWidget {
             },
           ),
           const Divider(),
-          // **NEW THEME SWITCH**
           Consumer<AppSettingsProvider>(
             builder: (context, appSettings, _) {
               final isDarkMode =
@@ -77,14 +187,11 @@ class SettingsPage extends StatelessWidget {
                       onChanged: (isDark) {
                         final currentSettings = appSettings.currentSettings;
                         final newSettings = AppSettings(
-                          // Set the new theme value
                           preferredTheme: isDark ? 'dark' : 'light',
-                          // Copy existing settings
                           localServerUrl: currentSettings.localServerUrl,
                           localServerApiKey: currentSettings.localServerApiKey,
                         );
-                        // Update the provider, which will notify listeners and rebuild the UI
-                        appSettings.updateSettings(newSettings);
+                         appSettings.updateSettings(newSettings);
                       },
                     ),
                     const Text('Dark'),
