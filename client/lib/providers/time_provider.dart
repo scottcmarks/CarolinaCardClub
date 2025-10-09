@@ -22,7 +22,7 @@ class TimeProvider with ChangeNotifier {
   TimeProvider() {
     // Timer.periodic creates a repeating timer
     // It calls the callback function every duration interval
-    _timer = Timer.periodic(const Duration(seconds: 60), // TODO: Revert to one second -> 1),
+    _timer = Timer.periodic(const Duration(seconds: 1),
       (timer) { _updateAndNotify(); }
     );
   }

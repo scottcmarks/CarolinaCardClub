@@ -16,6 +16,7 @@ class PlayerPanel extends StatefulWidget {
   final ValueChanged<int?>? onPlayerSelected;
   final ValueChanged<int>? onSessionAdded;
   final DateTime? clubSessionStartDateTime;
+  // The onRetryConnection parameter is removed from here
 
   const PlayerPanel({
     super.key,
@@ -23,6 +24,7 @@ class PlayerPanel extends StatefulWidget {
     this.onPlayerSelected,
     this.onSessionAdded,
     this.clubSessionStartDateTime,
+    // The onRetryConnection parameter is removed from here
   });
 
   @override
@@ -30,8 +32,6 @@ class PlayerPanel extends StatefulWidget {
 }
 
 class _PlayerPanelState extends State<PlayerPanel> {
-  // Methods like _startNewSession and _showAddMoneyDialog remain largely the same,
-  // but they now trigger automatic UI updates across the app when they call apiProvider methods.
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
     try {
@@ -199,53 +199,38 @@ class _PlayerPanelState extends State<PlayerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    // MODIFICATION: Watch the provider for changes.
     final apiProvider = context.watch<ApiProvider>();
 
-    // Handle connection states
-    switch (apiProvider.connectionStatus) {
-      case ConnectionStatus.connecting:
-        return const Center(child: CircularProgressIndicator());
-      case ConnectionStatus.disconnected:
-        return const Center(
-            child: Text('Disconnected from server.',
-                style: TextStyle(color: Colors.red)));
-      case ConnectionStatus.failed:
-        return Center(
-          child: Text('Connection failed: ${apiProvider.lastError}',
-              style: const TextStyle(color: Colors.red)),
-        );
-      case ConnectionStatus.connected:
-        // Get the player list directly from the provider.
-        final players = apiProvider.players;
+    // Since the parent ConnectionHandler now handles non-connected states,
+    // we can assume the status is 'connected' here and simplify the UI.
+    final players = apiProvider.players;
 
-        if (players.isEmpty) {
-          return const Center(child: Text('No players found.'));
-        }
-
-        return SingleChildScrollView(
-          key: const PageStorageKey<String>('PlayerListScrollPosition'),
-          child: IntrinsicWidth(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: players.map((player) {
-                return PlayerCard(
-                  player: player,
-                  isSelected: player.playerId == widget.selectedPlayerId,
-                  onTap: () {
-                    if (player.playerId == widget.selectedPlayerId) {
-                      widget.onPlayerSelected?.call(null);
-                    } else {
-                      widget.onPlayerSelected?.call(player.playerId);
-                      _showPlayerMenu(player);
-                    }
-                  },
-                );
-              }).toList(),
-            ),
-          ),
-        );
+    if (players.isEmpty) {
+      return const Center(child: Text('No players found.'));
     }
+
+    return SingleChildScrollView(
+      key: const PageStorageKey<String>('PlayerListScrollPosition'),
+      child: IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: players.map((player) {
+            return PlayerCard(
+              player: player,
+              isSelected: player.playerId == widget.selectedPlayerId,
+              onTap: () {
+                if (player.playerId == widget.selectedPlayerId) {
+                  widget.onPlayerSelected?.call(null);
+                } else {
+                  widget.onPlayerSelected?.call(player.playerId);
+                  _showPlayerMenu(player);
+                }
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
   }
 }
 
