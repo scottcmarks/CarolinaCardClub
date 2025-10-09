@@ -16,7 +16,6 @@ class PlayerPanel extends StatefulWidget {
   final ValueChanged<int?>? onPlayerSelected;
   final ValueChanged<int>? onSessionAdded;
   final DateTime? clubSessionStartDateTime;
-  // The onRetryConnection parameter is removed from here
 
   const PlayerPanel({
     super.key,
@@ -24,7 +23,6 @@ class PlayerPanel extends StatefulWidget {
     this.onPlayerSelected,
     this.onSessionAdded,
     this.clubSessionStartDateTime,
-    // The onRetryConnection parameter is removed from here
   });
 
   @override
@@ -34,6 +32,7 @@ class PlayerPanel extends StatefulWidget {
 class _PlayerPanelState extends State<PlayerPanel> {
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
+    // This method already uses `if (!mounted)` correctly.
     try {
       final now = timeProvider.currentTime;
       final sessionStart = widget.clubSessionStartDateTime != null &&
@@ -93,6 +92,10 @@ class _PlayerPanelState extends State<PlayerPanel> {
               onPressed: () async {
                 final double? amount = double.tryParse(amountController.text);
                 if (amount != null && amount > 0) {
+                  // **THE FIX**: Capture context-dependent objects before the await.
+                  final navigator = Navigator.of(dialogContext);
+                  final scaffoldMessenger = ScaffoldMessenger.of(context);
+
                   final newPayment = Payment(
                     playerId: player.playerId,
                     amount: amount,
@@ -104,7 +107,8 @@ class _PlayerPanelState extends State<PlayerPanel> {
                     final updatedPlayer =
                         await apiProvider.addPayment(newPayment.toMap());
 
-                    Navigator.of(dialogContext).pop();
+                    // Use the captured variables after the await.
+                    navigator.pop();
                     if (!mounted) return;
 
                     if (startSessionAfter && updatedPlayer.balance >= 0) {
@@ -117,7 +121,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
                     }
                   } catch (e) {
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    scaffoldMessenger.showSnackBar(
                       SnackBar(content: Text('Failed to add payment: $e')),
                     );
                   }
@@ -178,6 +182,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
                 TextButton(
                     child: const Text('Open a new session'),
                     onPressed: () async {
+                      // This is safe because the pop happens after all async work.
                       Navigator.of(dialogContext).pop();
                       if (!mounted) return;
                       await _startNewSession(apiProvider, timeProvider, player);
@@ -200,9 +205,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
   @override
   Widget build(BuildContext context) {
     final apiProvider = context.watch<ApiProvider>();
-
-    // Since the parent ConnectionHandler now handles non-connected states,
-    // we can assume the status is 'connected' here and simplify the UI.
     final players = apiProvider.players;
 
     if (players.isEmpty) {

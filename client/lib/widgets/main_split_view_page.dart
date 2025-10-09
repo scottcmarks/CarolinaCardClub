@@ -1,12 +1,11 @@
 // client/lib/widgets/main_split_view_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/app_settings_provider.dart';
 import '../providers/time_provider.dart';
+
 import 'player_panel.dart';
 import 'session_panel.dart';
 import 'settings_page.dart';
@@ -15,14 +14,14 @@ class MainSplitViewPage extends StatefulWidget {
   const MainSplitViewPage({super.key});
 
   @override
-  _MainSplitViewPageState createState() => _MainSplitViewPageState();
+  MainSplitViewPageState createState() => MainSplitViewPageState();
 }
 
-class _MainSplitViewPageState extends State<MainSplitViewPage> {
+class MainSplitViewPageState extends State<MainSplitViewPage> {
   int? _selectedPlayerId;
   int? _selectedSessionId;
   int? _newlyAddedSessionId;
-  DateTime? _clubSessionStartDateTime; // State is now owned by the parent
+  DateTime? _clubSessionStartDateTime;
 
   void _onPlayerSelected(int? playerId) {
     setState(() {
@@ -43,7 +42,6 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
     });
   }
 
-  // Callback for the SessionPanel to update the parent's state
   void _onClubSessionTimeChanged(DateTime? newTime) {
     setState(() {
       _clubSessionStartDateTime = newTime;
@@ -87,7 +85,7 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
               selectedPlayerId: _selectedPlayerId,
               onPlayerSelected: _onPlayerSelected,
               onSessionAdded: _onSessionAdded,
-              clubSessionStartDateTime: _clubSessionStartDateTime, // Pass state down
+              clubSessionStartDateTime: _clubSessionStartDateTime,
             ),
           ),
           const VerticalDivider(width: 1),
@@ -98,8 +96,8 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
               selectedSessionId: _selectedSessionId,
               onSessionSelected: _onSessionSelected,
               newlyAddedSessionId: _newlyAddedSessionId,
-              clubSessionStartDateTime: _clubSessionStartDateTime, // Pass state down
-              onClubSessionTimeChanged: _onClubSessionTimeChanged, // Pass callback down
+              clubSessionStartDateTime: _clubSessionStartDateTime,
+              onClubSessionTimeChanged: _onClubSessionTimeChanged,
             ),
           ),
         ],
@@ -108,7 +106,6 @@ class _MainSplitViewPageState extends State<MainSplitViewPage> {
   }
 }
 
-/// A widget that displays the current time and updates every second.
 class RealTimeClock extends StatelessWidget {
   const RealTimeClock({super.key});
 

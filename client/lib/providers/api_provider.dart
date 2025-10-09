@@ -6,12 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:shared/shared.dart';
 
-import '../models/app_settings.dart';
 import '../models/player_selection_item.dart';
-import '../models/session_panel_item.dart';
 import '../models/session.dart';
+import '../models/session_panel_item.dart';
 import 'app_settings_provider.dart';
 
 enum ConnectionStatus { disconnected, connecting, connected, failed }
@@ -65,7 +63,7 @@ class ApiProvider with ChangeNotifier {
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
     final newUrl = newSettingsProvider.currentSettings.localServerUrl;
     if (_currentConnectionUrl != newUrl) {
-      print(
+      debugPrint( // <-- FIXED
           '--> Server URL changed from "$_currentConnectionUrl" to "$newUrl". Forcing reconnect...');
       _appSettingsProvider = newSettingsProvider;
       _currentConnectionUrl = newUrl;
@@ -96,7 +94,8 @@ class ApiProvider with ChangeNotifier {
     _safeNotifyListeners();
     final serverUrl = _currentConnectionUrl!;
     try {
-      final wsUrl = Uri.parse(serverUrl.replaceFirst('http', 'ws') + '/ws');
+      // **FIXED**: Use string interpolation.
+      final wsUrl = Uri.parse('${serverUrl.replaceFirst('http', 'ws')}/ws');
       _channel = IOWebSocketChannel.connect(
         wsUrl,
         connectTimeout: const Duration(seconds: 10),
@@ -197,7 +196,7 @@ class ApiProvider with ChangeNotifier {
         );
       }
     } catch (e) {
-      print('Error handling server message: $e');
+      debugPrint('Error handling server message: $e'); // <-- FIXED
     }
   }
 
@@ -237,7 +236,7 @@ class ApiProvider with ChangeNotifier {
           .toList();
       _safeNotifyListeners();
     } catch (e) {
-      print('Failed to fetch player list: $e');
+      debugPrint('Failed to fetch player list: $e'); // <-- FIXED
       rethrow;
     }
   }
@@ -254,7 +253,7 @@ class ApiProvider with ChangeNotifier {
           .toList();
       _safeNotifyListeners();
     } catch (e) {
-      print('Failed to fetch session list: $e');
+      debugPrint('Failed to fetch session list: $e'); // <-- FIXED
       rethrow;
     }
   }
@@ -278,13 +277,8 @@ class ApiProvider with ChangeNotifier {
 
   Future<void> stopAllSessions(DateTime stopTime) async {
     final stopEpoch = stopTime.millisecondsSinceEpoch ~/ 1000;
-    // Step 1: Tell the server to stop all sessions.
     await _sendCommand('stopAllSessions', {'stopEpoch': stopEpoch});
-
-    // **THE CHANGE**: Step 2: If the first step succeeds, back up the database.
     await backupDatabase();
-
-    // Step 3: Refresh the client UI with the new data.
     await fetchPlayerSelectionList();
     await fetchSessionPanelList(
         playerId: _lastSessionPlayerIdFilter,
@@ -296,6 +290,7 @@ class ApiProvider with ChangeNotifier {
     final result = await _sendCommand('addPayment', paymentMap);
     await fetchPlayerSelectionList();
     return PlayerSelectionItem.fromMap(result);
+
   }
 
   Future<void> backupDatabase() async {
