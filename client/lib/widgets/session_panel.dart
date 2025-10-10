@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
+import '../models/player_selection_item.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
@@ -15,7 +16,7 @@ import '../models/session_panel_item.dart';
 
 String _formatMaybeMoney(double? price) {
   if (price == null) return '';
-  return '\$${price.toStringAsFixed(2)}';
+  return NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(price);
 }
 
 String _formatDuration(int totalSeconds) {
@@ -44,10 +45,10 @@ class SessionPanel extends StatefulWidget {
   });
 
   @override
-  State<SessionPanel> createState() => _SessionPanelState();
+  State<SessionPanel> createState() => SessionPanelState();
 }
 
-class _SessionPanelState extends State<SessionPanel> {
+class SessionPanelState extends State<SessionPanel> {
   final ItemScrollController _scrollController = ItemScrollController();
 
   @override
@@ -117,14 +118,11 @@ class _SessionPanelState extends State<SessionPanel> {
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                // **THE FIX**: Capture context-dependent objects before the await.
                 final navigator = Navigator.of(dialogContext);
                 final scaffoldMessenger = ScaffoldMessenger.of(context);
 
                 try {
                   await apiProvider.stopAllSessions(timeProvider.currentTime);
-
-                  // Use the captured variables after the await.
                   navigator.pop();
                   if (!mounted) return;
                   widget.onClubSessionTimeChanged(null);
@@ -152,6 +150,18 @@ class _SessionPanelState extends State<SessionPanel> {
 
     final apiProvider = context.watch<ApiProvider>();
 
+    // **LOGIC RE-ADDED**: Determine the second line of text for the header.
+    String playerFilterText;
+    if (widget.selectedPlayerId == null) {
+      playerFilterText = 'for all players';
+    } else {
+      final selectedPlayer = apiProvider.players.firstWhere(
+        (p) => p.playerId == widget.selectedPlayerId,
+        orElse: () => PlayerSelectionItem(playerId: 0, name: 'Unknown', balance: 0, hasActiveSession: false),
+      );
+      playerFilterText = 'for ${selectedPlayer.name}';
+    }
+
     return Column(
       children: [
         SessionPanelHeader(
@@ -164,17 +174,17 @@ class _SessionPanelState extends State<SessionPanel> {
               _showStopClubSessionDialog(context);
             }
           },
+          // **LOGIC RE-ADDED**: Pass the new text down to the header.
+          playerFilterText: playerFilterText,
         ),
         const Divider(),
         Expanded(
           child: Builder(
             builder: (context) {
               final sessions = apiProvider.sessions;
-
               if (sessions.isEmpty) {
                   return const Center(child: Text('No sessions found.'));
               }
-
               return ScrollablePositionedList.builder(
                 itemScrollController: _scrollController,
                 key: const PageStorageKey<String>('SessionListScrollPosition'),
@@ -188,6 +198,7 @@ class _SessionPanelState extends State<SessionPanel> {
                     onSessionSelected: widget.onSessionSelected,
                     clubSessionStartDateTime: widget.clubSessionStartDateTime,
                     showPlayerName: widget.selectedPlayerId == null,
+                    allSessions: sessions,
                   );
                   },
                 );
@@ -203,22 +214,32 @@ class SessionPanelHeader extends StatelessWidget {
   final DateTime? clubSessionStartDateTime;
   final DateTime defaultSessionStartDateTime;
   final VoidCallback onToggleClubSessionTime;
+  // **LOGIC RE-ADDED**: Added a parameter to accept the player filter text.
+  final String playerFilterText;
 
   const SessionPanelHeader({
     super.key,
     required this.clubSessionStartDateTime,
     required this.defaultSessionStartDateTime,
     required this.onToggleClubSessionTime,
+    required this.playerFilterText,
   });
 
   @override
   Widget build(BuildContext context) {
     final bool showOnlyActiveSessions = clubSessionStartDateTime != null;
+
+    // **LOGIC RE-ADDED**: Combine the two lines of text with a newline character.
+    final line1 = showOnlyActiveSessions ? 'Active sessions only' : 'All sessions';
+    final combinedText = '$line1\n$playerFilterText';
+
     return InkWell(
       onTap: onToggleClubSessionTime,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 2.0),
         child: Row(
+          // **LOGIC RE-ADDED**: Align children to their top edges.
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Text(
@@ -232,9 +253,11 @@ class SessionPanelHeader extends StatelessWidget {
                         : FontStyle.italic),
               ),
             ),
+            // **LOGIC RE-ADDED**: Use the new combined, multi-line, styled text.
             Text(
-              showOnlyActiveSessions ? 'Active' : 'All',
-              style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+              combinedText,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
             ),
           ],
         ),
@@ -249,6 +272,7 @@ class SessionCard extends StatelessWidget {
   final ValueChanged<int?>? onSessionSelected;
   final DateTime? clubSessionStartDateTime;
   final bool showPlayerName;
+  final List<SessionPanelItem> allSessions;
 
   const SessionCard({
     super.key,
@@ -257,7 +281,22 @@ class SessionCard extends StatelessWidget {
     this.onSessionSelected,
     this.clubSessionStartDateTime,
     required this.showPlayerName,
+    required this.allSessions,
   });
+
+  double _calculateRoundedAmount({
+    required int startEpoch,
+    required int stopEpoch,
+    required double rate,
+    required DateTime? clubSessionStartDateTime,
+  }) {
+    final effectiveStartEpoch = clubSessionStartDateTime != null
+        ? max(startEpoch, clubSessionStartDateTime.millisecondsSinceEpoch ~/ 1000)
+        : startEpoch;
+    final durationInSeconds = max(0, stopEpoch - effectiveStartEpoch);
+    final amount = (durationInSeconds / 3600.0) * rate;
+    return amount.roundToDouble();
+  }
 
   Future<void> _stopSession(BuildContext context, SessionPanelItem session) async {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
@@ -277,10 +316,8 @@ class SessionCard extends StatelessWidget {
             TextButton(
               child: const Text('OK'),
               onPressed: () async {
-                 // **THE FIX**: Capture context-dependent objects before the await.
                  final navigator = Navigator.of(dialogContext);
                  final scaffoldMessenger = ScaffoldMessenger.of(context);
-
                  try {
                    final fullSession = Session(
                      sessionId: session.sessionId,
@@ -289,12 +326,9 @@ class SessionCard extends StatelessWidget {
                      stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                    );
                    await apiProvider.updateSession(fullSession);
-
-                   // Use the captured variables after the await.
                    navigator.pop();
                  } catch (e) {
                    navigator.pop();
-                   // Check if the widget is still in the tree before showing a snackbar.
                    if (!scaffoldMessenger.mounted) return;
                    scaffoldMessenger.showSnackBar(
                      SnackBar(content: Text('Failed to stop session: $e')),
@@ -348,31 +382,66 @@ class SessionCard extends StatelessWidget {
                 '${DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.startEpoch * 1000))} - ${session.stopEpoch == null ? "ongoing" : DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.stopEpoch! * 1000))}',
               ),
               const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Consumer<TimeProvider>(
-                    builder: (context, timeProvider, child) {
-                      final effectiveStopEpoch = session.stopEpoch ??
-                          (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
-                      final effectiveStartEpoch = clubSessionStartDateTime != null
-                          ? max(session.startEpoch, clubSessionStartDateTime!.millisecondsSinceEpoch ~/ 1000)
-                          : session.startEpoch;
-                      final durationInSeconds = max(0, effectiveStopEpoch - effectiveStartEpoch);
-                      final amount = (durationInSeconds / 3600.0) * session.rate;
-                      return Row(
+              Consumer<TimeProvider>(
+                builder: (context, timeProvider, child) {
+                  final effectiveStopEpoch = session.stopEpoch ??
+                      (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
+
+                  final amount = _calculateRoundedAmount(
+                    startEpoch: session.startEpoch,
+                    stopEpoch: effectiveStopEpoch,
+                    rate: session.rate,
+                    clubSessionStartDateTime: clubSessionStartDateTime,
+                  );
+                  final durationInSeconds = max(0, effectiveStopEpoch - session.startEpoch);
+
+                  double liveBalance = session.balance;
+                  Color balanceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+
+                  if (session.stopEpoch == null) {
+                    final activeSessionsForPlayer = allSessions.where(
+                      (s) => s.playerId == session.playerId && s.stopEpoch == null
+                    );
+                    double totalActiveAmount = 0;
+                    for (final activeSession in activeSessionsForPlayer) {
+                      totalActiveAmount += _calculateRoundedAmount(
+                        startEpoch: activeSession.startEpoch,
+                        stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                        rate: activeSession.rate,
+                        clubSessionStartDateTime: clubSessionStartDateTime,
+                      );
+                    }
+                    liveBalance = session.balance - totalActiveAmount;
+                    if (liveBalance <= 0) {
+                      balanceColor = Colors.red.shade700;
+                    } else if (liveBalance <= 1) {
+                      balanceColor = Colors.yellow.shade800;
+                    } else {
+                      balanceColor = Colors.green.shade800;
+                    }
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
                           Text('Duration: ${_formatDuration(durationInSeconds)}'),
                           const SizedBox(width: 16),
-                          Text('Amount: ${_formatMaybeMoney(amount.roundToDouble())}'),
+                          Text('Amount: ${_formatMaybeMoney(amount)}'),
                         ],
-                      );
-                    },
-                  ),
-                  if (session.stopEpoch == null)
-                    Text('Balance: ${_formatMaybeMoney(session.balance)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                ],
+                      ),
+                      if (session.stopEpoch == null)
+                        Text(
+                          'Balance: ${_formatMaybeMoney(liveBalance)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: balanceColor,
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
