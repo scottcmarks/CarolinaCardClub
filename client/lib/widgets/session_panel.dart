@@ -150,7 +150,6 @@ class SessionPanelState extends State<SessionPanel> {
 
     final apiProvider = context.watch<ApiProvider>();
 
-    // **LOGIC RE-ADDED**: Determine the second line of text for the header.
     String playerFilterText;
     if (widget.selectedPlayerId == null) {
       playerFilterText = 'for all players';
@@ -174,7 +173,6 @@ class SessionPanelState extends State<SessionPanel> {
               _showStopClubSessionDialog(context);
             }
           },
-          // **LOGIC RE-ADDED**: Pass the new text down to the header.
           playerFilterText: playerFilterText,
         ),
         const Divider(),
@@ -214,7 +212,6 @@ class SessionPanelHeader extends StatelessWidget {
   final DateTime? clubSessionStartDateTime;
   final DateTime defaultSessionStartDateTime;
   final VoidCallback onToggleClubSessionTime;
-  // **LOGIC RE-ADDED**: Added a parameter to accept the player filter text.
   final String playerFilterText;
 
   const SessionPanelHeader({
@@ -228,8 +225,6 @@ class SessionPanelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool showOnlyActiveSessions = clubSessionStartDateTime != null;
-
-    // **LOGIC RE-ADDED**: Combine the two lines of text with a newline character.
     final line1 = showOnlyActiveSessions ? 'Active sessions only' : 'All sessions';
     final combinedText = '$line1\n$playerFilterText';
 
@@ -238,7 +233,6 @@ class SessionPanelHeader extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 2.0),
         child: Row(
-          // **LOGIC RE-ADDED**: Align children to their top edges.
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
@@ -253,7 +247,6 @@ class SessionPanelHeader extends StatelessWidget {
                         : FontStyle.italic),
               ),
             ),
-            // **LOGIC RE-ADDED**: Use the new combined, multi-line, styled text.
             Text(
               combinedText,
               textAlign: TextAlign.right,
@@ -357,80 +350,62 @@ class SessionCard extends StatelessWidget {
         },
         child: Padding(
           padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (showPlayerName)
-                    Expanded(
-                      child: Text(
-                        session.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  Text(
-                    'Session: ${session.sessionId}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.startEpoch * 1000))} - ${session.stopEpoch == null ? "ongoing" : DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.stopEpoch! * 1000))}',
-              ),
-              const SizedBox(height: 4),
-              Consumer<TimeProvider>(
-                builder: (context, timeProvider, child) {
-                  final effectiveStopEpoch = session.stopEpoch ??
-                      (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
+          // **MODIFICATION**: The Consumer now wraps the entire Column.
+          child: Consumer<TimeProvider>(
+            builder: (context, timeProvider, child) {
+              // --- All calculations are now done at the top ---
+              final effectiveStopEpoch = session.stopEpoch ??
+                  (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
 
-                  final amount = _calculateRoundedAmount(
-                    startEpoch: session.startEpoch,
-                    stopEpoch: effectiveStopEpoch,
-                    rate: session.rate,
+              final amount = _calculateRoundedAmount(
+                startEpoch: session.startEpoch,
+                stopEpoch: effectiveStopEpoch,
+                rate: session.rate,
+                clubSessionStartDateTime: clubSessionStartDateTime,
+              );
+              final durationInSeconds = max(0, effectiveStopEpoch - session.startEpoch);
+
+              double liveBalance = session.balance;
+              Color balanceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+
+              if (session.stopEpoch == null) {
+                final activeSessionsForPlayer = allSessions.where(
+                  (s) => s.playerId == session.playerId && s.stopEpoch == null
+                );
+                double totalActiveAmount = 0;
+                for (final activeSession in activeSessionsForPlayer) {
+                  totalActiveAmount += _calculateRoundedAmount(
+                    startEpoch: activeSession.startEpoch,
+                    stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                    rate: activeSession.rate,
                     clubSessionStartDateTime: clubSessionStartDateTime,
                   );
-                  final durationInSeconds = max(0, effectiveStopEpoch - session.startEpoch);
+                }
+                liveBalance = session.balance - totalActiveAmount;
+                if (liveBalance <= 0) {
+                  balanceColor = Colors.red.shade700;
+                } else if (liveBalance <= 1) {
+                  balanceColor = Colors.yellow.shade800;
+                } else {
+                  balanceColor = Colors.green.shade800;
+                }
+              }
 
-                  double liveBalance = session.balance;
-                  Color balanceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
-
-                  if (session.stopEpoch == null) {
-                    final activeSessionsForPlayer = allSessions.where(
-                      (s) => s.playerId == session.playerId && s.stopEpoch == null
-                    );
-                    double totalActiveAmount = 0;
-                    for (final activeSession in activeSessionsForPlayer) {
-                      totalActiveAmount += _calculateRoundedAmount(
-                        startEpoch: activeSession.startEpoch,
-                        stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                        rate: activeSession.rate,
-                        clubSessionStartDateTime: clubSessionStartDateTime,
-                      );
-                    }
-                    liveBalance = session.balance - totalActiveAmount;
-                    if (liveBalance <= 0) {
-                      balanceColor = Colors.red.shade700;
-                    } else if (liveBalance <= 1) {
-                      balanceColor = Colors.yellow.shade800;
-                    } else {
-                      balanceColor = Colors.green.shade800;
-                    }
-                  }
-
-                  return Row(
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Text('Duration: ${_formatDuration(durationInSeconds)}'),
-                          const SizedBox(width: 16),
-                          Text('Amount: ${_formatMaybeMoney(amount)}'),
-                        ],
-                      ),
+                      if (showPlayerName)
+                        Expanded(
+                          child: Text(
+                            session.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      // **MODIFICATION**: "Balance" is now here.
                       if (session.stopEpoch == null)
                         Text(
                           'Balance: ${_formatMaybeMoney(liveBalance)}',
@@ -440,10 +415,32 @@ class SessionCard extends StatelessWidget {
                           ),
                         ),
                     ],
-                  );
-                },
-              ),
-            ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.startEpoch * 1000))} - ${session.stopEpoch == null ? "ongoing" : DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.stopEpoch! * 1000))}',
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Duration: ${_formatDuration(durationInSeconds)}'),
+                          const SizedBox(width: 16),
+                          Text('Amount: ${_formatMaybeMoney(amount)}'),
+                        ],
+                      ),
+                      // **MODIFICATION**: "Session" is now here.
+                      Text(
+                        'Session: ${session.sessionId}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
