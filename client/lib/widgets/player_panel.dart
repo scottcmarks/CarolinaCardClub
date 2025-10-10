@@ -26,10 +26,10 @@ class PlayerPanel extends StatefulWidget {
   });
 
   @override
-  State<PlayerPanel> createState() => _PlayerPanelState();
+  State<PlayerPanel> createState() => PlayerPanelState();
 }
 
-class _PlayerPanelState extends State<PlayerPanel> {
+class PlayerPanelState extends State<PlayerPanel> {
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
     // This method already uses `if (!mounted)` correctly.
@@ -92,7 +92,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
               onPressed: () async {
                 final double? amount = double.tryParse(amountController.text);
                 if (amount != null && amount > 0) {
-                  // **THE FIX**: Capture context-dependent objects before the await.
                   final navigator = Navigator.of(dialogContext);
                   final scaffoldMessenger = ScaffoldMessenger.of(context);
 
@@ -104,21 +103,17 @@ class _PlayerPanelState extends State<PlayerPanel> {
                   );
 
                   try {
+                    // The apiProvider returns the updated player object after the payment.
                     final updatedPlayer =
                         await apiProvider.addPayment(newPayment.toMap());
 
-                    // Use the captured variables after the await.
-                    navigator.pop();
+                    navigator.pop(); // Close the 'Add Money' dialog.
                     if (!mounted) return;
 
-                    if (startSessionAfter && updatedPlayer.balance >= 0) {
-                      await _startNewSession(
-                          apiProvider, timeProvider, updatedPlayer);
-                    } else if (startSessionAfter) {
-                      _showAddMoneyDialog(apiProvider, timeProvider,
-                          updatedPlayer,
-                          startSessionAfter: true);
-                    }
+                    // **THE FIX**: Immediately re-trigger the player menu with the updated player data.
+                    // This creates the interaction loop you wanted.
+                    _showPlayerMenu(updatedPlayer);
+
                   } catch (e) {
                     if (!mounted) return;
                     scaffoldMessenger.showSnackBar(
@@ -182,7 +177,6 @@ class _PlayerPanelState extends State<PlayerPanel> {
                 TextButton(
                     child: const Text('Open a new session'),
                     onPressed: () async {
-                      // This is safe because the pop happens after all async work.
                       Navigator.of(dialogContext).pop();
                       if (!mounted) return;
                       await _startNewSession(apiProvider, timeProvider, player);
