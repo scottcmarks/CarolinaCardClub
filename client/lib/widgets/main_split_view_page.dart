@@ -95,6 +95,8 @@ class MainSplitViewPageState extends State<MainSplitViewPage> {
               selectedPlayerId: _selectedPlayerId,
               selectedSessionId: _selectedSessionId,
               onSessionSelected: _onSessionSelected,
+              // **MODIFICATION**: Pass the onPlayerSelected callback down.
+              onPlayerSelected: _onPlayerSelected,
               newlyAddedSessionId: _newlyAddedSessionId,
               clubSessionStartDateTime: _clubSessionStartDateTime,
               onClubSessionTimeChanged: _onClubSessionTimeChanged,
