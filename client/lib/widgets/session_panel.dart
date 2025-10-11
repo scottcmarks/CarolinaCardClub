@@ -30,6 +30,8 @@ class SessionPanel extends StatefulWidget {
   final int? selectedPlayerId;
   final int? selectedSessionId;
   final ValueChanged<int?>? onSessionSelected;
+  // **MODIFICATION**: Add onPlayerSelected callback.
+  final ValueChanged<int?>? onPlayerSelected;
   final int? newlyAddedSessionId;
   final DateTime? clubSessionStartDateTime;
   final ValueChanged<DateTime?> onClubSessionTimeChanged;
@@ -39,6 +41,7 @@ class SessionPanel extends StatefulWidget {
     this.selectedPlayerId,
     this.selectedSessionId,
     this.onSessionSelected,
+    this.onPlayerSelected,
     this.newlyAddedSessionId,
     required this.clubSessionStartDateTime,
     required this.onClubSessionTimeChanged,
@@ -174,6 +177,9 @@ class SessionPanelState extends State<SessionPanel> {
             }
           },
           playerFilterText: playerFilterText,
+          // **MODIFICATION**: Pass player selection info down to the header.
+          selectedPlayerId: widget.selectedPlayerId,
+          onPlayerSelected: widget.onPlayerSelected,
         ),
         const Divider(),
         Expanded(
@@ -213,6 +219,9 @@ class SessionPanelHeader extends StatelessWidget {
   final DateTime defaultSessionStartDateTime;
   final VoidCallback onToggleClubSessionTime;
   final String playerFilterText;
+  // **MODIFICATION**: Add player selection parameters.
+  final int? selectedPlayerId;
+  final ValueChanged<int?>? onPlayerSelected;
 
   const SessionPanelHeader({
     super.key,
@@ -220,6 +229,8 @@ class SessionPanelHeader extends StatelessWidget {
     required this.defaultSessionStartDateTime,
     required this.onToggleClubSessionTime,
     required this.playerFilterText,
+    this.selectedPlayerId,
+    this.onPlayerSelected,
   });
 
   @override
@@ -228,14 +239,18 @@ class SessionPanelHeader extends StatelessWidget {
     final line1 = showOnlyActiveSessions ? 'Active sessions only' : 'All sessions';
     final combinedText = '$line1\n$playerFilterText';
 
-    return InkWell(
-      onTap: onToggleClubSessionTime,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 2.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
+    // **MODIFICATION**: Logic for the right-side button's state.
+    final bool isPlayerSelected = selectedPlayerId != null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 2.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- Left-side Button ---
+          Expanded(
+            child: InkWell(
+              onTap: onToggleClubSessionTime,
               child: Text(
                 showOnlyActiveSessions
                     ? 'Club session started at ${DateFormat("yyyy-MM-dd HH:mm").format(clubSessionStartDateTime!)}'
@@ -247,13 +262,27 @@ class SessionPanelHeader extends StatelessWidget {
                         : FontStyle.italic),
               ),
             ),
-            Text(
-              combinedText,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+          ),
+          // --- Right-side Button ---
+          InkWell(
+            // If a player is selected, the action is to deselect them. Otherwise, do nothing.
+            onTap: isPlayerSelected ? () => onPlayerSelected?.call(null) : null,
+            borderRadius: BorderRadius.circular(4.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+              // Show a "depressed" background color if a player is selected.
+              decoration: BoxDecoration(
+                color: isPlayerSelected ? Theme.of(context).highlightColor : Colors.transparent,
+                borderRadius: BorderRadius.circular(4.0),
+              ),
+              child: Text(
+                combinedText,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -350,10 +379,8 @@ class SessionCard extends StatelessWidget {
         },
         child: Padding(
           padding: const EdgeInsets.all(12.0),
-          // **MODIFICATION**: The Consumer now wraps the entire Column.
           child: Consumer<TimeProvider>(
             builder: (context, timeProvider, child) {
-              // --- All calculations are now done at the top ---
               final effectiveStopEpoch = session.stopEpoch ??
                   (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
 
@@ -405,7 +432,6 @@ class SessionCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      // **MODIFICATION**: "Balance" is now here.
                       if (session.stopEpoch == null)
                         Text(
                           'Balance: ${_formatMaybeMoney(liveBalance)}',
@@ -413,28 +439,30 @@ class SessionCard extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                             color: balanceColor,
                           ),
+                        )
+                      else
+                        Text(
+                          'Session: ${session.sessionId}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.startEpoch * 1000))} - ${session.stopEpoch == null ? "ongoing" : DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.stopEpoch! * 1000))}',
-                  ),
-                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
                     children: [
+                      Text(
+                        '${DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.startEpoch * 1000))} - ${session.stopEpoch == null ? "ongoing" : DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(session.stopEpoch! * 1000))}',
+                      ),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text('Duration: ${_formatDuration(durationInSeconds)}'),
                           const SizedBox(width: 16),
                           Text('Amount: ${_formatMaybeMoney(amount)}'),
                         ],
-                      ),
-                      // **MODIFICATION**: "Session" is now here.
-                      Text(
-                        'Session: ${session.sessionId}',
-                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),

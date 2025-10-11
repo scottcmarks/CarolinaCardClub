@@ -1,0 +1,4 @@
+#!/bin/bash
+cd ~/carolina_card_club/server
+. venv/bin/activate
+python3 email_list_to_clipboard.py
