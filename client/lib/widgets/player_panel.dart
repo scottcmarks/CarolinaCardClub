@@ -30,9 +30,9 @@ class PlayerPanel extends StatefulWidget {
 }
 
 class PlayerPanelState extends State<PlayerPanel> {
+  // ... _startNewSession and _showAddMoneyDialog remain the same ...
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
-    // This method already uses `if (!mounted)` correctly.
     try {
       final now = timeProvider.currentTime;
       final sessionStart = widget.clubSessionStartDateTime != null &&
@@ -103,15 +103,12 @@ class PlayerPanelState extends State<PlayerPanel> {
                   );
 
                   try {
-                    // The apiProvider returns the updated player object after the payment.
                     final updatedPlayer =
                         await apiProvider.addPayment(newPayment.toMap());
 
-                    navigator.pop(); // Close the 'Add Money' dialog.
+                    navigator.pop();
                     if (!mounted) return;
 
-                    // **THE FIX**: Immediately re-trigger the player menu with the updated player data.
-                    // This creates the interaction loop you wanted.
                     _showPlayerMenu(updatedPlayer);
 
                   } catch (e) {
@@ -129,73 +126,87 @@ class PlayerPanelState extends State<PlayerPanel> {
     );
   }
 
-  void _showPlayerMenu(PlayerSelectionItem player) {
-    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
-    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-    final currencyFormatter =
-        NumberFormat.currency(symbol: '\$', decimalDigits: 0);
-    final formattedBalance = currencyFormatter.format(player.balance);
-    final titleText = '${player.name}: balance is $formattedBalance';
+  void _showPlayerMenu(PlayerSelectionItem player) {
+    // Get apiProvider outside the builder
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
 
     showDialog(
       context: context,
+      // **MODIFICATION**: The whole dialog is now wrapped in a Consumer
+      // to listen for time updates and recalculate the balance. ✅
       builder: (BuildContext dialogContext) {
-        final canStartSession = widget.clubSessionStartDateTime != null;
+        return Consumer<TimeProvider>(
+          builder: (context, timeProvider, child) {
+            final double dynamicBalance = apiProvider.getDynamicBalance(
+              playerId: player.playerId,
+              currentTime: timeProvider.currentTime,
+              clubSessionStartDateTime: widget.clubSessionStartDateTime,
+            );
 
-        if (player.balance < 0) {
-          return AlertDialog(
-            backgroundColor: Colors.red.shade100,
-            title: Text(titleText),
-            content: const Text('Please add money to continue.'),
-            actions: [
-              TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () {
-                    widget.onPlayerSelected?.call(null);
-                    Navigator.of(dialogContext).pop();
-                  }),
-              TextButton(
-                  child: const Text('Add Money'),
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    if (!mounted) return;
-                    _showAddMoneyDialog(apiProvider, timeProvider, player,
-                        startSessionAfter: canStartSession);
-                  }),
-            ],
-          );
-        } else {
-          return AlertDialog(
-            backgroundColor: Colors.green.shade100,
-            title: Text(titleText),
-            content: player.hasActiveSession
-                ? const Text('This player already has an active session.')
-                : const Text('What would you like to do?'),
-            actions: [
-              if (canStartSession && !player.hasActiveSession)
-                TextButton(
-                    child: const Text('Open a new session'),
-                    onPressed: () async {
-                      Navigator.of(dialogContext).pop();
-                      if (!mounted) return;
-                      await _startNewSession(apiProvider, timeProvider, player);
-                    }),
-              TextButton(
-                  child: const Text('Add Money'),
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    if (!mounted) return;
-                    _showAddMoneyDialog(apiProvider, timeProvider, player,
-                        startSessionAfter: false);
-                  }),
-            ],
-          );
-        }
+            final currencyFormatter =
+                NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+            final formattedBalance = currencyFormatter.format(dynamicBalance);
+            final titleText = '${player.name}: balance is $formattedBalance';
+
+            final canStartSession = widget.clubSessionStartDateTime != null;
+
+            if (dynamicBalance < 0) {
+              return AlertDialog(
+                backgroundColor: Colors.red.shade100,
+                title: Text(titleText),
+                content: const Text('Please add money to continue.'),
+                actions: [
+                  TextButton(
+                      child: const Text('Cancel'),
+                      onPressed: () {
+                        widget.onPlayerSelected?.call(null);
+                        Navigator.of(dialogContext).pop();
+                      }),
+                  TextButton(
+                      child: const Text('Add Money'),
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        if (!mounted) return;
+                        _showAddMoneyDialog(apiProvider, timeProvider, player,
+                            startSessionAfter: canStartSession);
+                      }),
+                ],
+              );
+            } else {
+              return AlertDialog(
+                backgroundColor: Colors.green.shade100,
+                title: Text(titleText),
+                content: player.hasActiveSession
+                    ? const Text('This player already has an active session.')
+                    : const Text('What would you like to do?'),
+                actions: [
+                  if (canStartSession && !player.hasActiveSession)
+                    TextButton(
+                        child: const Text('Open a new session'),
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+                          if (!mounted) return;
+                          await _startNewSession(apiProvider, timeProvider, player);
+                        }),
+                  TextButton(
+                      child: const Text('Add Money'),
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        if (!mounted) return;
+                        _showAddMoneyDialog(apiProvider, timeProvider, player,
+                            startSessionAfter: false);
+                      }),
+                ],
+              );
+            }
+          },
+        );
       },
     );
   }
 
+  // ... build method and PlayerCard remain the same ...
   @override
   Widget build(BuildContext context) {
     final apiProvider = context.watch<ApiProvider>();
