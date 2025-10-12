@@ -1,15 +1,14 @@
 // client/lib/widgets/player_panel.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../models/payment.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
+import 'dialogs.dart';
 
 class PlayerPanel extends StatefulWidget {
   final int? selectedPlayerId;
@@ -30,7 +29,6 @@ class PlayerPanel extends StatefulWidget {
 }
 
 class PlayerPanelState extends State<PlayerPanel> {
-  // ... _startNewSession and _showAddMoneyDialog remain the same ...
   Future<void> _startNewSession(ApiProvider apiProvider,
       TimeProvider timeProvider, PlayerSelectionItem player) async {
     try {
@@ -48,6 +46,8 @@ class PlayerPanelState extends State<PlayerPanel> {
 
       if (!mounted) return;
       widget.onSessionAdded?.call(newSessionId);
+      // **THE FIX**: Deselect the player after a session is successfully started.
+      widget.onPlayerSelected?.call(null);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -56,85 +56,11 @@ class PlayerPanelState extends State<PlayerPanel> {
     }
   }
 
-  void _showAddMoneyDialog(
-      ApiProvider apiProvider,
-      TimeProvider timeProvider,
-      PlayerSelectionItem player,
-      {required bool startSessionAfter}) {
-    final TextEditingController amountController = TextEditingController();
-    if (player.balance < 0) {
-      amountController.text = (-player.balance).toStringAsFixed(2);
-    }
-
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('Add Money for ${player.name}'),
-          content: TextField(
-            controller: amountController,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Amount',
-              prefixText: '\$',
-            ),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-            ],
-          ),
-          actions: [
-            TextButton(
-                child: const Text('Cancel'),
-                onPressed: () => Navigator.of(dialogContext).pop()),
-            TextButton(
-              child: const Text('OK'),
-              onPressed: () async {
-                final double? amount = double.tryParse(amountController.text);
-                if (amount != null && amount > 0) {
-                  final navigator = Navigator.of(dialogContext);
-                  final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-                  final newPayment = Payment(
-                    playerId: player.playerId,
-                    amount: amount,
-                    epoch:
-                        timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                  );
-
-                  try {
-                    final updatedPlayer =
-                        await apiProvider.addPayment(newPayment.toMap());
-
-                    navigator.pop();
-                    if (!mounted) return;
-
-                    _showPlayerMenu(updatedPlayer);
-
-                  } catch (e) {
-                    if (!mounted) return;
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(content: Text('Failed to add payment: $e')),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-
   void _showPlayerMenu(PlayerSelectionItem player) {
-    // Get apiProvider outside the builder
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
 
     showDialog(
       context: context,
-      // **MODIFICATION**: The whole dialog is now wrapped in a Consumer
-      // to listen for time updates and recalculate the balance. ✅
       builder: (BuildContext dialogContext) {
         return Consumer<TimeProvider>(
           builder: (context, timeProvider, child) {
@@ -160,16 +86,17 @@ class PlayerPanelState extends State<PlayerPanel> {
                   TextButton(
                       child: const Text('Cancel'),
                       onPressed: () {
-                        widget.onPlayerSelected?.call(null);
+                        // **THE FIX**: Only close the dialog, don't deselect the player.
                         Navigator.of(dialogContext).pop();
                       }),
                   TextButton(
                       child: const Text('Add Money'),
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.of(dialogContext).pop();
-                        if (!mounted) return;
-                        _showAddMoneyDialog(apiProvider, timeProvider, player,
-                            startSessionAfter: canStartSession);
+                        final updatedPlayer = await showAddMoneyDialog(context, player: player);
+                        if (updatedPlayer != null && mounted) {
+                          _showPlayerMenu(updatedPlayer);
+                        }
                       }),
                 ],
               );
@@ -191,11 +118,12 @@ class PlayerPanelState extends State<PlayerPanel> {
                         }),
                   TextButton(
                       child: const Text('Add Money'),
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.of(dialogContext).pop();
-                        if (!mounted) return;
-                        _showAddMoneyDialog(apiProvider, timeProvider, player,
-                            startSessionAfter: false);
+                        final updatedPlayer = await showAddMoneyDialog(context, player: player);
+                        if (updatedPlayer != null && mounted) {
+                          _showPlayerMenu(updatedPlayer);
+                        }
                       }),
                 ],
               );
@@ -206,7 +134,6 @@ class PlayerPanelState extends State<PlayerPanel> {
     );
   }
 
-  // ... build method and PlayerCard remain the same ...
   @override
   Widget build(BuildContext context) {
     final apiProvider = context.watch<ApiProvider>();

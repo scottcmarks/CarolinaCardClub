@@ -13,6 +13,7 @@ import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
+import 'dialogs.dart';
 
 String _formatMaybeMoney(double? price) {
   if (price == null) return '';
@@ -51,7 +52,6 @@ class SessionPanel extends StatefulWidget {
 }
 
 class SessionPanelState extends State<SessionPanel> {
-  // ... all methods in the State class remain the same ...
   final ItemScrollController _scrollController = ItemScrollController();
 
   @override
@@ -106,6 +106,13 @@ class SessionPanelState extends State<SessionPanel> {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
+    final bool hasActiveSessions = apiProvider.sessions.any((s) => s.stopEpoch == null);
+
+    if (!hasActiveSessions) {
+      widget.onClubSessionTimeChanged(null);
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -143,6 +150,7 @@ class SessionPanelState extends State<SessionPanel> {
       },
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -214,7 +222,6 @@ class SessionPanelState extends State<SessionPanel> {
 }
 
 class SessionPanelHeader extends StatelessWidget {
-  // ... SessionPanelHeader implementation remains the same ...
   final DateTime? clubSessionStartDateTime;
   final DateTime defaultSessionStartDateTime;
   final VoidCallback onToggleClubSessionTime;
@@ -300,129 +307,178 @@ class SessionCard extends StatelessWidget {
     required this.allSessions,
   });
 
-  // **REMOVED**: The local _calculateRoundedAmount helper is no longer needed.
-
-  Future<void> _stopSession(BuildContext context, SessionPanelItem session) async {
-    // ... _stopSession implementation remains the same ...
+  Future<void> _stopSession(BuildContext context, SessionPanelItem session, double liveBalance) async {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text('Stop Session for ${session.name}?'),
-          content: const Text('Are you sure you want to stop this session?'),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            TextButton(
-              child: const Text('OK'),
-              onPressed: () async {
-                 final navigator = Navigator.of(dialogContext);
-                 final scaffoldMessenger = ScaffoldMessenger.of(context);
-                 try {
-                   final fullSession = Session(
-                     sessionId: session.sessionId,
-                     playerId: session.playerId,
-                     startEpoch: session.startEpoch,
-                     stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
-                   );
-                   await apiProvider.updateSession(fullSession);
-                   navigator.pop();
-                 } catch (e) {
-                   navigator.pop();
-                   if (!scaffoldMessenger.mounted) return;
-                   scaffoldMessenger.showSnackBar(
-                     SnackBar(content: Text('Failed to stop session: $e')),
-                   );
-                 }
-              },
-            ),
-          ],
-        );
-      },
-    );
+    Future<void> handleStopAction() async {
+      final fullSession = Session(
+        sessionId: session.sessionId,
+        playerId: session.playerId,
+        startEpoch: session.startEpoch,
+        stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+      );
+      await apiProvider.updateSession(fullSession);
+    }
+
+    if (liveBalance < 0) {
+      showDialog(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            backgroundColor: Colors.red.shade100,
+            title: Text('Stop Session for ${session.name}?'),
+            content: Text('The player\'s balance is currently ${_formatMaybeMoney(liveBalance)}.'),
+            actions: [
+              TextButton(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+              ),
+              TextButton(
+                child: const Text('Stop Session'),
+                onPressed: () async {
+                  final navigator = Navigator.of(dialogContext);
+                  try {
+                    await handleStopAction();
+                    navigator.pop();
+                  } catch (e) {
+                     // Handle error if necessary
+                  }
+                },
+              ),
+              FilledButton(
+                child: const Text('Add Money'),
+                onPressed: () async {
+                  // **THE FIX**: Close this dialog, then show the Add Money dialog and finish.
+                  Navigator.of(dialogContext).pop();
+
+                  final player = PlayerSelectionItem(
+                    playerId: session.playerId,
+                    name: session.name,
+                    balance: session.balance,
+                    hasActiveSession: true
+                  );
+
+                  await showAddMoneyDialog(context, player: player);
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: Text('Stop Session for ${session.name}?'),
+            content: const Text('Are you sure you want to stop this session?'),
+            actions: [
+              TextButton(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+              ),
+              TextButton(
+                child: const Text('OK'),
+                onPressed: () async {
+                   final navigator = Navigator.of(dialogContext);
+                   try {
+                     await handleStopAction();
+                     navigator.pop();
+                   } catch (e) {
+                      // Handle error if necessary
+                   }
+                },
+              ),
+            ],
+          );
+        },
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // **MODIFICATION**: Get the apiProvider once at the top.
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       color: isSelected ? Colors.blue.shade100 : null,
-      child: InkWell(
-        onTap: () {
-          if (session.stopEpoch == null) {
-            _stopSession(context, session);
-          } else {
-            onSessionSelected?.call(session.sessionId);
-          }
+      child: Consumer<TimeProvider>(
+        builder: (context, timeProvider, child) {
+          final double liveBalance = apiProvider.getDynamicBalance(
+            playerId: session.playerId,
+            currentTime: timeProvider.currentTime,
+            clubSessionStartDateTime: clubSessionStartDateTime,
+          );
+
+          return InkWell(
+            onTap: () {
+              if (session.stopEpoch == null) {
+                _stopSession(context, session, liveBalance);
+              } else {
+                onSessionSelected?.call(session.sessionId);
+              }
+            },
+            child: child,
+          );
         },
         child: Padding(
           padding: const EdgeInsets.all(12.0),
-          child: Consumer<TimeProvider>(
-            builder: (context, timeProvider, child) {
-              final effectiveStopEpoch = session.stopEpoch ??
-                  (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
-
-              // Still need to calculate the individual session amount for display.
-              final amount = (max(0, effectiveStopEpoch - session.startEpoch) / 3600.0 * session.rate).roundToDouble();
-              final durationInSeconds = max(0, effectiveStopEpoch - session.startEpoch);
-
-              // **REFACTOR**: Use the centralized function from the provider.
-              final double liveBalance = apiProvider.getDynamicBalance(
-                playerId: session.playerId,
-                currentTime: timeProvider.currentTime,
-                clubSessionStartDateTime: clubSessionStartDateTime,
-              );
-
-              Color balanceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
-              if (session.stopEpoch == null) {
-                if (liveBalance <= 0) {
-                  balanceColor = Colors.red.shade700;
-                } else if (liveBalance <= 1) {
-                  balanceColor = Colors.yellow.shade800;
-                } else {
-                  balanceColor = Colors.green.shade800;
-                }
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (showPlayerName)
-                        Expanded(
-                          child: Text(
-                            session.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      if (session.stopEpoch == null)
-                        Text(
+                  if (showPlayerName)
+                    Expanded(
+                      child: Text(
+                        session.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  Consumer<TimeProvider>(
+                    builder: (context, timeProvider, child) {
+                      if (session.stopEpoch == null) {
+                        final double liveBalance = apiProvider.getDynamicBalance(
+                          playerId: session.playerId,
+                          currentTime: timeProvider.currentTime,
+                          clubSessionStartDateTime: clubSessionStartDateTime,
+                        );
+                        Color balanceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+                        if (liveBalance <= 0) { balanceColor = Colors.red.shade700; }
+                        else if (liveBalance <= 1) { balanceColor = Colors.yellow.shade800; }
+                        else { balanceColor = Colors.green.shade800; }
+
+                        return Text(
                           'Balance: ${_formatMaybeMoney(liveBalance)}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: balanceColor,
                           ),
-                        )
-                      else
-                        Text(
+                        );
+                      } else {
+                        return Text(
                           'Session: ${session.sessionId}',
                           style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
+                        );
+                      }
+                    },
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                ],
+              ),
+              const SizedBox(height: 4),
+              Consumer<TimeProvider>(
+                builder: (context, timeProvider, child) {
+                  final effectiveStopEpoch = session.stopEpoch ??
+                      (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
+
+                  final amount = (max(0, effectiveStopEpoch - session.startEpoch) / 3600.0 * session.rate).roundToDouble();
+                  final durationInSeconds = max(0, effectiveStopEpoch - session.startEpoch);
+
+                  return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
@@ -439,10 +495,10 @@ class SessionCard extends StatelessWidget {
                         ],
                       ),
                     ],
-                  ),
-                ],
-              );
-            },
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
