@@ -93,7 +93,15 @@ class PlayerPanelState extends State<PlayerPanel> {
                       child: const Text('Add Money'),
                       onPressed: () async {
                         Navigator.of(dialogContext).pop();
+
+                        // *** FIX APPLIED HERE ***
+                        // Wait for the next frame to avoid gesture conflict
+                        // before showing the next dialog.
+                        await Future.delayed(Duration.zero);
+
+                        if (!mounted) return;
                         final updatedPlayer = await showAddMoneyDialog(context, player: player);
+
                         if (updatedPlayer != null && mounted) {
                           _showPlayerMenu(updatedPlayer);
                         }
@@ -120,7 +128,16 @@ class PlayerPanelState extends State<PlayerPanel> {
                       child: const Text('Add Money'),
                       onPressed: () async {
                         Navigator.of(dialogContext).pop();
+
+                        // Also apply fix here just in case,
+                        // though it's less likely to crash
+                        // as the new dialog doesn't autofocus
+                        // when balance is positive.
+                        await Future.delayed(Duration.zero);
+
+                        if (!mounted) return;
                         final updatedPlayer = await showAddMoneyDialog(context, player: player);
+
                         if (updatedPlayer != null && mounted) {
                           _showPlayerMenu(updatedPlayer);
                         }

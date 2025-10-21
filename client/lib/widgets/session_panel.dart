@@ -352,6 +352,15 @@ class SessionCard extends StatelessWidget {
                   // **THE FIX**: Close this dialog, then show the Add Money dialog and finish.
                   Navigator.of(dialogContext).pop();
 
+                  // *** FIX APPLIED HERE ***
+                  // Wait for the next frame to avoid gesture conflict
+                  // before showing the next dialog.
+                  await Future.delayed(Duration.zero);
+
+                  // *** FIX APPLIED HERE ***
+                  // Check context.mounted, not just mounted
+                  if (!context.mounted) return;
+
                   final player = PlayerSelectionItem(
                     playerId: session.playerId,
                     name: session.name,
