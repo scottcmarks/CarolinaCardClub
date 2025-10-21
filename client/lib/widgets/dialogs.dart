@@ -48,8 +48,9 @@ Future<PlayerSelectionItem?> showAddMoneyDialog(BuildContext context, {
             onPressed: () async {
               final double? amount = double.tryParse(amountController.text);
               if (amount != null && amount > 0) {
+                // *** FIX 1: Use dialogContext for BOTH Navigator and ScaffoldMessenger ***
                 final navigator = Navigator.of(dialogContext);
-                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
 
                 final newPayment = Payment(
                   playerId: player.playerId,
@@ -62,11 +63,11 @@ Future<PlayerSelectionItem?> showAddMoneyDialog(BuildContext context, {
                   // Return the updated player object on success
                   navigator.pop(updatedPlayer);
                 } catch (e) {
-                  if (scaffoldMessenger.mounted) {
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(content: Text('Failed to add payment: $e')),
-                    );
-                  }
+                  // *** FIX 2: Check dialogContext is still mounted AFTER the await ***
+                  if (!dialogContext.mounted) return;
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('Failed to add payment: $e')),
+                  );
                 }
               }
             },
