@@ -68,7 +68,10 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
             return Scaffold(
               body: ConnectionFailedWidget(
                 errorMessage: api.lastError ?? 'Could not connect to the server.',
-                onRetry: () => showServerSettingsDialog(context),
+                // **MODIFICATION**: Pass the direct retry function
+                onRetry: api.retryConnection,
+                // **NEW**: Pass the settings dialog function
+                onSettings: () => showServerSettingsDialog(context),
               ),
             );
         }
