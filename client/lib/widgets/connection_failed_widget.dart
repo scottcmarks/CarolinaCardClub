@@ -1,59 +1,61 @@
 // client/lib/widgets/connection_failed_widget.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class ConnectionFailedWidget extends StatelessWidget {
   final String errorMessage;
   final VoidCallback onRetry;
+  // **NEW**: Add the onSettings callback
+  final VoidCallback onSettings;
 
   const ConnectionFailedWidget({
     super.key,
     required this.errorMessage,
     required this.onRetry,
+    // **NEW**: Require onSettings in the constructor
+    required this.onSettings,
   });
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.error_outline,
-              color: Colors.red.shade400,
+              color: Theme.of(context).colorScheme.error,
               size: 64,
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Connection Failed',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.headlineMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               errorMessage,
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+              style: Theme.of(context).textTheme.bodyLarge,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            // **MODIFICATION**: Wrap buttons in a Row for side-by-side placement
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                OutlinedButton(
+                // This is your original "Retry" button
+                ElevatedButton(
                   onPressed: onRetry,
                   child: const Text('Retry'),
                 ),
                 const SizedBox(width: 16),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey,
-                  ),
-                  onPressed: () => SystemNavigator.pop(),
-                  child: const Text('Exit App'),
+                // **NEW**: The "Settings" button
+                OutlinedButton(
+                  onPressed: onSettings,
+                  child: const Text('Settings'),
                 ),
               ],
             ),
