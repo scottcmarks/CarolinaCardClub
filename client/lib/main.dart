@@ -20,8 +20,8 @@ void main() {
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
         ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
           create: (context) => ApiProvider(
-              Provider.of<AppSettingsProvider>(context, listen: false))
-            ..initialize(), // Triggers the initial WebSocket connection
+              Provider.of<AppSettingsProvider>(context, listen: false)),
+          // **MODIFICATION**: Removed ..initialize() from create
           update: (_, appSettings, apiProvider) {
             apiProvider?.updateAppSettings(appSettings);
             return apiProvider!;

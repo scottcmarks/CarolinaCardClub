@@ -48,6 +48,17 @@ class ConnectionHandler extends StatefulWidget {
 }
 
 class _ConnectionHandlerState extends State<ConnectionHandler> {
+  // **NEW**: Add initState to trigger the connection
+  @override
+  void initState() {
+    super.initState();
+    // We are only in this widget BECAUSE AppSettingsProvider is ready.
+    // This is now the correct time to start the first connection attempt.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<ApiProvider>(context, listen: false).initialize();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ApiProvider>(
@@ -57,20 +68,19 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
             return const MainSplitViewPage();
 
           case ConnectionStatus.connecting:
-            // **CLEANUP**: Revert to using a Scaffold, which is more conventional
-            // for a full-screen loading state now that the timing is fixed.
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
 
           case ConnectionStatus.failed:
           case ConnectionStatus.disconnected:
+            // This will now only show if the *first* attempt (with
+            // correct settings) actually fails.
             return Scaffold(
               body: ConnectionFailedWidget(
-                errorMessage: api.lastError ?? 'Could not connect to the server.',
-                // **MODIFICATION**: Pass the direct retry function
+                errorMessage:
+                    api.lastError ?? 'Could not connect to the server.',
                 onRetry: api.retryConnection,
-                // **NEW**: Pass the settings dialog function
                 onSettings: () => showServerSettingsDialog(context),
               ),
             );
