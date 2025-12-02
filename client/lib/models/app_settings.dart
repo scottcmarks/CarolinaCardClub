@@ -1,3 +1,5 @@
+// client/lib/models/app_settings.dart
+
 import 'package:flutter/material.dart';
 
 import 'package:shared/shared.dart';
@@ -36,10 +38,6 @@ class AppSettings {
   }
 
   /// A factory constructor to create default settings.
-  ///
-  /// This is used to initialize the [AppSettingsProvider] before the
-  /// actual settings have been loaded from persistent storage, preventing
-  /// initialization errors.
   factory AppSettings.defaults() {
     return AppSettings(
       localServerUrl: defaultServerUrl,
@@ -48,4 +46,21 @@ class AppSettings {
       defaultSessionStartTime: const TimeOfDay(hour: defaultSessionHour, minute: defaultSessionMinute),
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppSettings &&
+          runtimeType == other.runtimeType &&
+          localServerUrl == other.localServerUrl &&
+          localServerApiKey == other.localServerApiKey &&
+          preferredTheme == other.preferredTheme &&
+          defaultSessionStartTime == other.defaultSessionStartTime;
+
+  @override
+  int get hashCode =>
+      localServerUrl.hashCode ^
+      localServerApiKey.hashCode ^
+      preferredTheme.hashCode ^
+      defaultSessionStartTime.hashCode;
 }

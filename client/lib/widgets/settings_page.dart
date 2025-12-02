@@ -31,151 +31,182 @@ class SettingsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: ListView(
-        children: [
-          ListTile(
-            title: const Text('Server Settings'),
-            subtitle: Text(
-              'Configure the connection to the server',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            leading: const Icon(Icons.storage),
-            onTap: () {
-              showServerSettingsDialog(context);
-            },
-          ),
-          const Divider(),
-          ListTile(
-            title: const Text('Revert Changes and Reload from Cloud'),
-            subtitle: Text(
-              'Overwrite server data with the latest cloud backup',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            leading: const Icon(Icons.cloud_download),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (BuildContext dialogContext) {
-                  return AlertDialog(
-                    title: const Text('Revert and Reload?'),
-                    content: const Text(
-                        'This will replace all current server data with the last cloud backup. Are you sure?'),
-                    actions: [
-                      TextButton(
-                        child: const Text('Cancel'),
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                      ),
-                      FilledButton(
-                        child: const Text('Load'),
-                        onPressed: () async {
-                          final scaffoldMessenger = ScaffoldMessenger.of(context);
-                          final rootNavigator = Navigator.of(context);
+      body: Consumer<AppSettingsProvider>(
+        builder: (context, appSettingsProvider, child) {
+          final currentSettings = appSettingsProvider.currentSettings;
 
-                          Navigator.of(dialogContext).pop();
-                          rootNavigator.pop();
+          return ListView(
+            children: [
+              ListTile(
+                title: const Text('Server Settings'),
+                subtitle: Text(
+                  'Configure the connection to the server',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                leading: const Icon(Icons.storage),
+                onTap: () {
+                  showServerSettingsDialog(context);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                title: const Text('Revert Changes and Reload from Cloud'),
+                subtitle: Text(
+                  'Overwrite server data with the latest cloud backup',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                leading: const Icon(Icons.cloud_download),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext dialogContext) {
+                      return AlertDialog(
+                        title: const Text('Revert and Reload?'),
+                        content: const Text(
+                            'This will replace all current server data with the last cloud backup. Are you sure?'),
+                        actions: [
+                          TextButton(
+                            child: const Text('Cancel'),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                          ),
+                          FilledButton(
+                            child: const Text('Load'),
+                            onPressed: () async {
+                              final scaffoldMessenger =
+                                  ScaffoldMessenger.of(context);
+                              final rootNavigator = Navigator.of(context);
 
-                          try {
-                            await apiProvider.reloadServerDatabase();
-                            scaffoldMessenger.showSnackBar(
-                              const SnackBar(
-                                backgroundColor: Colors.green,
-                                content: Text('Successfully loaded data from cloud.'),
-                              ),
-                            );
-                          } catch (e) {
-                             scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                backgroundColor: Colors.red,
-                                content: Text('Failed to load from cloud: $e'),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ],
+                              Navigator.of(dialogContext).pop();
+                              rootNavigator.pop();
+
+                              try {
+                                await apiProvider.reloadServerDatabase();
+                                scaffoldMessenger.showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Colors.green,
+                                    content: Text(
+                                        'Successfully loaded data from cloud.'),
+                                  ),
+                                );
+                              } catch (e) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: Colors.red,
+                                    content:
+                                        Text('Failed to load from cloud: $e'),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
-              );
-            },
-          ),
-          // **NEW "SAVE CURRENT STATE" BUTTON**
-          const Divider(),
-          ListTile(
-            title: const Text('Save Current State'),
-            subtitle: Text(
-              'Uploads the current server data to the cloud backup',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            leading: const Icon(Icons.cloud_upload),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (BuildContext dialogContext) {
-                  return AlertDialog(
-                    title: const Text('Save to Cloud?'),
-                    content: const Text(
-                        'This will overwrite the last cloud backup with the current server data. Are you sure?'),
-                    actions: [
-                      TextButton(
-                        child: const Text('Cancel'),
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                      ),
-                      FilledButton(
-                        child: const Text('Save'),
-                        onPressed: () async {
-                          final scaffoldMessenger = ScaffoldMessenger.of(context);
-                          final rootNavigator = Navigator.of(context);
+              ),
+              const Divider(),
+              ListTile(
+                title: const Text('Save Current State'),
+                subtitle: Text(
+                  'Uploads the current server data to the cloud backup',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                leading: const Icon(Icons.cloud_upload),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext dialogContext) {
+                      return AlertDialog(
+                        title: const Text('Save to Cloud?'),
+                        content: const Text(
+                            'This will overwrite the last cloud backup with the current server data. Are you sure?'),
+                        actions: [
+                          TextButton(
+                            child: const Text('Cancel'),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                          ),
+                          FilledButton(
+                            child: const Text('Save'),
+                            onPressed: () async {
+                              final scaffoldMessenger =
+                                  ScaffoldMessenger.of(context);
+                              final rootNavigator = Navigator.of(context);
 
-                          Navigator.of(dialogContext).pop();
-                          rootNavigator.pop();
+                              Navigator.of(dialogContext).pop();
+                              rootNavigator.pop();
 
-                          try {
-                            await apiProvider.backupDatabase();
-                            scaffoldMessenger.showSnackBar(
-                              const SnackBar(
-                                backgroundColor: Colors.green,
-                                content: Text('Successfully saved data to cloud.'),
-                              ),
-                            );
-                          } catch (e) {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(
-                                backgroundColor: Colors.red,
-                                content: Text('Failed to save to cloud: $e'),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ],
+                              try {
+                                await apiProvider.backupDatabase();
+                                scaffoldMessenger.showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Colors.green,
+                                    content: Text(
+                                        'Successfully saved data to cloud.'),
+                                  ),
+                                );
+                              } catch (e) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: Colors.red,
+                                    content:
+                                        Text('Failed to save to cloud: $e'),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
-              );
-            },
-          ),
-          const Divider(),
-          ListTile(
-            title: const Text('Set Clock'),
-            subtitle: Text(
-              'Adjust the displayed date and time',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            leading: const Icon(Icons.schedule),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return const SetClockDialog();
+              ),
+              const Divider(),
+              ListTile(
+                title: const Text('Default Session Start Time'),
+                subtitle: Text(
+                  currentSettings.defaultSessionStartTime?.format(context) ??
+                      const TimeOfDay(hour: 19, minute: 30).format(context),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                leading: const Icon(Icons.access_time),
+                onTap: () async {
+                  final initialTime = currentSettings.defaultSessionStartTime ??
+                      const TimeOfDay(hour: 19, minute: 30);
+
+                  final TimeOfDay? picked = await showTimePicker(
+                    context: context,
+                    initialTime: initialTime,
+                  );
+
+                  if (picked != null && picked != initialTime) {
+                    final newSettings = currentSettings.copyWith(
+                      defaultSessionStartTime: picked,
+                    );
+                    appSettingsProvider.updateSettings(newSettings);
+                  }
                 },
-              );
-            },
-          ),
-          const Divider(),
-          Consumer<AppSettingsProvider>(
-            builder: (context, appSettings, _) {
-              final isDarkMode =
-                  appSettings.currentSettings.preferredTheme == 'dark';
-              return ListTile(
+              ),
+              const Divider(),
+              ListTile(
+                title: const Text('Set Clock'),
+                subtitle: Text(
+                  'Adjust the displayed date and time',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                leading: const Icon(Icons.schedule),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return const SetClockDialog();
+                    },
+                  );
+                },
+              ),
+              const Divider(),
+              ListTile(
                 leading: const Icon(Icons.brightness_6),
                 title: const Text('Theme'),
                 trailing: Row(
@@ -183,24 +214,21 @@ class SettingsPage extends StatelessWidget {
                   children: [
                     const Text('Light'),
                     Switch(
-                      value: isDarkMode,
+                      value: currentSettings.preferredTheme == 'dark',
                       onChanged: (isDark) {
-                        final currentSettings = appSettings.currentSettings;
-                        final newSettings = AppSettings(
+                        final newSettings = currentSettings.copyWith(
                           preferredTheme: isDark ? 'dark' : 'light',
-                          localServerUrl: currentSettings.localServerUrl,
-                          localServerApiKey: currentSettings.localServerApiKey,
                         );
-                         appSettings.updateSettings(newSettings);
+                        appSettingsProvider.updateSettings(newSettings);
                       },
                     ),
                     const Text('Dark'),
                   ],
                 ),
-              );
-            },
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -285,11 +313,12 @@ class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final newSettings = AppSettings(
+            final currentSettings = appSettingsProvider.currentSettings;
+
+            // Update settings using copyWith to preserve other fields
+            final newSettings = currentSettings.copyWith(
               localServerUrl: _urlController.text,
               localServerApiKey: _apiKeyController.text,
-              preferredTheme:
-                  appSettingsProvider.currentSettings.preferredTheme,
             );
 
             appSettingsProvider.updateSettings(newSettings);
