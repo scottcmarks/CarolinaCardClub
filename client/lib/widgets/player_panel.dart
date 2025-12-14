@@ -100,7 +100,8 @@ class PlayerPanelState extends State<PlayerPanel> {
                         await Future.delayed(Duration.zero);
 
                         if (!mounted) return;
-                        final updatedPlayer = await showAddMoneyDialog(context, player: player);
+                        final updatedPlayer =
+                            await showAddMoneyDialog(context, player: player);
 
                         if (updatedPlayer != null && mounted) {
                           _showPlayerMenu(updatedPlayer);
@@ -122,7 +123,8 @@ class PlayerPanelState extends State<PlayerPanel> {
                         onPressed: () async {
                           Navigator.of(dialogContext).pop();
                           if (!mounted) return;
-                          await _startNewSession(apiProvider, timeProvider, player);
+                          await _startNewSession(
+                              apiProvider, timeProvider, player);
                         }),
                   TextButton(
                       child: const Text('Add Money'),
@@ -136,7 +138,8 @@ class PlayerPanelState extends State<PlayerPanel> {
                         await Future.delayed(Duration.zero);
 
                         if (!mounted) return;
-                        final updatedPlayer = await showAddMoneyDialog(context, player: player);
+                        final updatedPlayer =
+                            await showAddMoneyDialog(context, player: player);
 
                         if (updatedPlayer != null && mounted) {
                           _showPlayerMenu(updatedPlayer);

@@ -45,10 +45,16 @@ class SessionPanelItem {
       name: map['Name'] ?? 'Unnamed', // Provide a default if name is null
       startEpoch: map['Start_Epoch'],
       stopEpoch: map['Stop_Epoch'], // Will be null if it's not set in the DB
-      durationInSeconds: map['Duration_In_Seconds'], // Will be null if it's not set in the DB
-      amount: (map['Amount'] is int) ? (map['Amount'] as int).toDouble() : map['Amount'], // ditto
-      balance: (map['Balance'] is int) ? (map['Balance'] as int).toDouble() : map['Balance'],
-      rate: (map['Rate'] is int) ? (map['Rate'] as int).toDouble() : map['Rate'],
+      durationInSeconds:
+          map['Duration_In_Seconds'], // Will be null if it's not set in the DB
+      amount: (map['Amount'] is int)
+          ? (map['Amount'] as int).toDouble()
+          : map['Amount'], // ditto
+      balance: (map['Balance'] is int)
+          ? (map['Balance'] as int).toDouble()
+          : map['Balance'],
+      rate:
+          (map['Rate'] is int) ? (map['Rate'] as int).toDouble() : map['Rate'],
     );
   }
 }

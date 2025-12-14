@@ -43,7 +43,8 @@ class AppSettings {
       localServerUrl: defaultServerUrl,
       localServerApiKey: localApiKey,
       preferredTheme: defaultTheme,
-      defaultSessionStartTime: const TimeOfDay(hour: defaultSessionHour, minute: defaultSessionMinute),
+      defaultSessionStartTime: const TimeOfDay(
+          hour: defaultSessionHour, minute: defaultSessionMinute),
     );
   }
 

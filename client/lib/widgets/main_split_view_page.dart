@@ -115,7 +115,8 @@ class RealTimeClock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<TimeProvider>(
       builder: (context, timeProvider, child) {
-        final String formattedTime = DateFormat('HH:mm:ss').format(timeProvider.currentTime);
+        final String formattedTime =
+            DateFormat('HH:mm:ss').format(timeProvider.currentTime);
         return Center(
           child: Text(
             formattedTime,
