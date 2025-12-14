@@ -19,18 +19,19 @@ void main() async {
   sqfliteFfiInit();
   await _downloadDatabase();
 
-  final router = Router()
-    ..all('/ws', _webSocketHandler);
+  final router = Router()..all('/ws', _webSocketHandler);
 
-  final ipLoggingMiddleware = createMiddleware(requestHandler: (Request request) {
-    if (request.headers['connection'] == 'Upgrade' && request.headers['upgrade'] == 'websocket') {
-      final connectionInfo = request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
+  final ipLoggingMiddleware =
+      createMiddleware(requestHandler: (Request request) {
+    if (request.headers['connection'] == 'Upgrade' &&
+        request.headers['upgrade'] == 'websocket') {
+      final connectionInfo =
+          request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
       final address = connectionInfo?.remoteAddress.address ?? 'unknown';
       print('✓ WebSocket connection attempt from $address');
     }
     return null;
   });
-
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
@@ -44,7 +45,8 @@ void main() async {
   print('---');
 }
 
-Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message) async {
+Future<void> _handleWebSocketMessage(
+    WebSocketChannel webSocket, String message) async {
   try {
     final decoded = jsonDecode(message);
     final requestId = decoded['requestId'];
@@ -104,7 +106,6 @@ Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message)
       'requestId': requestId,
       if (error != null) 'error': error else 'payload': payload,
     }));
-
   } catch (e) {
     print('✗ Error handling message: $e');
     try {
@@ -118,8 +119,8 @@ Future<void> _handleWebSocketMessage(WebSocketChannel webSocket, String message)
   }
 }
 
-
-final _webSocketHandler = webSocketHandler((WebSocketChannel webSocket, String? protocol) {
+final _webSocketHandler =
+    webSocketHandler((WebSocketChannel webSocket, String? protocol) {
   print('✓ Client connection established.');
   _clients.add(webSocket);
 
@@ -165,7 +166,8 @@ Future<List<Map<String, Object?>>> _getPlayers() async {
   return await db.query('Player_Selection_List');
 }
 
-Future<List<Map<String, Object?>>> _getSessions(Map<String, dynamic>? params) async {
+Future<List<Map<String, Object?>>> _getSessions(
+    Map<String, dynamic>? params) async {
   final db = await _db;
 
   final int? playerId = params?['playerId'];
@@ -183,7 +185,8 @@ Future<List<Map<String, Object?>>> _getSessions(Map<String, dynamic>? params) as
     whereClauses.add('Stop_Epoch IS NULL');
   }
 
-  String? whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
+  String? whereString =
+      whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
 
   return await db.query(
     'Session_Panel_List',
@@ -202,7 +205,8 @@ Future<int> _addSession(Map<String, dynamic> sessionData) async {
 
 Future<void> _updateSession(Map<String, dynamic> sessionData) async {
   final db = await _db;
-  await db.update('Session', sessionData, where: 'Session_Id = ?', whereArgs: [sessionData['Session_Id']]);
+  await db.update('Session', sessionData,
+      where: 'Session_Id = ?', whereArgs: [sessionData['Session_Id']]);
   _broadcastUpdate();
 }
 
@@ -220,10 +224,12 @@ Future<void> _stopAllSessions(Map<String, dynamic> params) async {
   );
 }
 
-Future<Map<String, Object?>> _addPayment(Map<String, dynamic> paymentData) async {
+Future<Map<String, Object?>> _addPayment(
+    Map<String, dynamic> paymentData) async {
   final db = await _db;
   await db.insert('Payment', paymentData);
-  final updatedPlayer = await db.query('Player_Selection_List', where: 'Player_Id = ?', whereArgs: [paymentData['Player_Id']]);
+  final updatedPlayer = await db.query('Player_Selection_List',
+      where: 'Player_Id = ?', whereArgs: [paymentData['Player_Id']]);
   _broadcastUpdate();
   return updatedPlayer.first;
 }
@@ -236,7 +242,8 @@ Future<void> _backupDatabase() async {
   try {
     var req = http.MultipartRequest("POST", Uri.parse(uploadUrl))
       ..fields['apiKey'] = remoteApiKey
-      ..files.add(await http.MultipartFile.fromPath('database', dbPath, filename: dbFileName));
+      ..files.add(await http.MultipartFile.fromPath('database', dbPath,
+          filename: dbFileName));
     var res = await req.send();
     if (res.statusCode == 200) {
       print('✓ Backup successful!');
@@ -259,7 +266,8 @@ Future<void> _downloadDatabase() async {
     final downloadUri = Uri.parse('$downloadUrl?apiKey=$remoteApiKey');
     print('--- Downloading database from $downloadUrl ---');
 
-    final response = await http.get(downloadUri).timeout(const Duration(seconds: 15));
+    final response =
+        await http.get(downloadUri).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       await dbFile.writeAsBytes(response.bodyBytes);
       print('✓ Database download complete.');
