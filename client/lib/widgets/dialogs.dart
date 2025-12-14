@@ -10,7 +10,8 @@ import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 
 /// Shows a dialog to add money for a player and returns the updated player on success.
-Future<PlayerSelectionItem?> showAddMoneyDialog(BuildContext context, {
+Future<PlayerSelectionItem?> showAddMoneyDialog(
+  BuildContext context, {
   required PlayerSelectionItem player,
 }) async {
   final apiProvider = Provider.of<ApiProvider>(context, listen: false);
@@ -41,7 +42,8 @@ Future<PlayerSelectionItem?> showAddMoneyDialog(BuildContext context, {
         actions: [
           TextButton(
             child: const Text('Cancel'),
-            onPressed: () => Navigator.of(dialogContext).pop(null), // Return null on cancel
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(null), // Return null on cancel
           ),
           TextButton(
             child: const Text('OK'),
@@ -55,11 +57,13 @@ Future<PlayerSelectionItem?> showAddMoneyDialog(BuildContext context, {
                 final newPayment = Payment(
                   playerId: player.playerId,
                   amount: amount,
-                  epoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+                  epoch:
+                      timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
                 );
 
                 try {
-                  final updatedPlayer = await apiProvider.addPayment(newPayment.toMap());
+                  final updatedPlayer =
+                      await apiProvider.addPayment(newPayment.toMap());
                   // Return the updated player object on success
                   navigator.pop(updatedPlayer);
                 } catch (e) {

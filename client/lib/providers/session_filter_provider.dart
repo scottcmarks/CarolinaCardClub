@@ -10,7 +10,8 @@ class SessionFilterProvider extends ChangeNotifier {
 
   // Method to update the state and notify listeners
   void setShowOnlyActiveSessions(bool newValue) {
-    if (_showOnlyActiveSessions != newValue) { // Only update if value actually changes
+    if (_showOnlyActiveSessions != newValue) {
+      // Only update if value actually changes
       _showOnlyActiveSessions = newValue;
       notifyListeners(); // Notify all widgets that are listening for changes
     }

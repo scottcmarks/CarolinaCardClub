@@ -69,7 +69,8 @@ class SessionPanelState extends State<SessionPanel> {
     super.didUpdateWidget(oldWidget);
     final bool oldOnlyActive = oldWidget.clubSessionStartDateTime != null;
     final bool newOnlyActive = widget.clubSessionStartDateTime != null;
-    if (oldWidget.selectedPlayerId != widget.selectedPlayerId || oldOnlyActive != newOnlyActive) {
+    if (oldWidget.selectedPlayerId != widget.selectedPlayerId ||
+        oldOnlyActive != newOnlyActive) {
       _updateSessionFilter();
     }
     if (widget.newlyAddedSessionId != null &&
@@ -106,7 +107,8 @@ class SessionPanelState extends State<SessionPanel> {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-    final bool hasActiveSessions = apiProvider.sessions.any((s) => s.stopEpoch == null);
+    final bool hasActiveSessions =
+        apiProvider.sessions.any((s) => s.stopEpoch == null);
 
     if (!hasActiveSessions) {
       widget.onClubSessionTimeChanged(null);
@@ -151,13 +153,15 @@ class SessionPanelState extends State<SessionPanel> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
-    final appSettings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
+    final appSettings = Provider.of<AppSettingsProvider>(context, listen: false)
+        .currentSettings;
     final now = Provider.of<TimeProvider>(context, listen: false).currentTime;
-    final defaultStartTime = appSettings.defaultSessionStartTime ?? const TimeOfDay(hour: 19, minute: 30);
-    final defaultSessionStartDateTime = DateTime(now.year, now.month, now.day, defaultStartTime.hour, defaultStartTime.minute);
+    final defaultStartTime = appSettings.defaultSessionStartTime ??
+        const TimeOfDay(hour: 19, minute: 30);
+    final defaultSessionStartDateTime = DateTime(now.year, now.month, now.day,
+        defaultStartTime.hour, defaultStartTime.minute);
 
     final apiProvider = context.watch<ApiProvider>();
 
@@ -167,7 +171,8 @@ class SessionPanelState extends State<SessionPanel> {
     } else {
       final selectedPlayer = apiProvider.players.firstWhere(
         (p) => p.playerId == widget.selectedPlayerId,
-        orElse: () => PlayerSelectionItem(playerId: 0, name: 'Unknown', balance: 0, hasActiveSession: false),
+        orElse: () => PlayerSelectionItem(
+            playerId: 0, name: 'Unknown', balance: 0, hasActiveSession: false),
       );
       playerFilterText = 'for ${selectedPlayer.name}';
     }
@@ -194,7 +199,7 @@ class SessionPanelState extends State<SessionPanel> {
             builder: (context) {
               final sessions = apiProvider.sessions;
               if (sessions.isEmpty) {
-                  return const Center(child: Text('No sessions found.'));
+                return const Center(child: Text('No sessions found.'));
               }
               return ScrollablePositionedList.builder(
                 itemScrollController: _scrollController,
@@ -202,7 +207,8 @@ class SessionPanelState extends State<SessionPanel> {
                 itemCount: sessions.length,
                 itemBuilder: (context, index) {
                   final session = sessions[index];
-                  final isSelected = session.sessionId == widget.selectedSessionId;
+                  final isSelected =
+                      session.sessionId == widget.selectedSessionId;
                   return SessionCard(
                     session: session,
                     isSelected: isSelected,
@@ -211,8 +217,8 @@ class SessionPanelState extends State<SessionPanel> {
                     showPlayerName: widget.selectedPlayerId == null,
                     allSessions: sessions,
                   );
-                  },
-                );
+                },
+              );
             },
           ),
         ),
@@ -242,7 +248,8 @@ class SessionPanelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool showOnlyActiveSessions = clubSessionStartDateTime != null;
-    final line1 = showOnlyActiveSessions ? 'Active sessions only' : 'All sessions';
+    final line1 =
+        showOnlyActiveSessions ? 'Active sessions only' : 'All sessions';
     final combinedText = '$line1\n$playerFilterText';
 
     final bool isPlayerSelected = selectedPlayerId != null;
@@ -271,15 +278,19 @@ class SessionPanelHeader extends StatelessWidget {
             onTap: isPlayerSelected ? () => onPlayerSelected?.call(null) : null,
             borderRadius: BorderRadius.circular(4.0),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
               decoration: BoxDecoration(
-                color: isPlayerSelected ? Theme.of(context).highlightColor : Colors.transparent,
+                color: isPlayerSelected
+                    ? Theme.of(context).highlightColor
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(4.0),
               ),
               child: Text(
                 combinedText,
                 textAlign: TextAlign.right,
-                style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+                style:
+                    const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
               ),
             ),
           ),
@@ -307,7 +318,8 @@ class SessionCard extends StatelessWidget {
     required this.allSessions,
   });
 
-  Future<void> _stopSession(BuildContext context, SessionPanelItem session, double liveBalance) async {
+  Future<void> _stopSession(BuildContext context, SessionPanelItem session,
+      double liveBalance) async {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
@@ -328,7 +340,8 @@ class SessionCard extends StatelessWidget {
           return AlertDialog(
             backgroundColor: Colors.red.shade100,
             title: Text('Stop Session for ${session.name}?'),
-            content: Text('The player\'s balance is currently ${_formatMaybeMoney(liveBalance)}.'),
+            content: Text(
+                'The player\'s balance is currently ${_formatMaybeMoney(liveBalance)}.'),
             actions: [
               TextButton(
                 child: const Text('Cancel'),
@@ -342,7 +355,7 @@ class SessionCard extends StatelessWidget {
                     await handleStopAction();
                     navigator.pop();
                   } catch (e) {
-                     // Handle error if necessary
+                    // Handle error if necessary
                   }
                 },
               ),
@@ -362,11 +375,10 @@ class SessionCard extends StatelessWidget {
                   if (!context.mounted) return;
 
                   final player = PlayerSelectionItem(
-                    playerId: session.playerId,
-                    name: session.name,
-                    balance: session.balance,
-                    hasActiveSession: true
-                  );
+                      playerId: session.playerId,
+                      name: session.name,
+                      balance: session.balance,
+                      hasActiveSession: true);
 
                   await showAddMoneyDialog(context, player: player);
                 },
@@ -390,13 +402,13 @@ class SessionCard extends StatelessWidget {
               TextButton(
                 child: const Text('OK'),
                 onPressed: () async {
-                   final navigator = Navigator.of(dialogContext);
-                   try {
-                     await handleStopAction();
-                     navigator.pop();
-                   } catch (e) {
-                      // Handle error if necessary
-                   }
+                  final navigator = Navigator.of(dialogContext);
+                  try {
+                    await handleStopAction();
+                    navigator.pop();
+                  } catch (e) {
+                    // Handle error if necessary
+                  }
                 },
               ),
             ],
@@ -444,22 +456,30 @@ class SessionCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         session.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   Consumer<TimeProvider>(
                     builder: (context, timeProvider, child) {
                       if (session.stopEpoch == null) {
-                        final double liveBalance = apiProvider.getDynamicBalance(
+                        final double liveBalance =
+                            apiProvider.getDynamicBalance(
                           playerId: session.playerId,
                           currentTime: timeProvider.currentTime,
                           clubSessionStartDateTime: clubSessionStartDateTime,
                         );
-                        Color balanceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
-                        if (liveBalance <= 0) { balanceColor = Colors.red.shade700; }
-                        else if (liveBalance <= 1) { balanceColor = Colors.yellow.shade800; }
-                        else { balanceColor = Colors.green.shade800; }
+                        Color balanceColor =
+                            Theme.of(context).textTheme.bodyLarge?.color ??
+                                Colors.black;
+                        if (liveBalance <= 0) {
+                          balanceColor = Colors.red.shade700;
+                        } else if (liveBalance <= 1) {
+                          balanceColor = Colors.yellow.shade800;
+                        } else {
+                          balanceColor = Colors.green.shade800;
+                        }
 
                         return Text(
                           'Balance: ${_formatMaybeMoney(liveBalance)}',
@@ -484,8 +504,13 @@ class SessionCard extends StatelessWidget {
                   final effectiveStopEpoch = session.stopEpoch ??
                       (timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000);
 
-                  final amount = (max(0, effectiveStopEpoch - session.startEpoch) / 3600.0 * session.rate).roundToDouble();
-                  final durationInSeconds = max(0, effectiveStopEpoch - session.startEpoch);
+                  final amount =
+                      (max(0, effectiveStopEpoch - session.startEpoch) /
+                              3600.0 *
+                              session.rate)
+                          .roundToDouble();
+                  final durationInSeconds =
+                      max(0, effectiveStopEpoch - session.startEpoch);
 
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -498,7 +523,8 @@ class SessionCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('Duration: ${_formatDuration(durationInSeconds)}'),
+                          Text(
+                              'Duration: ${_formatDuration(durationInSeconds)}'),
                           const SizedBox(width: 16),
                           Text('Amount: ${_formatMaybeMoney(amount)}'),
                         ],

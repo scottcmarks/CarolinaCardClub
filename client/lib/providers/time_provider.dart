@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'; // Required for ChangeNotifier
 import 'package:flutter/material.dart';
 
-
 class TimeProvider with ChangeNotifier {
   DateTime _currentTime = DateTime.now();
   Duration _offset = Duration();
@@ -21,9 +20,9 @@ class TimeProvider with ChangeNotifier {
   TimeProvider() {
     // Timer.periodic creates a repeating timer
     // It calls the callback function every duration interval
-    _timer = Timer.periodic(const Duration(seconds: 1),
-      (timer) { _updateAndNotify(); }
-    );
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _updateAndNotify();
+    });
   }
 
   void _updateAndNotify() {

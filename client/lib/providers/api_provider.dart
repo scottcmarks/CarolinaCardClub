@@ -50,7 +50,8 @@ class ApiProvider with ChangeNotifier {
 
   // ... initialize, retryConnection, updateAppSettings, etc. remain the same ...
   void initialize() {
-    if (_connectionStatus == ConnectionStatus.connecting || _connectionStatus == ConnectionStatus.connected) {
+    if (_connectionStatus == ConnectionStatus.connecting ||
+        _connectionStatus == ConnectionStatus.connected) {
       return;
     }
     _connectionStatus = ConnectionStatus.connecting;
@@ -91,7 +92,8 @@ class ApiProvider with ChangeNotifier {
     required DateTime? clubSessionStartDateTime,
   }) {
     final effectiveStartEpoch = clubSessionStartDateTime != null
-        ? max(startEpoch, clubSessionStartDateTime.millisecondsSinceEpoch ~/ 1000)
+        ? max(
+            startEpoch, clubSessionStartDateTime.millisecondsSinceEpoch ~/ 1000)
         : startEpoch;
     final durationInSeconds = max(0, stopEpoch - effectiveStartEpoch);
     final amount = (durationInSeconds / 3600.0) * rate;
@@ -105,7 +107,8 @@ class ApiProvider with ChangeNotifier {
     required DateTime? clubSessionStartDateTime,
   }) {
     final player = _players.firstWhere((p) => p.playerId == playerId,
-        orElse: () => PlayerSelectionItem(playerId: 0, name: '', balance: 0, hasActiveSession: false));
+        orElse: () => PlayerSelectionItem(
+            playerId: 0, name: '', balance: 0, hasActiveSession: false));
 
     if (!player.hasActiveSession) {
       return player.balance;
@@ -145,8 +148,7 @@ class ApiProvider with ChangeNotifier {
       return;
     }
 
-    _currentConnectionUrl =
-        _appSettingsProvider.currentSettings.localServerUrl;
+    _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
     final serverUrl = _currentConnectionUrl!;
 
     try {
@@ -184,8 +186,8 @@ class ApiProvider with ChangeNotifier {
         },
         onDone: () {
           if (!handshakeCompleter.isCompleted) {
-            handshakeCompleter
-                .completeError(Exception('Connection closed during handshake.'));
+            handshakeCompleter.completeError(
+                Exception('Connection closed during handshake.'));
           } else {
             disconnect();
           }
@@ -261,8 +263,8 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  Future<dynamic> _sendCommand(
-      String command, [Map<String, dynamic>? params]) async {
+  Future<dynamic> _sendCommand(String command,
+      [Map<String, dynamic>? params]) async {
     if (connectionStatus != ConnectionStatus.connected) {
       await connectionFuture;
       if (connectionStatus != ConnectionStatus.connected) {
@@ -281,8 +283,7 @@ class ApiProvider with ChangeNotifier {
       'params': params,
     }));
 
-    return completer.future.timeout(const Duration(seconds: 15),
-        onTimeout: () {
+    return completer.future.timeout(const Duration(seconds: 15), onTimeout: () {
       _requests.remove(requestId);
       throw TimeoutException(
           'Server did not respond in time for command: $command');
@@ -351,7 +352,6 @@ class ApiProvider with ChangeNotifier {
     final result = await _sendCommand('addPayment', paymentMap);
     await fetchPlayerSelectionList();
     return PlayerSelectionItem.fromMap(result);
-
   }
 
   Future<void> backupDatabase() async {

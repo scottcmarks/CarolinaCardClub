@@ -2,7 +2,8 @@ class Payment {
   final int? paymentId;
   final int playerId;
   final double amount;
-  final int epoch; // Storing as integer for SQLite, can convert to DateTime when needed
+  final int
+      epoch; // Storing as integer for SQLite, can convert to DateTime when needed
 
   Payment({
     this.paymentId,
@@ -38,7 +39,8 @@ class Payment {
     return Payment(
       paymentId: map['Payment_Id'] as int?,
       playerId: map['Player_Id'] as int,
-      amount: (map['Amount'] as num).toDouble(), // SQLite stores NUMERIC as REAL
+      amount:
+          (map['Amount'] as num).toDouble(), // SQLite stores NUMERIC as REAL
       epoch: map['Epoch'] as int,
     );
   }
