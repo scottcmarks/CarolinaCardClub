@@ -1,8 +1,6 @@
 // client/lib/widgets/main_split_view_page.dart
 
 import 'package:flutter/material.dart';
-// Note: intl is no longer needed here as the formatting moved to the widget file
-// import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/time_provider.dart';
