@@ -1,12 +1,14 @@
 // client/lib/widgets/main_split_view_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+// Note: intl is no longer needed here as the formatting moved to the widget file
+// import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/time_provider.dart';
 
 import 'player_panel.dart';
+import 'real_time_clock.dart'; // **NEW IMPORT**
 import 'session_panel.dart';
 import 'settings_page.dart';
 
@@ -72,7 +74,7 @@ class MainSplitViewPageState extends State<MainSplitViewPage> {
         actions: const [
           SizedBox(
             width: 100,
-            child: RealTimeClock(),
+            child: RealTimeClock(), // Uses the imported widget
           ),
           SizedBox(width: 16),
         ],
@@ -95,7 +97,6 @@ class MainSplitViewPageState extends State<MainSplitViewPage> {
               selectedPlayerId: _selectedPlayerId,
               selectedSessionId: _selectedSessionId,
               onSessionSelected: _onSessionSelected,
-              // **MODIFICATION**: Pass the onPlayerSelected callback down.
               onPlayerSelected: _onPlayerSelected,
               newlyAddedSessionId: _newlyAddedSessionId,
               clubSessionStartDateTime: _clubSessionStartDateTime,
@@ -104,30 +105,6 @@ class MainSplitViewPageState extends State<MainSplitViewPage> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class RealTimeClock extends StatelessWidget {
-  const RealTimeClock({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<TimeProvider>(
-      builder: (context, timeProvider, child) {
-        final String formattedTime =
-            DateFormat('HH:mm:ss').format(timeProvider.currentTime);
-        return Center(
-          child: Text(
-            formattedTime,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.normal,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-        );
-      },
     );
   }
 }

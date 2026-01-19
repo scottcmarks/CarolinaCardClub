@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared/shared.dart';
 
-import '../models/app_settings.dart';
 import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/time_provider.dart';
