@@ -9,6 +9,7 @@ import '../models/session.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 import 'dialogs.dart';
+import 'player_card.dart'; // **NEW IMPORT**
 
 class PlayerPanel extends StatefulWidget {
   final int? selectedPlayerId;
@@ -46,7 +47,7 @@ class PlayerPanelState extends State<PlayerPanel> {
 
       if (!mounted) return;
       widget.onSessionAdded?.call(newSessionId);
-      // **THE FIX**: Deselect the player after a session is successfully started.
+      // Deselect the player after a session is successfully started.
       widget.onPlayerSelected?.call(null);
     } catch (e) {
       if (!mounted) return;
@@ -86,7 +87,7 @@ class PlayerPanelState extends State<PlayerPanel> {
                   TextButton(
                       child: const Text('Cancel'),
                       onPressed: () {
-                        // **THE FIX**: Only close the dialog, don't deselect the player.
+                        // Only close the dialog, don't deselect the player.
                         Navigator.of(dialogContext).pop();
                       }),
                   TextButton(
@@ -94,9 +95,7 @@ class PlayerPanelState extends State<PlayerPanel> {
                       onPressed: () async {
                         Navigator.of(dialogContext).pop();
 
-                        // *** FIX APPLIED HERE ***
                         // Wait for the next frame to avoid gesture conflict
-                        // before showing the next dialog.
                         await Future.delayed(Duration.zero);
 
                         if (!mounted) return;
@@ -131,10 +130,6 @@ class PlayerPanelState extends State<PlayerPanel> {
                       onPressed: () async {
                         Navigator.of(dialogContext).pop();
 
-                        // Also apply fix here just in case,
-                        // though it's less likely to crash
-                        // as the new dialog doesn't autofocus
-                        // when balance is positive.
                         await Future.delayed(Duration.zero);
 
                         if (!mounted) return;
@@ -182,53 +177,6 @@ class PlayerPanelState extends State<PlayerPanel> {
               },
             );
           }).toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class PlayerCard extends StatelessWidget {
-  final PlayerSelectionItem player;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const PlayerCard({
-    super.key,
-    required this.player,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    Color? cardColor;
-    if (player.balance > 0) {
-      cardColor = Colors.green.shade100;
-    } else if (player.balance < 0) {
-      cardColor = Colors.red.shade100;
-    }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      color: cardColor,
-      shape: isSelected
-          ? RoundedRectangleBorder(
-              side:
-                  BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
-              borderRadius: BorderRadius.circular(4.0),
-            )
-          : null,
-      child: InkWell(
-        onTap: onTap,
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-          title: Text(
-            player.name,
-            style: Theme.of(context).textTheme.titleLarge,
-            softWrap: false,
-            maxLines: 1,
-          ),
         ),
       ),
     );
