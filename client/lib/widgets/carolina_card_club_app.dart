@@ -48,12 +48,9 @@ class ConnectionHandler extends StatefulWidget {
 }
 
 class _ConnectionHandlerState extends State<ConnectionHandler> {
-  // **NEW**: Add initState to trigger the connection
   @override
   void initState() {
     super.initState();
-    // We are only in this widget BECAUSE AppSettingsProvider is ready.
-    // This is now the correct time to start the first connection attempt.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ApiProvider>(context, listen: false).initialize();
     });
@@ -67,6 +64,8 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
           case ConnectionStatus.connected:
             return const MainSplitViewPage();
 
+          // **FIX**: Handle 'initial' same as 'connecting' to hide the error screen on startup
+          case ConnectionStatus.initial:
           case ConnectionStatus.connecting:
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
@@ -74,8 +73,6 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
 
           case ConnectionStatus.failed:
           case ConnectionStatus.disconnected:
-            // This will now only show if the *first* attempt (with
-            // correct settings) actually fails.
             return Scaffold(
               body: ConnectionFailedWidget(
                 errorMessage:

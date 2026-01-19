@@ -7,9 +7,6 @@ import '../models/session_panel_item.dart';
 
 class BalanceCalculator {
   /// Calculates the rounded cost of a session based on duration and rate.
-  ///
-  /// If [clubSessionStartDateTime] is provided, the cost is calculated starting
-  /// from that time if it is later than the session's actual start time.
   static double calculateRoundedAmount({
     required int startEpoch,
     required int stopEpoch,
@@ -25,8 +22,7 @@ class BalanceCalculator {
     return amount.roundToDouble();
   }
 
-  /// Calculates the live balance for a player by subtracting the cost of
-  /// currently active sessions from their stored database balance.
+  /// Calculates the live balance for a player.
   static double getDynamicBalance({
     required int playerId,
     required DateTime currentTime,

@@ -47,12 +47,17 @@ class SessionCard extends StatelessWidget {
     final apiProvider = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
+    // **CHANGE**: Capture the time immediately when the user taps "Stop".
+    // This effectively "freezes" the session cost at the moment of interaction.
+    final DateTime frozenStopTime = timeProvider.currentTime;
+
     Future<void> handleStopAction() async {
       final fullSession = Session(
         sessionId: session.sessionId,
         playerId: session.playerId,
         startEpoch: session.startEpoch,
-        stopEpoch: timeProvider.currentTime.millisecondsSinceEpoch ~/ 1000,
+        // **CHANGE**: Use the frozen time for the database update.
+        stopEpoch: frozenStopTime.millisecondsSinceEpoch ~/ 1000,
       );
       await apiProvider.updateSession(fullSession);
     }
@@ -92,7 +97,7 @@ class SessionCard extends StatelessWidget {
                   // Wait for the next frame to avoid gesture conflict
                   await Future.delayed(Duration.zero);
 
-                  // Check context.mounted, not just mounted
+                  // Check context.mounted, not just mounted (StatelessWidget doesn't have mounted)
                   if (!context.mounted) return;
 
                   final player = PlayerSelectionItem(
