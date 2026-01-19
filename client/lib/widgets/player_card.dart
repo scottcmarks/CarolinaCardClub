@@ -27,6 +27,7 @@ class PlayerCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       color: cardColor,
+      clipBehavior: Clip.hardEdge, // Ensures splash effects are clipped to the card shape
       shape: isSelected
           ? RoundedRectangleBorder(
               side:
@@ -34,16 +35,14 @@ class PlayerCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(4.0),
             )
           : null,
-      child: InkWell(
-        onTap: onTap,
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-          title: Text(
-            player.name,
-            style: Theme.of(context).textTheme.titleLarge,
-            softWrap: false,
-            maxLines: 1,
-          ),
+      child: ListTile(
+        onTap: onTap, // FIX: onTap must be here to prevent the ListTile from "swallowing" the click
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+        title: Text(
+          player.name,
+          style: Theme.of(context).textTheme.titleLarge,
+          softWrap: false,
+          maxLines: 1,
         ),
       ),
     );

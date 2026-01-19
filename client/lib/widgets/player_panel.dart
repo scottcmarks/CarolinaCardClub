@@ -9,7 +9,7 @@ import '../models/session.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 import 'dialogs.dart';
-import 'player_card.dart'; // **NEW IMPORT**
+import 'player_card.dart'; // Imports the fixed widget
 
 class PlayerPanel extends StatefulWidget {
   final int? selectedPlayerId;
