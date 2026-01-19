@@ -2,12 +2,13 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math'; // Added for the 'max' function
+// Removed: import 'dart:math'; (No longer needed)
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../logic/balance_calculator.dart'; // **NEW IMPORT**
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
@@ -16,7 +17,6 @@ import 'app_settings_provider.dart';
 enum ConnectionStatus { disconnected, connecting, connected, failed }
 
 class ApiProvider with ChangeNotifier {
-  // ... existing properties ...
   AppSettingsProvider _appSettingsProvider;
   final Map<String, Completer> _requests = {};
   final Uuid _uuid = const Uuid();
@@ -48,7 +48,6 @@ class ApiProvider with ChangeNotifier {
     connectionFuture = Completer<void>().future;
   }
 
-  // ... initialize, retryConnection, updateAppSettings, etc. remain the same ...
   void initialize() {
     if (_connectionStatus == ConnectionStatus.connecting ||
         _connectionStatus == ConnectionStatus.connected) {
@@ -84,53 +83,21 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  // **NEW**: Centralized helper function to calculate a session's rounded cost.
-  double _calculateRoundedAmount({
-    required int startEpoch,
-    required int stopEpoch,
-    required double rate,
-    required DateTime? clubSessionStartDateTime,
-  }) {
-    final effectiveStartEpoch = clubSessionStartDateTime != null
-        ? max(
-            startEpoch, clubSessionStartDateTime.millisecondsSinceEpoch ~/ 1000)
-        : startEpoch;
-    final durationInSeconds = max(0, stopEpoch - effectiveStartEpoch);
-    final amount = (durationInSeconds / 3600.0) * rate;
-    return amount.roundToDouble();
-  }
-
-  // **NEW**: Public method to get the dynamic balance for any player. 🧠
+  // **MODIFICATION**: Delegated logic to BalanceCalculator
   double getDynamicBalance({
     required int playerId,
     required DateTime currentTime,
     required DateTime? clubSessionStartDateTime,
   }) {
-    final player = _players.firstWhere((p) => p.playerId == playerId,
-        orElse: () => PlayerSelectionItem(
-            playerId: 0, name: '', balance: 0, hasActiveSession: false));
-
-    if (!player.hasActiveSession) {
-      return player.balance;
-    }
-
-    final activeSessionsForPlayer =
-        _sessions.where((s) => s.playerId == playerId && s.stopEpoch == null);
-
-    double totalActiveAmount = 0;
-    for (final activeSession in activeSessionsForPlayer) {
-      totalActiveAmount += _calculateRoundedAmount(
-        startEpoch: activeSession.startEpoch,
-        stopEpoch: currentTime.millisecondsSinceEpoch ~/ 1000,
-        rate: activeSession.rate,
-        clubSessionStartDateTime: clubSessionStartDateTime,
-      );
-    }
-
-    return player.balance - totalActiveAmount;
+    return BalanceCalculator.getDynamicBalance(
+      playerId: playerId,
+      currentTime: currentTime,
+      clubSessionStartDateTime: clubSessionStartDateTime,
+      players: _players,
+      sessions: _sessions,
+    );
   }
 
-  // ... all other methods (connect, _sendCommand, fetch methods, etc.) remain the same ...
   void _safeNotifyListeners() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_mounted) {
