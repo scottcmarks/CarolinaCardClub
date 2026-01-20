@@ -3,30 +3,36 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../logic/balance_calculator.dart'; // **NEW IMPORT**
+import '../logic/balance_calculator.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
-import '../services/socket_client.dart'; // **NEW IMPORT**
+import '../services/socket_client.dart';
+import '../services/subnet_scanner.dart';
 import 'app_settings_provider.dart';
 
-// Export the enum so other files don't break
+// Export the connection status so widgets don't need to import the service directly
 export '../services/socket_client.dart' show ConnectionStatus;
 
 class ApiProvider with ChangeNotifier {
   AppSettingsProvider _appSettingsProvider;
 
-  // Delegate networking to the service
+  // Services
   final SocketClient _socketClient = SocketClient();
+  final SubnetScanner _subnetScanner = SubnetScanner();
 
+  // State
   List<PlayerSelectionItem> _players = [];
   List<SessionPanelItem> _sessions = [];
+
+  // Filters
   int? _lastSessionPlayerIdFilter;
   bool _lastSessionActiveOnlyFilter = false;
 
   bool _mounted = true;
   String? _currentConnectionUrl;
 
+  // Getters
   List<PlayerSelectionItem> get players => _players;
   List<SessionPanelItem> get sessions => _sessions;
   ConnectionStatus get connectionStatus => _socketClient.status;
@@ -38,12 +44,12 @@ class ApiProvider with ChangeNotifier {
   ApiProvider(this._appSettingsProvider) {
     _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
 
-    // Listen to status changes from the socket client
+    // Listen to socket status changes
     _socketClient.statusNotifier.addListener(() {
       _safeNotifyListeners();
     });
 
-    // Listen to broadcast events
+    // Listen to broadcast events (DB updates from server)
     _socketClient.onBroadcast.listen((message) {
       if (message['event'] == 'update') {
         fetchPlayerSelectionList();
@@ -76,6 +82,31 @@ class ApiProvider with ChangeNotifier {
     final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
 
     await _socketClient.connect(_currentConnectionUrl!, apiKey);
+
+    // If connection failed, try to auto-discover via Subnet Scan
+    if (connectionStatus == ConnectionStatus.failed) {
+      debugPrint('Connection failed. Attempting subnet scan...');
+      final foundIp = await _subnetScanner.findServer();
+
+      if (foundIp != null) {
+        debugPrint('Auto-discovery found server at: $foundIp');
+
+        final newUrl = 'http://$foundIp:5109';
+
+        // 1. Update the App Settings persistently (Now Awaitable!)
+        await _appSettingsProvider.updateSettings(
+          _appSettingsProvider.currentSettings.copyWith(localServerUrl: newUrl),
+        );
+
+        // 2. Update local reference
+        _currentConnectionUrl = newUrl;
+
+        // 3. Retry connection immediately with new URL
+        await _socketClient.connect(newUrl, apiKey);
+      } else {
+        debugPrint('Subnet scan found no active servers.');
+      }
+    }
   }
 
   Future<void> disconnect() async {
@@ -89,7 +120,6 @@ class ApiProvider with ChangeNotifier {
   void updateAppSettings(AppSettingsProvider newSettingsProvider) {
     final newUrl = newSettingsProvider.currentSettings.localServerUrl;
     if (_currentConnectionUrl != newUrl) {
-      debugPrint('--> Server URL changed. Reconnecting...');
       _appSettingsProvider = newSettingsProvider;
       _currentConnectionUrl = newUrl;
       retryConnection();
