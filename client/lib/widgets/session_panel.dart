@@ -142,7 +142,7 @@ class SessionPanelState extends State<SessionPanel> {
     final appSettings = Provider.of<AppSettingsProvider>(context, listen: false)
         .currentSettings;
     final now = Provider.of<TimeProvider>(context, listen: false).currentTime;
-    final defaultStartTime = appSettings.defaultSessionStartTime ??
+    final defaultStartTime = appSettings.sessionStartTime ??
         const TimeOfDay(hour: 19, minute: 30);
     final defaultSessionStartDateTime = DateTime(now.year, now.month, now.day,
         defaultStartTime.hour, defaultStartTime.minute);

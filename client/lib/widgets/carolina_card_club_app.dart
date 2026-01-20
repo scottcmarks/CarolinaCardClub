@@ -73,14 +73,7 @@ class _ConnectionHandlerState extends State<ConnectionHandler> {
 
           case ConnectionStatus.failed:
           case ConnectionStatus.disconnected:
-            return Scaffold(
-              body: ConnectionFailedWidget(
-                errorMessage:
-                    api.lastError ?? 'Could not connect to the server.',
-                onRetry: api.retryConnection,
-                onSettings: () => showServerSettingsDialog(context),
-              ),
-            );
+            return const ConnectionFailedWidget();
         }
       },
     );
