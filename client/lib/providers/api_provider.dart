@@ -8,31 +8,25 @@ import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
 import '../services/socket_client.dart';
-import '../services/subnet_scanner.dart';
 import 'app_settings_provider.dart';
 
-// Export the connection status so widgets don't need to import the service directly
 export '../services/socket_client.dart' show ConnectionStatus;
 
 class ApiProvider with ChangeNotifier {
   AppSettingsProvider _appSettingsProvider;
-
-  // Services
   final SocketClient _socketClient = SocketClient();
-  final SubnetScanner _subnetScanner = SubnetScanner();
 
-  // State
   List<PlayerSelectionItem> _players = [];
   List<SessionPanelItem> _sessions = [];
-
-  // Filters
   int? _lastSessionPlayerIdFilter;
   bool _lastSessionActiveOnlyFilter = false;
 
   bool _mounted = true;
   String? _currentConnectionUrl;
 
-  // Getters
+  bool _hasAttemptedAutoScan = false;
+  bool get hasAttemptedAutoScan => _hasAttemptedAutoScan;
+
   List<PlayerSelectionItem> get players => _players;
   List<SessionPanelItem> get sessions => _sessions;
   ConnectionStatus get connectionStatus => _socketClient.status;
@@ -44,19 +38,16 @@ class ApiProvider with ChangeNotifier {
   ApiProvider(this._appSettingsProvider) {
     _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
 
-    // Listen to socket status changes
     _socketClient.statusNotifier.addListener(() {
       _safeNotifyListeners();
     });
 
-    // Listen to broadcast events (DB updates from server)
     _socketClient.onBroadcast.listen((message) {
       if (message['event'] == 'update') {
-        fetchPlayerSelectionList();
-        fetchSessionPanelList(
-          playerId: _lastSessionPlayerIdFilter,
-          onlyActive: _lastSessionActiveOnlyFilter,
-        );
+        // **FIX**: Catch errors here too so broadcast updates don't crash the app
+        _fetchAllData().catchError((e) {
+          debugPrint('ApiProvider: Failed to update data from broadcast: $e');
+        });
       }
     });
   }
@@ -67,46 +58,53 @@ class ApiProvider with ChangeNotifier {
       return;
     }
 
+    _hasAttemptedAutoScan = false;
     connectionFuture = connect();
-
-    connectionFuture.then((_) async {
-      if (connectionStatus == ConnectionStatus.connected) {
-        await fetchPlayerSelectionList();
-        await fetchSessionPanelList();
-      }
-    });
   }
 
   Future<void> connect() async {
     _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
     final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
 
+    // 1. Establish Socket Connection
     await _socketClient.connect(_currentConnectionUrl!, apiKey);
 
-    // If connection failed, try to auto-discover via Subnet Scan
-    if (connectionStatus == ConnectionStatus.failed) {
-      debugPrint('Connection failed. Attempting subnet scan...');
-      final foundIp = await _subnetScanner.findServer();
-
-      if (foundIp != null) {
-        debugPrint('Auto-discovery found server at: $foundIp');
-
-        final newUrl = 'http://$foundIp:5109';
-
-        // 1. Update the App Settings persistently (Now Awaitable!)
-        await _appSettingsProvider.updateSettings(
-          _appSettingsProvider.currentSettings.copyWith(localServerUrl: newUrl),
-        );
-
-        // 2. Update local reference
-        _currentConnectionUrl = newUrl;
-
-        // 3. Retry connection immediately with new URL
-        await _socketClient.connect(newUrl, apiKey);
-      } else {
-        debugPrint('Subnet scan found no active servers.');
+    // 2. If successful, fetch initial data immediately
+    if (connectionStatus == ConnectionStatus.connected) {
+      debugPrint('ApiProvider: Connection successful. Fetching initial data...');
+      try {
+        await _fetchAllData();
+      } catch (e) {
+        debugPrint('ApiProvider: Error fetching initial data: $e');
+        // **FIX**: If we can't get data, the connection is useless.
+        // Disconnect so the UI shows the "Connection Failed" screen again.
+        await _socketClient.disconnect();
       }
     }
+  }
+
+  Future<void> _fetchAllData() async {
+    // We await these so any errors (like Timeout) bubble up to be caught
+    await fetchPlayerSelectionList();
+    await fetchSessionPanelList(
+      playerId: _lastSessionPlayerIdFilter,
+      onlyActive: _lastSessionActiveOnlyFilter,
+    );
+  }
+
+  void markAutoScanAttempted() {
+    _hasAttemptedAutoScan = true;
+    notifyListeners();
+  }
+
+  Future<void> updateServerUrl(String newUrl) async {
+    debugPrint('ApiProvider: Updating URL to $newUrl and saving settings.');
+    final newSettings = _appSettingsProvider.currentSettings.copyWith(
+      localServerUrl: newUrl
+    );
+    await _appSettingsProvider.updateSettings(newSettings);
+    _currentConnectionUrl = newUrl;
+    notifyListeners();
   }
 
   Future<void> disconnect() async {
@@ -114,6 +112,7 @@ class ApiProvider with ChangeNotifier {
   }
 
   void retryConnection() {
+    _hasAttemptedAutoScan = false;
     initialize();
   }
 
@@ -129,7 +128,6 @@ class ApiProvider with ChangeNotifier {
   }
 
   // --- Logic Delegates ---
-
   double getDynamicBalance({
     required int playerId,
     required DateTime currentTime,
@@ -145,7 +143,6 @@ class ApiProvider with ChangeNotifier {
   }
 
   // --- Command Methods ---
-
   Future<dynamic> _sendCommand(String command,
       [Map<String, dynamic>? params]) async {
     final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
@@ -184,29 +181,20 @@ class ApiProvider with ChangeNotifier {
 
   Future<int> addSession(Session session) async {
     final result = await _sendCommand('addSession', session.toMap());
-    await fetchPlayerSelectionList();
-    await fetchSessionPanelList(
-        playerId: _lastSessionPlayerIdFilter,
-        onlyActive: _lastSessionActiveOnlyFilter);
+    await _fetchAllData();
     return result['sessionId'];
   }
 
   Future<void> updateSession(Session session) async {
     await _sendCommand('updateSession', session.toMap());
-    await fetchPlayerSelectionList();
-    await fetchSessionPanelList(
-        playerId: _lastSessionPlayerIdFilter,
-        onlyActive: _lastSessionActiveOnlyFilter);
+    await _fetchAllData();
   }
 
   Future<void> stopAllSessions(DateTime stopTime) async {
     final stopEpoch = stopTime.millisecondsSinceEpoch ~/ 1000;
     await _sendCommand('stopAllSessions', {'stopEpoch': stopEpoch});
     await backupDatabase();
-    await fetchPlayerSelectionList();
-    await fetchSessionPanelList(
-        playerId: _lastSessionPlayerIdFilter,
-        onlyActive: _lastSessionActiveOnlyFilter);
+    await _fetchAllData();
   }
 
   Future<PlayerSelectionItem> addPayment(
@@ -222,10 +210,7 @@ class ApiProvider with ChangeNotifier {
 
   Future<void> reloadServerDatabase() async {
     await _sendCommand('reloadDatabase');
-    await fetchPlayerSelectionList();
-    await fetchSessionPanelList(
-        playerId: _lastSessionPlayerIdFilter,
-        onlyActive: _lastSessionActiveOnlyFilter);
+    await _fetchAllData();
   }
 
   void _safeNotifyListeners() {

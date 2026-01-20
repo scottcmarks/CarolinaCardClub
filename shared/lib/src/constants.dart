@@ -17,6 +17,6 @@ const String localApiKey =
 
 // -- Default Settings
 const String defaultServerUrl     = 'http://localhost:5109';
-const String defaultTheme         = 'light';
+const String defaultTheme         = 'system';
 const int defaultSessionHour   = 19;
 const int defaultSessionMinute = 30;

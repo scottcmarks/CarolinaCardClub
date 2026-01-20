@@ -2,45 +2,86 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+
+enum ScanEventType { checking, found }
+
+class ScanEvent {
+  final ScanEventType type;
+  final String? ip;
+  ScanEvent(this.type, [this.ip]);
+}
 
 class SubnetScanner {
-  static const int _scanTimeoutMs = 500; // Fast timeout per IP
+  static const int _scanTimeoutMs = 500;
   static const int _serverPort = 5109;
 
-  /// Scans the local subnet for a reachable server on port 5109.
-  Future<String?> findServer() async {
-    final String? localIp = await _getLocalIpAddress();
-    if (localIp == null) {
-      return null;
-    }
+  String? lastUsedBaseIp;
 
-    final String subnetPrefix = localIp.substring(0, localIp.lastIndexOf('.') + 1);
-    final int localHostSuffix = int.parse(localIp.split('.').last);
-
-    final List<Future<String?>> checks = [];
-
-    // **FIX**: Start at 2.
-    // .0 is Network, .1 is Gateway, .255 is Broadcast.
-    // We scan .2 through .254.
-    for (int i = 2; i < 255; i++) {
-      if (i == localHostSuffix) continue; // Skip ourselves
-
-      final targetIp = '$subnetPrefix$i';
-      checks.add(_checkConnection(targetIp));
-    }
-
+  /// Rapidly checks a single IP address. Returns true if server is found.
+  Future<bool> isServerAt(String ip) async {
     try {
-      // Return the first successful IP, or null if all fail/timeout
-      final foundIp = await Stream.fromFutures(checks)
-          .firstWhere((ip) => ip != null, orElse: () => null);
-
-      return foundIp;
+      debugPrint('Scanner: Checking single target $ip...');
+      final socket = await Socket.connect(ip, _serverPort,
+          timeout: const Duration(milliseconds: _scanTimeoutMs));
+      await socket.close();
+      debugPrint('Scanner: SUCCESS! Found server at $ip');
+      return true;
     } catch (e) {
-      return null;
+      return false;
     }
   }
 
-  Future<String?> _getLocalIpAddress() async {
+  /// Scans the subnet of the provided [baseIp].
+  Stream<ScanEvent> scanSubnet(String baseIp) async* {
+    lastUsedBaseIp = baseIp;
+    debugPrint('Scanner: Starting scan on subnet for $baseIp');
+
+    final String subnetPrefix = baseIp.substring(0, baseIp.lastIndexOf('.') + 1);
+    final int localHostSuffix = int.parse(baseIp.split('.').last);
+
+    final controller = StreamController<ScanEvent>();
+    final List<Future<void>> futures = [];
+
+    // Scan .2 to .254
+    for (int i = 2; i < 255; i++) {
+      if (i == localHostSuffix) continue;
+
+      final targetIp = '$subnetPrefix$i';
+      futures.add(_checkWithReporting(targetIp, controller));
+    }
+
+    Future.wait(futures).then((_) {
+      debugPrint('Scanner: All checks complete for $baseIp.');
+      controller.close();
+    });
+
+    yield* controller.stream;
+  }
+
+  Future<void> _checkWithReporting(String ip, StreamController<ScanEvent> controller) async {
+    if (controller.isClosed) return;
+
+    controller.add(ScanEvent(ScanEventType.checking, ip));
+
+    try {
+      final socket = await Socket.connect(ip, _serverPort,
+          timeout: const Duration(milliseconds: _scanTimeoutMs));
+
+      await socket.close();
+
+      debugPrint('Scanner: SUCCESS! Found server at $ip');
+      if (!controller.isClosed) {
+        controller.add(ScanEvent(ScanEventType.found, ip));
+      }
+    } catch (e) {
+      // Expected failure for most IPs
+    }
+  }
+
+  /// Returns ALL valid IPv4 addresses found on the device.
+  Future<List<String>> getLocalIpAddresses() async {
+    final List<String> ips = [];
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
@@ -48,29 +89,18 @@ class SubnetScanner {
       );
 
       for (var interface in interfaces) {
-        // Filter out VPNs/Tunneled interfaces if possible
-        if (interface.name.contains('tun')) continue;
+        // Skip VPN tunnels or other clearly non-physical interfaces if possible
+        if (interface.name.toLowerCase().contains('tun')) continue;
 
         for (var addr in interface.addresses) {
           if (!addr.isLoopback) {
-            return addr.address;
+             ips.add(addr.address);
           }
         }
       }
-      return null;
     } catch (e) {
-      return null;
+      debugPrint('Scanner: Failed to list network interfaces: $e');
     }
-  }
-
-  Future<String?> _checkConnection(String ip) async {
-    try {
-      final socket = await Socket.connect(ip, _serverPort,
-          timeout: const Duration(milliseconds: _scanTimeoutMs));
-      await socket.close();
-      return ip;
-    } catch (e) {
-      return null;
-    }
+    return ips;
   }
 }

@@ -11,17 +11,17 @@ dependencies:
     sdk: flutter
 
   # Core App Utilities
-  provider: ^6.1.2 # For state management
-  http: ^1.2.1 # For network requests (kept for future use)
-  shared_preferences: ^2.2.3 # For persisting app settings
+  provider: ^6.1.5+1 # For state management
+  http: ^1.6.0 # For network requests (kept for future use)
+  shared_preferences: ^2.5.4 # For persisting app settings
   intl: ^0.20.2 # For date and time formatting
-  uuid: ^4.4.0 # For generating unique request IDs
+  uuid: ^4.5.2 # For generating unique request IDs
 
   # WebSocket Communication
   web_socket_channel: ^3.0.3 # For real-time communication with the server
 
   # UI Components
-  cupertino_icons: ^1.0.2
+  cupertino_icons: ^1.0.8
   google_fonts: ^7.0.2 # For custom fonts, like the monospaced clock
   scrollable_positioned_list: ^0.3.8 # For auto-scrolling the session list
   bottom_picker: ^4.1.1 # For the settings page date/time pickers

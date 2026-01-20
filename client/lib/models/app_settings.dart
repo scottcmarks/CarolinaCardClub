@@ -10,15 +10,13 @@ class AppSettings {
   final String localServerUrl;
   final String localServerApiKey;
   final String preferredTheme;
-  final TimeOfDay? defaultSessionStartTime;
+  final TimeOfDay? sessionStartTime;
 
   // Default values
-  static const String defaultLocalServerUrl = 'http://172.20.10.2:5109';
+  static const String defaultLocalServerUrl = defaultServerUrl;
+  static const String defaultLocalTheme = defaultTheme;
+  static const String defaultLocalApiKey = localApiKey;
 
-  // **FIX**: Now uses the constant from the shared package
-  static const String defaultApiKey = localApiKey;
-
-  static const String defaultTheme = 'system';
 
   // Keys for SharedPreferences
   static const String _keyServerUrl = 'server_url';
@@ -31,15 +29,15 @@ class AppSettings {
     required this.localServerUrl,
     required this.localServerApiKey,
     required this.preferredTheme,
-    this.defaultSessionStartTime,
+    this.sessionStartTime,
   });
 
   factory AppSettings.defaults() {
     return const AppSettings(
       localServerUrl: defaultLocalServerUrl,
-      localServerApiKey: defaultApiKey,
-      preferredTheme: defaultTheme,
-      defaultSessionStartTime: null,
+      localServerApiKey: defaultLocalApiKey,
+      preferredTheme: defaultLocalTheme,
+      sessionStartTime: null,
     );
   }
 
@@ -47,14 +45,14 @@ class AppSettings {
     String? localServerUrl,
     String? localServerApiKey,
     String? preferredTheme,
-    TimeOfDay? defaultSessionStartTime,
+    TimeOfDay? sessionStartTime,
   }) {
     return AppSettings(
       localServerUrl: localServerUrl ?? this.localServerUrl,
       localServerApiKey: localServerApiKey ?? this.localServerApiKey,
       preferredTheme: preferredTheme ?? this.preferredTheme,
-      defaultSessionStartTime:
-          defaultSessionStartTime ?? this.defaultSessionStartTime,
+      sessionStartTime:
+          sessionStartTime ?? this.sessionStartTime,
     );
   }
 
@@ -73,10 +71,10 @@ class AppSettings {
       localServerUrl:
           prefs.getString(_keyServerUrl) ?? defaultLocalServerUrl,
       localServerApiKey:
-          prefs.getString(_keyApiKey) ?? defaultApiKey,
+          prefs.getString(_keyApiKey) ?? defaultLocalApiKey,
       preferredTheme:
           prefs.getString(_keyTheme) ?? defaultTheme,
-      defaultSessionStartTime: loadedTime,
+      sessionStartTime: loadedTime,
     );
   }
 
@@ -85,9 +83,9 @@ class AppSettings {
     await prefs.setString(_keyApiKey, localServerApiKey);
     await prefs.setString(_keyTheme, preferredTheme);
 
-    if (defaultSessionStartTime != null) {
-      await prefs.setInt(_keyStartHour, defaultSessionStartTime!.hour);
-      await prefs.setInt(_keyStartMinute, defaultSessionStartTime!.minute);
+    if (sessionStartTime != null) {
+      await prefs.setInt(_keyStartHour, sessionStartTime!.hour);
+      await prefs.setInt(_keyStartMinute, sessionStartTime!.minute);
     } else {
       await prefs.remove(_keyStartHour);
       await prefs.remove(_keyStartMinute);

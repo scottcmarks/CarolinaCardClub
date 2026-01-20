@@ -166,13 +166,13 @@ class SettingsPage extends StatelessWidget {
               ListTile(
                 title: const Text('Default Session Start Time'),
                 subtitle: Text(
-                  currentSettings.defaultSessionStartTime?.format(context) ??
+                  currentSettings.sessionStartTime?.format(context) ??
                       const TimeOfDay(hour: 19, minute: 30).format(context),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 leading: const Icon(Icons.access_time),
                 onTap: () async {
-                  final initialTime = currentSettings.defaultSessionStartTime ??
+                  final initialTime = currentSettings.sessionStartTime ??
                       const TimeOfDay(hour: 19, minute: 30);
 
                   final TimeOfDay? picked = await showTimePicker(
@@ -182,7 +182,7 @@ class SettingsPage extends StatelessWidget {
 
                   if (picked != null && picked != initialTime) {
                     final newSettings = currentSettings.copyWith(
-                      defaultSessionStartTime: picked,
+                      sessionStartTime: picked,
                     );
                     appSettingsProvider.updateSettings(newSettings);
                   }
