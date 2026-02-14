@@ -1,0 +1,14 @@
+#!/bin/bash
+cd ~/carolina_card_club/server
+sqlite3 CarolinaCardClub.db <<EOF
+
+INSERT INTO Payment (Player_Id, Amount, Epoch) 
+SELECT pb.Player_Id, 
+       -pb.Balance, 
+       COALESCE(last.Most_Recent_Stop_Epoch, strftime('%s', 'now')) 
+FROM Player_Balance pb 
+LEFT JOIN Player_Most_Recent_Session_Stop_Epoch last 
+ON pb.Player_Id = last.Player_Id 
+WHERE pb.Balance < 0;
+
+EOF
