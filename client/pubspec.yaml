@@ -22,7 +22,7 @@ dependencies:
 
   # UI Components
   cupertino_icons: ^1.0.8
-  google_fonts: ^7.0.2 # For custom fonts, like the monospaced clock
+  google_fonts: ^8.0.1 # For custom fonts, like the monospaced clock
   scrollable_positioned_list: ^0.3.8 # For auto-scrolling the session list
   bottom_picker: ^4.1.1 # For the settings page date/time pickers
 
