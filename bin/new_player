@@ -1,0 +1,25 @@
+#!/bin/bash
+if [ -z "${1}" ] || [ -z "${2}" ] || [ -z "${3}" ]
+then
+    echo 'usage: new_player <name> <email> <phone>' >&2
+    exit 129
+fi
+
+cd ~/carolina_card_club/server
+sqlite3 CarolinaCardClub.db "
+BEGIN TRANSACTION;
+INSERT INTO Player (Name, Player_Category_Id)
+            VALUES ('$1', (SELECT Player_Category_Id
+                           FROM Player_Category
+                           WHERE Name = 'Regular'));
+INSERT OR IGNORE INTO Email_Address (Address) VALUES ('$2');
+INSERT OR IGNORE INTO Phone_Number (Number) VALUES ('$3');
+INSERT INTO Player_Email (Player_Id, EmailAddress_Id) VALUES (
+    (SELECT Player_Id FROM Player WHERE Name='$1' ORDER BY Player_Id DESC LIMIT 1),
+    (SELECT EmailAddress_Id FROM Email_Address WHERE Address='$2')
+);
+INSERT INTO Player_Phone (Player_Id, PhoneNumber_Id) VALUES (
+    (SELECT Player_Id FROM Player WHERE Name='$1' ORDER BY Player_Id DESC LIMIT 1),
+    (SELECT PhoneNumber_Id FROM Phone_Number WHERE Number='$3')
+);
+COMMIT;"
