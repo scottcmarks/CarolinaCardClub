@@ -19,10 +19,13 @@ class PlayerSelectionItem {
 
   factory PlayerSelectionItem.fromMap(Map<String, dynamic> map) {
     return PlayerSelectionItem(
-      playerId: map['Player_Id'],
-      name: map['Name'],
-      balance: (map['Balance'] as num).toDouble(),
-      isActive: (map['Is_Active'] as int) == 1,
+      playerId: map['Player_Id'] as int,
+      name: map['Name'] ?? 'Unknown',
+      balance: (map['Balance'] as num? ?? 0.0).toDouble(),
+      isActive: (map['Is_Active'] as int? ?? 0) == 1,
+
+      // *** THE CRITICAL FIXES ***
+      // If the database view returns NULL for these, we MUST fall back to defaults
       hourlyRate: (map['Hourly_Rate'] as num? ?? 5.0).toDouble(),
       prepayHours: (map['Prepay_Hours'] as int? ?? 5),
     );

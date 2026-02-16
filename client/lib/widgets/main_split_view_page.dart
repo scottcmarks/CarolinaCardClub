@@ -2,104 +2,52 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../providers/time_provider.dart';
-
-import 'player_panel.dart';
-import 'real_time_clock.dart'; // **NEW IMPORT**
-import 'session_panel.dart';
-import 'settings_page.dart';
+import '../providers/api_provider.dart';
+import 'player_panel.dart'; // Ensure this matches your filename
+import 'session_panel.dart'; // Ensure this matches your filename
 
 class MainSplitViewPage extends StatefulWidget {
-  const MainSplitViewPage({super.key});
+  const MainSplitViewPage({Key? key}) : super(key: key);
 
   @override
-  MainSplitViewPageState createState() => MainSplitViewPageState();
+  State<MainSplitViewPage> createState() => _MainSplitViewPageState();
 }
 
-class MainSplitViewPageState extends State<MainSplitViewPage> {
-  int? _selectedPlayerId;
-  int? _selectedSessionId;
-  int? _newlyAddedSessionId;
-  DateTime? _clubSessionStartDateTime;
-
-  void _onPlayerSelected(int? playerId) {
-    setState(() {
-      _selectedPlayerId = playerId;
-      _selectedSessionId = null;
-    });
-  }
-
-  void _onSessionSelected(int? sessionId) {
-    setState(() {
-      _selectedSessionId = sessionId;
-    });
-  }
-
-  void _onSessionAdded(int sessionId) {
-    setState(() {
-      _newlyAddedSessionId = sessionId;
-    });
-  }
-
-  void _onClubSessionTimeChanged(DateTime? newTime) {
-    setState(() {
-      _clubSessionStartDateTime = newTime;
-    });
-  }
+class _MainSplitViewPageState extends State<MainSplitViewPage> {
+  // We don't need _selectedPlayerId logic here anymore
+  // because the PlayerPanel handles its own taps internally now.
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.settings),
-          tooltip: 'Settings',
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              builder: (context) => const SettingsPage(),
-            );
-          },
-        ),
-        title: Center(
-          child: SizedBox(
-            height: 40,
-            child: Image.asset('assets/CCCBanner.png'),
-          ),
-        ),
-        actions: const [
-          SizedBox(
-            width: 100,
-            child: RealTimeClock(), // Uses the imported widget
-          ),
-          SizedBox(width: 16),
+        title: const Text("Carolina Card Club"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              // Manual Refresh
+              Provider.of<ApiProvider>(context, listen: false).reloadServerDatabase();
+            },
+          )
         ],
       ),
       body: Row(
         children: [
-          Expanded(
+          // Left Panel: Player List
+          const Expanded(
             flex: 1,
-            child: PlayerPanel(
-              selectedPlayerId: _selectedPlayerId,
-              onPlayerSelected: _onPlayerSelected,
-              onSessionAdded: _onSessionAdded,
-              clubSessionStartDateTime: _clubSessionStartDateTime,
-            ),
+            // ERROR FIX: Removed selectedPlayerId parameter
+            child: PlayerPanel(),
           ),
+
           const VerticalDivider(width: 1),
-          Expanded(
+
+          // Right Panel: Session List
+          const Expanded(
             flex: 2,
-            child: SessionPanel(
-              selectedPlayerId: _selectedPlayerId,
-              selectedSessionId: _selectedSessionId,
-              onSessionSelected: _onSessionSelected,
-              onPlayerSelected: _onPlayerSelected,
-              newlyAddedSessionId: _newlyAddedSessionId,
-              clubSessionStartDateTime: _clubSessionStartDateTime,
-              onClubSessionTimeChanged: _onClubSessionTimeChanged,
-            ),
+             // ERROR FIX: Removed selectedPlayerId parameter
+            child: SessionPanel(),
           ),
         ],
       ),

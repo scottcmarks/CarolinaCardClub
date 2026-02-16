@@ -1,184 +1,309 @@
 // client/lib/widgets/player_panel.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
+import '../providers/api_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
-import '../providers/api_provider.dart';
-import '../providers/time_provider.dart';
-import 'dialogs.dart';
-import 'player_card.dart'; // Imports the fixed widget
+import '../models/poker_table.dart';
+import 'location_selector_widget.dart'; // Assumes this is in the same directory
 
 class PlayerPanel extends StatefulWidget {
-  final int? selectedPlayerId;
-  final ValueChanged<int?>? onPlayerSelected;
-  final ValueChanged<int>? onSessionAdded;
-  final DateTime? clubSessionStartDateTime;
-
-  const PlayerPanel({
-    super.key,
-    this.selectedPlayerId,
-    this.onPlayerSelected,
-    this.onSessionAdded,
-    this.clubSessionStartDateTime,
-  });
+  const PlayerPanel({Key? key}) : super(key: key);
 
   @override
-  State<PlayerPanel> createState() => PlayerPanelState();
+  State<PlayerPanel> createState() => _PlayerPanelState();
 }
 
-class PlayerPanelState extends State<PlayerPanel> {
-  Future<void> _startNewSession(ApiProvider apiProvider,
-      TimeProvider timeProvider, PlayerSelectionItem player) async {
-    try {
-      final now = timeProvider.currentTime;
-      final sessionStart = widget.clubSessionStartDateTime != null &&
-              now.isBefore(widget.clubSessionStartDateTime!)
-          ? widget.clubSessionStartDateTime!
-          : now;
+class _PlayerPanelState extends State<PlayerPanel> {
+  Timer? _ticker;
 
-      final newSession = Session(
-        playerId: player.playerId,
-        startEpoch: sessionStart.millisecondsSinceEpoch ~/ 1000,
-      );
-      final newSessionId = await apiProvider.addSession(newSession);
-
-      if (!mounted) return;
-      widget.onSessionAdded?.call(newSessionId);
-      // Deselect the player after a session is successfully started.
-      widget.onPlayerSelected?.call(null);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error starting session: $e')),
-      );
-    }
+  @override
+  void initState() {
+    super.initState();
+    // Refresh UI every second for dynamic balance updates
+    _ticker = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) setState(() {});
+    });
   }
 
-  void _showPlayerMenu(PlayerSelectionItem player) {
-    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
 
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return Consumer<TimeProvider>(
-          builder: (context, timeProvider, child) {
-            final double dynamicBalance = apiProvider.getDynamicBalance(
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ApiProvider>(
+      builder: (context, apiProvider, child) {
+        final players = apiProvider.players;
+
+        if (players.isEmpty) {
+          return const Center(child: Text("No players found."));
+        }
+
+        return ListView.builder(
+          itemCount: players.length,
+          itemBuilder: (ctx, index) {
+            final player = players[index];
+            final displayBalance = apiProvider.getDynamicBalance(
               playerId: player.playerId,
-              currentTime: timeProvider.currentTime,
-              clubSessionStartDateTime: widget.clubSessionStartDateTime,
+              currentTime: DateTime.now(),
             );
+            final balanceColor = displayBalance < 0 ? Colors.red.shade700 : Colors.grey.shade700;
 
-            final currencyFormatter =
-                NumberFormat.currency(symbol: '\$', decimalDigits: 0);
-            final formattedBalance = currencyFormatter.format(dynamicBalance);
-            final titleText = '${player.name}: balance is $formattedBalance';
-
-            final canStartSession = widget.clubSessionStartDateTime != null;
-
-            if (dynamicBalance < 0) {
-              return AlertDialog(
-                backgroundColor: Colors.red.shade100,
-                title: Text(titleText),
-                content: const Text('Please add money to continue.'),
-                actions: [
-                  TextButton(
-                      child: const Text('Cancel'),
-                      onPressed: () {
-                        // Only close the dialog, don't deselect the player.
-                        Navigator.of(dialogContext).pop();
-                      }),
-                  TextButton(
-                      child: const Text('Add Money'),
-                      onPressed: () async {
-                        Navigator.of(dialogContext).pop();
-
-                        // Wait for the next frame to avoid gesture conflict
-                        await Future.delayed(Duration.zero);
-
-                        if (!mounted) return;
-                        final updatedPlayer =
-                            await showAddMoneyDialog(context, player: player);
-
-                        if (updatedPlayer != null && mounted) {
-                          _showPlayerMenu(updatedPlayer);
-                        }
-                      }),
-                ],
-              );
-            } else {
-              return AlertDialog(
-                backgroundColor: Colors.green.shade100,
-                title: Text(titleText),
-                content: player.hasActiveSession
-                    ? const Text('This player already has an active session.')
-                    : const Text('What would you like to do?'),
-                actions: [
-                  if (canStartSession && !player.hasActiveSession)
-                    TextButton(
-                        child: const Text('Open a new session'),
-                        onPressed: () async {
-                          Navigator.of(dialogContext).pop();
-                          if (!mounted) return;
-                          await _startNewSession(
-                              apiProvider, timeProvider, player);
-                        }),
-                  TextButton(
-                      child: const Text('Add Money'),
-                      onPressed: () async {
-                        Navigator.of(dialogContext).pop();
-
-                        await Future.delayed(Duration.zero);
-
-                        if (!mounted) return;
-                        final updatedPlayer =
-                            await showAddMoneyDialog(context, player: player);
-
-                        if (updatedPlayer != null && mounted) {
-                          _showPlayerMenu(updatedPlayer);
-                        }
-                      }),
-                ],
-              );
-            }
+            return Card(
+              color: player.isActive ? Colors.green.shade50 : Colors.white,
+              child: ListTile(
+                title: Text(player.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  "Balance: \$${displayBalance.toStringAsFixed(2)}",
+                  style: TextStyle(color: balanceColor, fontWeight: FontWeight.bold),
+                ),
+                trailing: player.isActive
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : const Icon(Icons.play_circle_outline),
+                onTap: () => _handlePlayerTap(context, apiProvider, player),
+              ),
+            );
           },
         );
       },
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final apiProvider = context.watch<ApiProvider>();
-    final players = apiProvider.players;
-
-    if (players.isEmpty) {
-      return const Center(child: Text('No players found.'));
+  void _handlePlayerTap(BuildContext context, ApiProvider apiProvider, PlayerSelectionItem player) {
+    if (player.isActive) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Player already active.")));
+      return;
     }
 
-    return SingleChildScrollView(
-      key: const PageStorageKey<String>('PlayerListScrollPosition'),
-      child: IntrinsicWidth(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: players.map((player) {
-            return PlayerCard(
-              player: player,
-              isSelected: player.playerId == widget.selectedPlayerId,
-              onTap: () {
-                if (player.playerId == widget.selectedPlayerId) {
-                  widget.onPlayerSelected?.call(null);
-                } else {
-                  widget.onPlayerSelected?.call(player.playerId);
-                  _showPlayerMenu(player);
-                }
-              },
-            );
-          }).toList(),
+    // Filter active tables only
+    final activeTables = apiProvider.pokerTables.where((t) => t.isActive).toList();
+
+    if (activeTables.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No active tables available.")));
+      return;
+    }
+
+    // --- LOGIC ---
+    final double hourlyRate = player.hourlyRate;
+    final int prepayHours = player.prepayHours;
+    final double prepayCost = hourlyRate * prepayHours;
+
+    final bool isVip = hourlyRate == 0;
+
+    final bool canNormallyStart = player.balance >= -0.01;
+
+    final bool offerPrepayOption = !isVip && canNormallyStart && prepayCost > 0;
+    final bool showAddMoneyFlow = !isVip && !canNormallyStart;
+
+    // Build Occupancy Map for Start Dialog
+    final occupancyMap = <int, List<int>>{};
+    for (var s in apiProvider.sessions) {
+      // Ensure we access safe properties if they exist
+      if (s.pokerTableId != null && s.seatNumber != null) {
+        occupancyMap.putIfAbsent(s.pokerTableId!, () => []).add(s.seatNumber!);
+      }
+    }
+
+    if (showAddMoneyFlow) {
+      _showMandatoryPaymentDialog(context, apiProvider, player);
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => _StartSessionDialog(
+          player: player,
+          tables: activeTables,
+          occupancyMap: occupancyMap,
+          canPrepay: offerPrepayOption,
+          isVip: isVip,
+          prepayCost: prepayCost,
+          prepayHours: prepayHours,
+          onStart: (tableId, seatNum, isPrepaid) async {
+             // Create the session with the required pokerTableId
+             await apiProvider.addSession(Session(
+              playerId: player.playerId,
+              startEpoch: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              pokerTableId: tableId,
+              seatNumber: seatNum,
+              isPrepaid: isPrepaid,
+              prepayAmount: isPrepaid ? prepayCost : 0.0,
+            ));
+            if (context.mounted) Navigator.pop(ctx);
+          },
+          onAddPayment: (amount) async {
+             await apiProvider.addPayment({
+              'Player_Id': player.playerId,
+              'Amount': amount,
+              'Epoch': DateTime.now().millisecondsSinceEpoch ~/ 1000
+            });
+          }
         ),
+      );
+    }
+  }
+
+  void _showMandatoryPaymentDialog(BuildContext context, ApiProvider apiProvider, PlayerSelectionItem player) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Negative Balance"),
+        content: Text("${player.name} owes \$${(-player.balance).toStringAsFixed(2)}.\nMust clear balance to start."),
+        actions: [
+           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+           ElevatedButton(
+            child: const Text("Clear Debt"),
+            onPressed: () async {
+               await apiProvider.addPayment({
+                'Player_Id': player.playerId,
+                'Amount': -player.balance,
+                'Epoch': DateTime.now().millisecondsSinceEpoch ~/ 1000
+              });
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+          )
+        ],
       ),
     );
+  }
+}
+
+class _StartSessionDialog extends StatefulWidget {
+  final PlayerSelectionItem player;
+  final List<PokerTable> tables;
+  final Map<int, List<int>> occupancyMap;
+  final bool canPrepay;
+  final bool isVip;
+  final double prepayCost;
+  final int prepayHours;
+  final Function(int tableId, int? seatNum, bool isPrepaid) onStart;
+  final Function(double amount) onAddPayment;
+
+  const _StartSessionDialog({
+    required this.player,
+    required this.tables,
+    required this.occupancyMap,
+    required this.canPrepay,
+    required this.isVip,
+    required this.prepayCost,
+    required this.prepayHours,
+    required this.onStart,
+    required this.onAddPayment,
+  });
+
+  @override
+  State<_StartSessionDialog> createState() => _StartSessionDialogState();
+}
+
+class _StartSessionDialogState extends State<_StartSessionDialog> {
+  late int _selectedTableId;
+  int? _selectedSeat;
+  bool _isPrepaid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to first available table (logic simplified for brevity, assumes list not empty)
+    if (widget.tables.isNotEmpty) {
+      _selectedTableId = widget.tables.first.pokerTableId;
+    }
+    // Attempt to pick a non-full table by default if the first one is full
+    for(var t in widget.tables) {
+       final occupied = widget.occupancyMap[t.pokerTableId] ?? [];
+       if (occupied.length < t.capacity) {
+         _selectedTableId = t.pokerTableId;
+         break;
+       }
+    }
+
+    if (widget.isVip) _isPrepaid = true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text("Start: ${widget.player.name}"),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!widget.isVip)
+              Text("Current Balance: \$${widget.player.balance.toStringAsFixed(2)}"),
+
+            const SizedBox(height: 16),
+            LocationSelectorWidget(
+              tables: widget.tables,
+              occupancyMap: widget.occupancyMap,
+              onChanged: (tableId, seatNum) {
+                setState(() {
+                  _selectedTableId = tableId;
+                  _selectedSeat = seatNum;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+
+            if (widget.isVip) ...[
+               const ListTile(
+                 leading: Icon(Icons.star, color: Colors.amber),
+                 title: Text("VIP Session"),
+                 subtitle: Text("No hourly charge."),
+               )
+            ] else if (widget.canPrepay) ...[
+              CheckboxListTile(
+                title: const Text("Prepay Session?"),
+                subtitle: Text("${widget.prepayHours} hrs for \$${widget.prepayCost.toStringAsFixed(2)}"),
+                value: _isPrepaid,
+                onChanged: (val) {
+                  setState(() => _isPrepaid = val ?? false);
+                  if (_isPrepaid) _checkPrepayFunds();
+                },
+              ),
+            ]
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        ElevatedButton(
+          onPressed: () => widget.onStart(_selectedTableId, _selectedSeat, _isPrepaid),
+          child: const Text("Start Session"),
+        ),
+      ],
+    );
+  }
+
+  void _checkPrepayFunds() {
+    final deficit = widget.prepayCost - widget.player.balance;
+    if (deficit > 0) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Add Funds"),
+          content: Text("Add \$${deficit.toStringAsFixed(2)} for prepay?"),
+          actions: [
+            TextButton(
+              child: const Text("No"),
+              onPressed: () {
+                setState(() => _isPrepaid = false);
+                Navigator.pop(ctx);
+              },
+            ),
+            ElevatedButton(
+              child: const Text("Add & Continue"),
+              onPressed: () async {
+                await widget.onAddPayment(deficit);
+                if (mounted) Navigator.pop(ctx);
+              },
+            )
+          ],
+        ),
+      );
+    }
   }
 }

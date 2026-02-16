@@ -49,3 +49,6 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/icon/CCCIcon.png"
   image_path: "assets/icon/CCCIconA.png"
+
+dependency_overrides:
+  meta: ^1.18.1
