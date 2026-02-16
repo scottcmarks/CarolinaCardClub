@@ -1,6 +1,5 @@
 // client/lib/providers/api_provider.dart
 
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -18,14 +17,17 @@ class ApiProvider with ChangeNotifier {
   AppSettingsProvider _appSettingsProvider;
   final SocketClient _socketClient = SocketClient();
 
+  // Data State
   List<PlayerSelectionItem> _players = [];
   List<SessionPanelItem> _sessions = [];
   List<PokerTable> _pokerTables = [];
   DateTime? _clubSessionStartDateTime;
 
+  // Game Rules State
   double _defaultHourlyRate = 5.0;
   int _defaultPrepayHours = 5;
 
+  // Filter State
   int? _lastSessionPlayerIdFilter;
   bool _lastSessionActiveOnlyFilter = false;
 
@@ -33,6 +35,7 @@ class ApiProvider with ChangeNotifier {
   String? _currentConnectionUrl;
   bool _hasAttemptedAutoScan = false;
 
+  // Getters
   List<PlayerSelectionItem> get players => _players;
   List<SessionPanelItem> get sessions => _sessions;
   List<PokerTable> get pokerTables => _pokerTables;
@@ -63,6 +66,50 @@ class ApiProvider with ChangeNotifier {
       }
     });
   }
+
+  // --- MISSING METHODS ADDED HERE ---
+
+  void updateAppSettings(AppSettingsProvider appSettingsProvider) {
+    _appSettingsProvider = appSettingsProvider;
+    final newUrl = _appSettingsProvider.currentSettings.localServerUrl;
+
+    if (_currentConnectionUrl != newUrl) {
+      _currentConnectionUrl = newUrl;
+      _socketClient.disconnect();
+      connect();
+    }
+  }
+
+  Future<void> retryConnection() async {
+    _hasAttemptedAutoScan = false; // Reset to allow loading spinner logic
+    _safeNotifyListeners();
+    await connect();
+  }
+
+  void markAutoScanAttempted() {
+    _hasAttemptedAutoScan = true;
+    _safeNotifyListeners();
+  }
+
+  Future<void> updateServerUrl(String newUrl) async {
+    // 1. Update local state
+    _currentConnectionUrl = newUrl;
+
+    // 2. Persist to settings
+    try {
+      await _appSettingsProvider.updateSettings(
+        _appSettingsProvider.currentSettings.copyWith(localServerUrl: newUrl)
+      );
+    } catch (e) {
+      debugPrint("Warning: Could not save settings: $e");
+    }
+
+    // 3. Reconnect
+    await _socketClient.disconnect();
+    await connect();
+  }
+
+  // ----------------------------------
 
   void initialize() {
     if (connectionStatus == ConnectionStatus.connecting ||
