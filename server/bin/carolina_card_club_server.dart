@@ -39,36 +39,59 @@ void main() async {
       .addHandler(router);
 
   final server = await io.serve(handler, '0.0.0.0', 5109);
-  // final serverAddress = server.address.host;
-
   print('✓ Secure WebSocket Server listening on port ${server.port}');
   print('---');
 }
 
+// --- Helper Methods ---
+void _sendResponse(WebSocketChannel ws, String requestId, dynamic payload) {
+  ws.sink.add(jsonEncode({
+    'type': 'response',
+    'requestId': requestId,
+    'payload': payload,
+  }));
+}
+
+void _sendError(WebSocketChannel ws, String requestId, String message) {
+  ws.sink.add(jsonEncode({
+    'type': 'response',
+    'requestId': requestId,
+    'error': message,
+  }));
+}
+
 Future<void> _handleWebSocketMessage(
     WebSocketChannel webSocket, String message) async {
+  String? currentRequestId;
   try {
     final decoded = jsonDecode(message);
-    final requestId = decoded['requestId'];
+    currentRequestId = decoded['requestId'];
     final apiKey = decoded['apiKey'];
     final command = decoded['command'];
     final params = decoded['params'];
 
     if (apiKey != localApiKey) {
-      webSocket.sink.add(jsonEncode({
-        'type': 'response',
-        'requestId': requestId,
-        'error': 'Invalid or missing API Key on WebSocket message',
-      }));
+      if (currentRequestId != null) {
+        _sendError(webSocket, currentRequestId, 'Invalid API Key');
+      }
       return;
     }
 
     dynamic payload;
-    String? error;
 
     switch (command) {
       case 'getPlayers':
         payload = await _getPlayers();
+        break;
+      case 'getPokerTables':
+        payload = await _getPokerTables();
+        break;
+      case 'updateTableStatus':
+        await _updateTableStatus(params!);
+        payload = {'status': 'ok'};
+        break;
+      case 'getPlayerCategories':
+        payload = await _getPlayerCategories();
         break;
       case 'getSessions':
         payload = await _getSessions(params);
@@ -98,24 +121,17 @@ Future<void> _handleWebSocketMessage(
         _broadcastUpdate();
         break;
       default:
-        error = 'Unknown command: $command';
+        _sendError(webSocket, currentRequestId!, 'Unknown command: $command');
+        return;
     }
 
-    webSocket.sink.add(jsonEncode({
-      'type': 'response',
-      'requestId': requestId,
-      if (error != null) 'error': error else 'payload': payload,
-    }));
+    _sendResponse(webSocket, currentRequestId!, payload);
+
   } catch (e) {
     print('✗ Error handling message: $e');
-    try {
-      final decoded = jsonDecode(message);
-      webSocket.sink.add(jsonEncode({
-        'type': 'response',
-        'requestId': decoded['requestId'],
-        'error': 'Server error processing request: $e',
-      }));
-    } catch (_) {}
+    if (currentRequestId != null) {
+      _sendError(webSocket, currentRequestId, 'Server error: $e');
+    }
   }
 }
 
@@ -123,7 +139,6 @@ final _webSocketHandler =
     webSocketHandler((WebSocketChannel webSocket, String? protocol) {
   print('✓ Client connection established.');
   _clients.add(webSocket);
-
   webSocket.sink.add(jsonEncode({'type': 'ack'}));
 
   webSocket.stream.listen(
@@ -140,13 +155,11 @@ final _webSocketHandler =
 });
 
 void _broadcastUpdate() {
-  // print('-> Broadcasting update to ${_clients.length} client${_clients.length==1 ? "" : "s"}...');
   final message = jsonEncode({'type': 'broadcast', 'event': 'update'});
   for (final client in _clients.toList()) {
     try {
       client.sink.add(message);
     } catch (e) {
-      print('✗ Error sending to client, removing: $e');
       _clients.remove(client);
     }
   }
@@ -166,10 +179,31 @@ Future<List<Map<String, Object?>>> _getPlayers() async {
   return await db.query('Player_Selection_List');
 }
 
+Future<List<Map<String, Object?>>> _getPokerTables() async {
+  final db = await _db;
+  // Return ALL tables (active and inactive) so UI can toggle them
+  return await db.query('PokerTable', orderBy: 'Name ASC');
+}
+
+Future<void> _updateTableStatus(Map<String, dynamic> params) async {
+  final db = await _db;
+  await db.update(
+    'PokerTable',
+    {'IsActive': params['isActive'] ? 1 : 0},
+    where: 'PokerTable_Id = ?',
+    whereArgs: [params['tableId']],
+  );
+  _broadcastUpdate();
+}
+
+Future<List<Map<String, Object?>>> _getPlayerCategories() async {
+  final db = await _db;
+  return await db.query('Player_Category_Rate_Interval_List');
+}
+
 Future<List<Map<String, Object?>>> _getSessions(
     Map<String, dynamic>? params) async {
   final db = await _db;
-
   final int? playerId = params?['playerId'];
   final bool onlyActive = params?['onlyActive'] ?? false;
 
@@ -213,15 +247,14 @@ Future<void> _updateSession(Map<String, dynamic> sessionData) async {
 Future<void> _stopAllSessions(Map<String, dynamic> params) async {
   final db = await _db;
   final int? stopEpoch = params['stopEpoch'];
-  if (stopEpoch == null) {
-    throw Exception('stopEpoch parameter is required for stopAllSessions');
-  }
+  if (stopEpoch == null) throw Exception('stopEpoch required');
 
   await db.update(
     'Session',
     {'Stop_Epoch': stopEpoch},
     where: 'Stop_Epoch IS NULL',
   );
+  _broadcastUpdate();
 }
 
 Future<Map<String, Object?>> _addPayment(
@@ -245,43 +278,22 @@ Future<void> _backupDatabase() async {
       ..files.add(await http.MultipartFile.fromPath('database', dbPath,
           filename: dbFileName));
     var res = await req.send();
-    if (res.statusCode == 200) {
-      print('✓ Backup successful!');
-    } else {
-      print('✗ Backup failed with status: ${res.statusCode}');
-      throw Exception('Backup failed with status: ${res.statusCode}');
-    }
-  } catch (e) {
-    print('✗ An error occurred during backup: $e');
-    rethrow;
+    if (res.statusCode != 200) throw Exception('Backup failed: ${res.statusCode}');
   } finally {
     await _db;
-    print('✓ Database re-opened after backup.');
   }
 }
 
 Future<void> _downloadDatabase() async {
   final dbFile = File(p.join(Directory.current.path, dbFileName));
   try {
-    final downloadUri = Uri.parse('$downloadUrl?apiKey=$remoteApiKey');
-    print('--- Downloading database from $downloadUrl ---');
-
     final response =
-        await http.get(downloadUri).timeout(const Duration(seconds: 15));
+        await http.get(Uri.parse('$downloadUrl?apiKey=$remoteApiKey')).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       await dbFile.writeAsBytes(response.bodyBytes);
-      print('✓ Database download complete.');
-    } else {
-      print('✗ Error downloading database. Status: ${response.statusCode}');
-      if (!await dbFile.exists()) {
-        exit(1);
-      }
     }
   } catch (e) {
-    print('✗ An error occurred during download: $e');
-    if (!await dbFile.exists()) {
-      exit(1);
-    }
+    if (!await dbFile.exists()) exit(1);
   }
 }
 
