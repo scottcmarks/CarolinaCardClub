@@ -1,60 +1,50 @@
-// models/session_panel_item.dart
+// client/lib/models/session_panel_item.dart
+
 class SessionPanelItem {
   final int sessionId;
   final int playerId;
   final String name;
-  final int startEpoch;
-  final int? stopEpoch; // Nullable as per schema
-  final int? durationInSeconds;
-  final double? amount;
+  final DateTime startTime;
+  final DateTime? stopTime;
+  final double amount;
   final double balance;
   final double rate;
+  final int? pokerTableId;
+  final int? seatNumber;
+  final bool isPrepaid;
+  final double prepayAmount;
 
   SessionPanelItem({
     required this.sessionId,
     required this.playerId,
     required this.name,
-    required this.startEpoch,
-    this.stopEpoch, // Make optional, it will be null?
-    this.durationInSeconds,
-    this.amount,
+    required this.startTime,
+    this.stopTime,
+    required this.amount,
     required this.balance,
     required this.rate,
+    this.pokerTableId,
+    this.seatNumber,
+    this.isPrepaid = false,
+    this.prepayAmount = 0.0,
   });
 
-  // Convert a SessionPanelItem object into a Map.
-  Map<String, dynamic> toMap() {
-    return {
-      'Session_Id': sessionId,
-      'Player_Id': playerId,
-      'Name': name,
-      'Start_Epoch': startEpoch,
-      'Stop_Epoch': stopEpoch,
-      'Duration_In_Seconds': durationInSeconds,
-      'Amount': amount,
-      'Balance': balance,
-      'Rate': rate,
-    };
-  }
-
-  // Create a SessionPanelItem object from a Map.
   factory SessionPanelItem.fromMap(Map<String, dynamic> map) {
     return SessionPanelItem(
       sessionId: map['Session_Id'],
       playerId: map['Player_Id'],
-      name: map['Name'] ?? 'Unnamed', // Provide a default if name is null
-      startEpoch: map['Start_Epoch'],
-      stopEpoch: map['Stop_Epoch'], // Will be null if it's not set in the DB
-      durationInSeconds:
-          map['Duration_In_Seconds'], // Will be null if it's not set in the DB
-      amount: (map['Amount'] is int)
-          ? (map['Amount'] as int).toDouble()
-          : map['Amount'], // ditto
-      balance: (map['Balance'] is int)
-          ? (map['Balance'] as int).toDouble()
-          : map['Balance'],
-      rate:
-          (map['Rate'] is int) ? (map['Rate'] as int).toDouble() : map['Rate'],
+      name: map['Name'],
+      startTime: DateTime.fromMillisecondsSinceEpoch(map['Start_Epoch'] * 1000),
+      stopTime: map['Stop_Epoch'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['Stop_Epoch'] * 1000)
+          : null,
+      amount: (map['Amount'] as num).toDouble(),
+      balance: (map['Balance'] as num).toDouble(),
+      rate: (map['Rate'] as num).toDouble(),
+      pokerTableId: map['PokerTable_Id'],
+      seatNumber: map['Seat_Number'],
+      isPrepaid: (map['Is_Prepaid'] as int? ?? 0) == 1,
+      prepayAmount: (map['Prepay_Amount'] as num? ?? 0.0).toDouble(),
     );
   }
 }
