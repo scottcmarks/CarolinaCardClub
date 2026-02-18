@@ -1,278 +1,199 @@
 // client/lib/providers/api_provider.dart
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared/shared.dart';
 
-import '../logic/balance_calculator.dart';
-import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/session_panel_item.dart';
+import '../models/player_selection_item.dart';
 import '../models/poker_table.dart';
-import '../services/socket_client.dart';
 import 'app_settings_provider.dart';
 
-export '../services/socket_client.dart' show ConnectionStatus;
-
 class ApiProvider with ChangeNotifier {
-  AppSettingsProvider _appSettingsProvider;
-  final SocketClient _socketClient = SocketClient();
+  final AppSettingsProvider _appSettingsProvider;
 
-  // Data State
-  List<PlayerSelectionItem> _players = [];
   List<SessionPanelItem> _sessions = [];
+  List<PlayerSelectionItem> _players = [];
   List<PokerTable> _pokerTables = [];
-  DateTime? _clubSessionStartDateTime;
 
-  // Game Rules State
-  double _defaultHourlyRate = 5.0;
-  int _defaultPrepayHours = 5;
+  // Track selection state for the Dashboard
+  int? _selectedPlayerId;
 
-  // Filter State
-  int? _lastSessionPlayerIdFilter;
-  bool _lastSessionActiveOnlyFilter = false;
+  bool isClubSessionOpen = false;
+  DateTime? clubSessionStartDateTime;
 
-  bool _mounted = true;
-  String? _currentConnectionUrl;
-  bool _hasAttemptedAutoScan = false;
-
-  // Getters
-  List<PlayerSelectionItem> get players => _players;
-  List<SessionPanelItem> get sessions => _sessions;
-  List<PokerTable> get pokerTables => _pokerTables;
-  DateTime? get clubSessionStartDateTime => _clubSessionStartDateTime;
-
-  double get defaultHourlyRate => _defaultHourlyRate;
-  int get defaultPrepayHours => _defaultPrepayHours;
-
-  ConnectionStatus get connectionStatus => _socketClient.status;
-  String? get lastError => _socketClient.lastError;
-  String? get connectingUrl => _currentConnectionUrl;
-  bool get hasAttemptedAutoScan => _hasAttemptedAutoScan;
-
-  Future<void> connectionFuture = Completer<void>().future;
+  bool _isConnected = false;
+  String? _lastError;
 
   ApiProvider(this._appSettingsProvider) {
-    _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
-
-    _socketClient.statusNotifier.addListener(() {
-      _safeNotifyListeners();
-    });
-
-    _socketClient.onBroadcast.listen((message) {
-      if (message['event'] == 'update') {
-        _fetchAllData().catchError((e) {
-          debugPrint('ApiProvider: Failed to update data from broadcast: $e');
-        });
-      }
-    });
+    reloadServerDatabase();
   }
 
-  // --- MISSING METHODS ADDED HERE ---
+  // --- GETTERS ---
+  List<PlayerSelectionItem> get players => _players;
+  List<PokerTable> get pokerTables => _pokerTables;
+  bool get isConnected => _isConnected;
+  String? get lastError => _lastError;
+  int? get selectedPlayerId => _selectedPlayerId;
 
-  void updateAppSettings(AppSettingsProvider appSettingsProvider) {
-    _appSettingsProvider = appSettingsProvider;
-    final newUrl = _appSettingsProvider.currentSettings.localServerUrl;
+  // --- THE 4-STATE DASHBOARD LOGIC ---
+  List<SessionPanelItem> get displayedSessions {
+    Iterable<SessionPanelItem> filtered = _sessions;
 
-    if (_currentConnectionUrl != newUrl) {
-      _currentConnectionUrl = newUrl;
-      _socketClient.disconnect();
-      connect();
+    if (isClubSessionOpen) {
+      // MODE A: ACTIVE FLOOR (Club is Open)
+      // Rule: Show only sessions that are currently running (stopTime is null)
+      filtered = filtered.where((s) => s.stopTime == null);
+    } else {
+      // MODE B: HISTORY (Club is Closed)
+      // Rule: Show everything (Recorded History)
     }
+
+    // SELECTION FILTER (Applies to both modes)
+    if (_selectedPlayerId != null) {
+      filtered = filtered.where((s) => s.playerId == _selectedPlayerId);
+    }
+
+    // Sort: Newest first so active/recent stuff is at the top
+    var list = filtered.toList();
+    list.sort((a, b) => b.startTime.compareTo(a.startTime));
+    return list;
+  }
+
+  // --- ACTIONS ---
+
+  void selectPlayer(int? playerId) {
+    _selectedPlayerId = playerId;
+    notifyListeners();
+  }
+
+  void toggleClubSession() {
+    isClubSessionOpen = !isClubSessionOpen;
+    if (isClubSessionOpen) {
+      final now = DateTime.now();
+      final settings = _appSettingsProvider.currentSettings;
+      clubSessionStartDateTime = DateTime(
+        now.year, now.month, now.day,
+        settings.defaultSessionHour,
+        settings.defaultSessionMinute
+      );
+    } else {
+      clubSessionStartDateTime = null;
+    }
+    notifyListeners();
   }
 
   Future<void> retryConnection() async {
-    _hasAttemptedAutoScan = false; // Reset to allow loading spinner logic
-    _safeNotifyListeners();
-    await connect();
+    await reloadServerDatabase();
   }
 
-  void markAutoScanAttempted() {
-    _hasAttemptedAutoScan = true;
-    _safeNotifyListeners();
-  }
+  // --- DATA FETCHING ---
 
-  Future<void> updateServerUrl(String newUrl) async {
-    // 1. Update local state
-    _currentConnectionUrl = newUrl;
-
-    // 2. Persist to settings
-    try {
-      await _appSettingsProvider.updateSettings(
-        _appSettingsProvider.currentSettings.copyWith(localServerUrl: newUrl)
-      );
-    } catch (e) {
-      debugPrint("Warning: Could not save settings: $e");
-    }
-
-    // 3. Reconnect
-    await _socketClient.disconnect();
-    await connect();
-  }
-
-  // ----------------------------------
-
-  void initialize() {
-    if (connectionStatus == ConnectionStatus.connecting ||
-        connectionStatus == ConnectionStatus.connected) {
-      return;
-    }
-    _hasAttemptedAutoScan = false;
-    connectionFuture = connect();
-  }
-
-  Future<void> connect() async {
-    _currentConnectionUrl = _appSettingsProvider.currentSettings.localServerUrl;
-    final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
-
-    await _socketClient.connect(_currentConnectionUrl!, apiKey);
-
-    if (connectionStatus == ConnectionStatus.connected) {
-      try {
-        await _fetchAllData();
-      } catch (e) {
-        debugPrint('ApiProvider: Error fetching initial data: $e');
-        await _socketClient.disconnect();
-      }
-    }
-  }
-
-  Future<void> _fetchAllData() async {
-    await Future.wait([
-      fetchPlayerSelectionList(),
-      fetchSessionPanelList(
-        playerId: _lastSessionPlayerIdFilter,
-        onlyActive: _lastSessionActiveOnlyFilter,
-      ),
-      fetchPokerTables(),
-      fetchClubSessionStatus(),
-    ]);
-  }
-
-  Future<List<T>> _fetchList<T>(
-      String command,
-      Map<String, dynamic>? params,
-      T Function(Map<String, dynamic>) fromMap
-  ) async {
-    final result = await _sendCommand(command, params);
-    return (result as List).map((item) => fromMap(item)).toList();
-  }
-
-  Future<void> fetchPlayerSelectionList() async {
-    _players = await _fetchList('getPlayers', null, PlayerSelectionItem.fromMap);
-    _safeNotifyListeners();
-  }
-
-  Future<void> fetchSessionPanelList({int? playerId, bool onlyActive = false}) async {
-    _lastSessionPlayerIdFilter = playerId;
-    _lastSessionActiveOnlyFilter = onlyActive;
-    _sessions = await _fetchList(
-      'getSessions',
-      {'playerId': playerId, 'onlyActive': onlyActive},
-      SessionPanelItem.fromMap
-    );
-    _safeNotifyListeners();
-  }
-
-  Future<void> fetchPokerTables() async {
-    _pokerTables = await _fetchList('getPokerTables', null, PokerTable.fromMap);
-    _safeNotifyListeners();
-  }
-
-  Future<void> toggleTableStatus(int tableId, bool isActive) async {
-    await _sendCommand('updateTableStatus', {'tableId': tableId, 'isActive': isActive});
-    await fetchPokerTables();
-  }
-
-  Future<void> fetchClubSessionStatus() async {
-    try {
-      final result = await _sendCommand('getPlayerCategories');
-      final categories = List<Map<String, dynamic>>.from(result);
-
-      final regularCategory = categories.firstWhere(
-        (cat) => cat['Name'] == 'Regular',
-        orElse: () => {},
-      );
-
-      if (regularCategory.isNotEmpty && regularCategory['Stop'] == null) {
-         if (regularCategory['Rate_Start_Epoch'] != null) {
-           int startEpoch = regularCategory['Rate_Start_Epoch'];
-           _clubSessionStartDateTime = DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000);
-         }
-      } else {
-        _clubSessionStartDateTime = null;
-      }
-      if (regularCategory.isNotEmpty) {
-        if (regularCategory['Rate'] != null) {
-          _defaultHourlyRate = (regularCategory['Rate'] as num).toDouble();
-        }
-        if (regularCategory['Prepay_Hours'] != null) {
-          _defaultPrepayHours = (regularCategory['Prepay_Hours'] as int);
-        }
-      }
-      _safeNotifyListeners();
-    } catch (e) {
-      debugPrint('Error fetching session status: $e');
-    }
-  }
-
-  double getDynamicBalance({
-    required int playerId,
-    required DateTime currentTime,
-  }) {
-    return BalanceCalculator.getDynamicBalance(
-      playerId: playerId,
-      currentTime: currentTime,
-      clubSessionStartDateTime: _clubSessionStartDateTime,
-      players: _players,
-      sessions: _sessions,
-    );
-  }
-
-  Future<dynamic> _sendCommand(String command, [Map<String, dynamic>? params]) async {
-    final apiKey = _appSettingsProvider.currentSettings.localServerApiKey;
-    return _socketClient.send(command, apiKey, params);
-  }
-
-  Future<int> addSession(Session session) async {
-    final result = await _sendCommand('addSession', session.toMap());
-    await _fetchAllData();
-    return result['sessionId'];
-  }
-
-  Future<void> updateSession(Session session) async {
-    await _sendCommand('updateSession', session.toMap());
-    await _fetchAllData();
-  }
-
-  Future<void> stopAllSessions(DateTime stopTime) async {
-    final stopEpoch = stopTime.millisecondsSinceEpoch ~/ 1000;
-    await _sendCommand('stopAllSessions', {'stopEpoch': stopEpoch});
-    await backupDatabase();
-    await _fetchAllData();
-  }
-
-  Future<PlayerSelectionItem> addPayment(Map<String, dynamic> paymentMap) async {
-    final result = await _sendCommand('addPayment', paymentMap);
-    await fetchPlayerSelectionList();
-    return PlayerSelectionItem.fromMap(result);
-  }
-
-  Future<void> backupDatabase() async { await _sendCommand('backupDatabase'); }
   Future<void> reloadServerDatabase() async {
-    await _sendCommand('reloadDatabase');
-    await _fetchAllData();
+    _lastError = null;
+    try {
+      // 1. Fetch Players
+      final pRes = await http.get(Uri.parse('$_baseUrl/players/selection'), headers: _headers);
+      if (pRes.statusCode == 200) {
+        final List<dynamic> rawList = json.decode(pRes.body);
+        _players = [];
+        for (var item in rawList) {
+          try {
+            _players.add(PlayerSelectionItem.fromMap(item));
+          } catch (e) {
+            print("🛑 Player Data Error: $e");
+          }
+        }
+      }
+
+      // 2. Fetch Sessions
+      final sRes = await http.get(Uri.parse('$_baseUrl/sessions/panel'), headers: _headers);
+      if (sRes.statusCode == 200) {
+        final List<dynamic> rawList = json.decode(sRes.body);
+        _sessions = [];
+        for (var item in rawList) {
+          try {
+            // Load ALL sessions. The smart getter 'displayedSessions' filters them later.
+            _sessions.add(SessionPanelItem.fromMap(item));
+          } catch (e) {
+            print("🛑 Session Data Error: $e");
+          }
+        }
+      }
+
+      // 3. Init Tables (Default)
+       if (_pokerTables.isEmpty) {
+        _pokerTables = [
+          PokerTable(pokerTableId: 1, name: "Table 1", capacity: 9, isActive: true),
+          PokerTable(pokerTableId: 2, name: "Table 2", capacity: 10, isActive: true),
+        ];
+      }
+
+      _isConnected = true;
+      notifyListeners();
+    } catch (e) {
+      _isConnected = false;
+      _lastError = e.toString();
+      notifyListeners();
+    }
   }
 
-  void _safeNotifyListeners() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_mounted) notifyListeners();
-    });
+  // Helper Getters
+  String get _baseUrl => 'http://${_appSettingsProvider.currentSettings.serverIp}:${_appSettingsProvider.currentSettings.serverPort}';
+  Map<String, String> get _headers => {'Content-Type': 'application/json', 'x-api-key': _appSettingsProvider.currentSettings.localApiKey};
+
+  // Helper: Get Balance
+  int getDynamicBalance({required int playerId, required DateTime currentTime}) {
+     final p = _players.firstWhere(
+      (p) => p.playerId == playerId,
+      orElse: () => PlayerSelectionItem(
+        playerId: -1, name: "Unknown", balance: 0, hourlyRate: 0.0, prepayHours: 0, isActive: false
+      )
+    );
+    int runningBalance = p.balance;
+    for (var s in _sessions) {
+      // FIX: This was the broken line. Now complete:
+      if (s.playerId == playerId && s.stopTime == null) {
+        Duration diff = currentTime.difference(s.startTime);
+        if (diff.isNegative) diff = Duration.zero;
+        double rawCost = s.isPrepaid
+            ? s.prepayAmount.toDouble()
+            : (diff.inSeconds / Shared.secondsPerHour * s.rate);
+        runningBalance -= rawCost.round();
+      }
+    }
+    return runningBalance;
   }
 
-  @override
-  void dispose() {
-    _mounted = false;
-    _socketClient.disconnect();
-    super.dispose();
+  Future<void> addSession(Session session) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/sessions'),
+      headers: _headers,
+      body: json.encode(session.toMap())
+    );
+    if (response.statusCode != 200) throw Exception("Failed to add session");
+    await reloadServerDatabase();
+  }
+
+  Future<void> triggerRemoteBackup(String apiKey) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/maintenance/backup'),
+      headers: _headers,
+      body: json.encode({'apiKey': apiKey})
+    );
+    if (response.statusCode != 200) throw Exception("Backup Failed");
+  }
+
+  Future<void> triggerRemoteRestore(String apiKey) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/maintenance/restore'),
+      headers: _headers,
+      body: json.encode({'apiKey': apiKey})
+    );
+    if (response.statusCode != 200) throw Exception("Restore Failed");
+    await reloadServerDatabase();
   }
 }

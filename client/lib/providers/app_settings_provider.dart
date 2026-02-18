@@ -1,41 +1,40 @@
 // client/lib/providers/app_settings_provider.dart
 
-import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/app_settings.dart';
 
 class AppSettingsProvider with ChangeNotifier {
-  AppSettings _currentSettings = AppSettings.defaults();
-  late Future<void> initializationComplete;
+  // This line caused the error "Required named parameter serverIp...".
+  // With the defaults added to AppSettings() above, this is now valid.
+  AppSettings _currentSettings = AppSettings();
 
-  AppSettingsProvider() {
-    initializationComplete = _loadSettings();
-  }
+  static const String _storageKey = 'ccc_app_settings';
 
   AppSettings get currentSettings => _currentSettings;
 
+  AppSettingsProvider() {
+    _loadSettings();
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    // Assuming AppSettings has a fromJson/fromMap or we load fields manually.
-    // We load into the existing model structure.
-    _currentSettings = AppSettings.fromPrefs(prefs);
-    notifyListeners();
+    final String? encoded = prefs.getString(_storageKey);
+    if (encoded != null) {
+      try {
+        _currentSettings = AppSettings.fromMap(json.decode(encoded));
+        notifyListeners();
+      } catch (e) {
+        debugPrint("Error decoding settings: $e");
+      }
+    }
   }
 
-  /// Updates the settings and persists them to disk.
-  /// Returns a Future so callers can wait for the save to complete.
   Future<void> updateSettings(AppSettings newSettings) async {
     _currentSettings = newSettings;
-    notifyListeners(); // Update UI immediately
-
     final prefs = await SharedPreferences.getInstance();
-    await _currentSettings.saveToPrefs(prefs);
-  }
-
-  // Optional: Reset logic if you have it
-  Future<void> resetSettings() async {
-    await updateSettings(AppSettings.defaults());
+    await prefs.setString(_storageKey, json.encode(newSettings.toMap()));
+    notifyListeners();
   }
 }
