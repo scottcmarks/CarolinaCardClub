@@ -5,32 +5,55 @@ import 'package:provider/provider.dart';
 
 import 'providers/api_provider.dart';
 import 'providers/app_settings_provider.dart';
-import 'providers/session_filter_provider.dart';
 import 'providers/time_provider.dart';
-import 'widgets/carolina_card_club_app.dart';
+import 'pages/home_page.dart';
 
 void main() {
-  // WidgetsFlutterBinding.ensureInitialized() is needed for async operations before runApp
-  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const CarolinaCardClubApp());
+}
 
-  runApp(
-    MultiProvider(
+class CarolinaCardClubApp extends StatelessWidget {
+  const CarolinaCardClubApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
       providers: [
-        // AppSettingsProvider now needs to be created differently to handle async loading
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
+        ChangeNotifierProvider(create: (_) => TimeProvider()),
+
         ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
           create: (context) => ApiProvider(
-              Provider.of<AppSettingsProvider>(context, listen: false)),
-          // **MODIFICATION**: Removed ..initialize() from create
-          update: (_, appSettings, apiProvider) {
-            apiProvider?.updateAppSettings(appSettings);
-            return apiProvider!;
+            Provider.of<AppSettingsProvider>(context, listen: false)
+          ),
+          update: (context, settings, previous) {
+            return previous ?? ApiProvider(settings);
           },
         ),
-        ChangeNotifierProvider(create: (_) => TimeProvider()),
-        ChangeNotifierProvider(create: (_) => SessionFilterProvider()),
       ],
-      child: const CarolinaCardClubApp(),
-    ),
-  );
+      child: Consumer<AppSettingsProvider>(
+        builder: (context, settings, _) {
+          return MaterialApp(
+            title: 'Carolina Card Club',
+            debugShowCheckedModeBanner: false,
+            themeMode: settings.currentSettings.preferredTheme == 'dark'
+                ? ThemeMode.dark
+                : ThemeMode.light,
+            theme: ThemeData(
+              primarySwatch: Colors.blue,
+              useMaterial3: true,
+              scaffoldBackgroundColor: Colors.white,
+            ),
+            darkTheme: ThemeData.dark().copyWith(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.blue,
+                brightness: Brightness.dark
+              ),
+            ),
+            home: const HomePage(),
+          );
+        },
+      ),
+    );
+  }
 }

@@ -1,13 +1,14 @@
-// client/lib/screens/session_panel.dart
+// client/lib/widgets/session_panel.dart
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../providers/api_provider.dart';
 import '../models/session_panel_item.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
-import '../widgets/location_selector_widget.dart';
+import 'location_selector_widget.dart';
 
 class SessionPanel extends StatefulWidget {
   const SessionPanel({Key? key}) : super(key: key);
@@ -37,42 +38,36 @@ class _SessionPanelState extends State<SessionPanel> {
   Widget build(BuildContext context) {
     return Consumer<ApiProvider>(
       builder: (context, apiProvider, child) {
-        final sessions = apiProvider.sessions;
-        final tables = apiProvider.pokerTables;
+        final sessions = apiProvider.sessions.where((s) => s.stopTime == null).toList();
+        final clubStartTime = apiProvider.clubSessionStartDateTime;
 
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Header: Availability Checkboxes
-            Container(
-              padding: const EdgeInsets.all(8.0),
-              color: Colors.grey.shade200,
-              child: Row(
-                children: [
-                  const Text("Availability: ", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 8.0,
-                      children: tables.map((t) {
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Checkbox(
-                              value: t.isActive,
-                              onChanged: (val) {
-                                apiProvider.toggleTableStatus(t.pokerTableId, val ?? false);
-                              },
-                            ),
-                            Text(t.name),
-                          ],
-                        );
-                      }).toList(),
+            // --- HEADER SECTION ---
+            Card(
+              margin: const EdgeInsets.all(8.0),
+              elevation: 3,
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.access_time_filled, color: Colors.blueAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      clubStartTime != null
+                          ? "Club Session Started: ${DateFormat('h:mm a').format(clubStartTime)}"
+                          : "No Club Session Active",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                  )
-                ],
+                  ],
+                ),
               ),
             ),
 
-            // 2. Session List
+            // --- LIST SECTION ---
             Expanded(
               child: sessions.isEmpty
                   ? const Center(child: Text("No active sessions."))
@@ -92,28 +87,35 @@ class _SessionPanelState extends State<SessionPanel> {
   Widget _buildSessionCard(
       BuildContext context, ApiProvider apiProvider, SessionPanelItem session) {
 
-    final duration = DateTime.now().difference(session.startTime);
+    final effectiveEndTime = session.stopTime ?? DateTime.now();
+    final duration = effectiveEndTime.difference(session.startTime);
     final hours = duration.inSeconds / 3600.0;
+
     double currentCost = session.isPrepaid ? session.prepayAmount : (hours * session.rate);
     final currentBalance = session.balance - currentCost;
     final isVip = session.rate == 0;
 
     final tableName = apiProvider.pokerTables
         .firstWhere((t) => t.pokerTableId == session.pokerTableId,
-            orElse: () => PokerTable(pokerTableId: -1, name: "Unknown", capacity: 0))
+            orElse: () => PokerTable(pokerTableId: -1, name: "Unknown", capacity: 0, isActive: false))
         .name;
 
     final seatDisplay = session.seatNumber != null ? "Seat ${session.seatNumber}" : "Standing";
 
+    String durationText = "${duration.inHours}h ${duration.inMinutes.remainder(60)}m";
+    if (duration.inDays > 0) durationText = "${duration.inDays}d ${duration.inHours.remainder(24)}h";
+
     return Card(
       color: Colors.blue.shade50,
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: ListTile(
         title: Text(session.name, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("$tableName - $seatDisplay"),
-            Text("Time: ${duration.inHours}h ${duration.inMinutes.remainder(60)}m"),
+            Text("Running ($durationText)"),
             if (!isVip) ...[
                Text("Cost: \$${currentCost.toStringAsFixed(2)}"),
                Text(
@@ -142,23 +144,38 @@ class _SessionPanelState extends State<SessionPanel> {
 
     final isVip = session.rate == 0;
 
-    // --- MOVE LOGIC START ---
-
-    // 1. Build Occupancy Map
-    final occupancyMap = <int, List<int>>{};
+    // Occupancy Map
+    final occupancyMap = <int, Map<int, String>>{};
     for (var s in apiProvider.sessions) {
-      if (s.pokerTableId != null && s.seatNumber != null) {
-        occupancyMap.putIfAbsent(s.pokerTableId!, () => []).add(s.seatNumber!);
+      if (s.stopTime == null && s.pokerTableId != null && s.seatNumber != null) {
+        occupancyMap.putIfAbsent(s.pokerTableId!, () => {})[s.seatNumber!] = s.name;
       }
     }
 
-    // 2. Find Candidate Tables
-    // Must be Active AND Not Current AND Have at least 1 seat free
+    // --- PONY LOGIC ---
+    final bool isPony = session.playerId == 1;
+    final bool isPonyActive = apiProvider.sessions.any((s) => s.playerId == 1 && s.stopTime == null);
+
+    Map<int, int>? preferredSeat;
+    final table1 = apiProvider.pokerTables.where((t) => t.name == "Table 1").firstOrNull;
+
+    if (table1 != null) {
+      if (isPony) {
+        preferredSeat = { table1.pokerTableId: 7 };
+      } else {
+        if (!isPonyActive) {
+           final occupiedCount = (occupancyMap[table1.pokerTableId] ?? {}).length;
+           if (occupiedCount < (table1.capacity - 1)) {
+              occupancyMap.putIfAbsent(table1.pokerTableId, () => {})[7] = "RESERVED";
+           }
+        }
+      }
+    }
+
     final candidateTables = apiProvider.pokerTables.where((t) {
       if (!t.isActive) return false;
       if (t.pokerTableId == session.pokerTableId) return false;
-
-      final occupiedCount = (occupancyMap[t.pokerTableId] ?? []).length;
+      final occupiedCount = (occupancyMap[t.pokerTableId] ?? {}).length;
       return occupiedCount < t.capacity;
     }).toList();
 
@@ -172,7 +189,6 @@ class _SessionPanelState extends State<SessionPanel> {
             Text("Currently at $currentTableName"),
             const SizedBox(height: 20),
 
-            // OPTION 1: MOVE TABLE
             if (candidateTables.isNotEmpty) ...[
               SizedBox(
                 width: double.infinity,
@@ -182,14 +198,13 @@ class _SessionPanelState extends State<SessionPanel> {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade100, foregroundColor: Colors.orange.shade900),
                   onPressed: () {
                       Navigator.pop(ctx);
-                      _showMoveDialog(context, apiProvider, session, candidateTables, occupancyMap);
+                      _showMoveDialog(context, apiProvider, session, candidateTables, occupancyMap, preferredSeat);
                   },
                 ),
               ),
               const SizedBox(height: 8),
             ],
 
-            // OPTION 2: ADD MONEY (Strictly Hidden for VIPs)
             if (!isVip) ...[
               SizedBox(
                 width: double.infinity,
@@ -207,7 +222,6 @@ class _SessionPanelState extends State<SessionPanel> {
 
             const Divider(),
 
-            // OPTION 3: STOP SESSION
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -215,18 +229,28 @@ class _SessionPanelState extends State<SessionPanel> {
                 label: const Text("Stop Session"),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade100, foregroundColor: Colors.red.shade900),
                 onPressed: () async {
+                  // STOP SESSION LOGIC
                   final stopTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
                   final updatedSession = Session(
                     sessionId: session.sessionId,
                     playerId: session.playerId,
+                    // Preserve original start time!
+                    startEpoch: session.startTime.millisecondsSinceEpoch ~/ 1000,
                     stopEpoch: stopTime,
                     pokerTableId: session.pokerTableId ?? -1,
                     seatNumber: session.seatNumber,
                     isPrepaid: session.isPrepaid,
                     prepayAmount: session.prepayAmount,
                   );
-                  await apiProvider.updateSession(updatedSession);
-                  if (ctx.mounted) Navigator.pop(ctx);
+
+                  try {
+                    await apiProvider.updateSession(updatedSession);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+                    }
+                  }
                 },
               ),
             ),
@@ -244,11 +268,20 @@ class _SessionPanelState extends State<SessionPanel> {
       ApiProvider apiProvider,
       SessionPanelItem session,
       List<PokerTable> candidateTables,
-      Map<int, List<int>> occupancyMap) {
+      Map<int, Map<int, String>> occupancyMap,
+      Map<int, int>? preferredSeat) {
 
-    // Default variables
     int selectedTableId = candidateTables.first.pokerTableId;
     int? selectedSeat;
+
+    if (preferredSeat != null) {
+      for (var tId in preferredSeat.keys) {
+         if (candidateTables.any((t) => t.pokerTableId == tId)) {
+           selectedTableId = tId;
+           break;
+         }
+      }
+    }
 
     showDialog(
       context: context,
@@ -265,7 +298,8 @@ class _SessionPanelState extends State<SessionPanel> {
                    LocationSelectorWidget(
                      tables: candidateTables,
                      occupancyMap: occupancyMap,
-                     requireSeat: true, // STRICT SEAT REQUIRED
+                     preferredSeat: preferredSeat,
+                     requireSeat: true,
                      onChanged: (tId, sNum) {
                        setState(() {
                          selectedTableId = tId;
@@ -280,10 +314,27 @@ class _SessionPanelState extends State<SessionPanel> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
               ElevatedButton(
                 onPressed: (selectedSeat == null)
-                  ? null // Disable until seat picked
-                  : () {
-                      _executeMove(context, apiProvider, session, selectedTableId, selectedSeat!);
-                      Navigator.pop(ctx);
+                  ? null
+                  : () async {
+                      // MOVE SESSION LOGIC
+                      final updatedSession = Session(
+                        sessionId: session.sessionId,
+                        playerId: session.playerId,
+                        // Preserve Start Time
+                        startEpoch: session.startTime.millisecondsSinceEpoch ~/ 1000,
+                        stopEpoch: null,
+                        pokerTableId: selectedTableId,
+                        seatNumber: selectedSeat,
+                        isPrepaid: session.isPrepaid,
+                        prepayAmount: session.prepayAmount,
+                      );
+
+                      try {
+                        await apiProvider.updateSession(updatedSession);
+                        Navigator.pop(ctx);
+                      } catch (e) {
+                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Move failed: $e"), backgroundColor: Colors.red));
+                      }
                     },
                 child: const Text("Confirm Move"),
               )
@@ -292,36 +343,6 @@ class _SessionPanelState extends State<SessionPanel> {
         }
       ),
     );
-  }
-
-  void _executeMove(
-      BuildContext context,
-      ApiProvider apiProvider,
-      SessionPanelItem session,
-      int newTableId,
-      int newSeatNumber) async {
-
-    final updatedSession = Session(
-      sessionId: session.sessionId,
-      playerId: session.playerId,
-      startEpoch: session.startTime.millisecondsSinceEpoch ~/ 1000,
-      stopEpoch: null,
-      pokerTableId: newTableId,
-      seatNumber: newSeatNumber,
-      isPrepaid: session.isPrepaid,
-      prepayAmount: session.prepayAmount,
-    );
-
-    try {
-      await apiProvider.updateSession(updatedSession);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Moved successfully!")));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Move failed: $e"), backgroundColor: Colors.red));
-      }
-    }
   }
 
   void _showAddMoneyDialog(
@@ -343,13 +364,17 @@ class _SessionPanelState extends State<SessionPanel> {
             onPressed: () async {
               final amount = double.tryParse(controller.text) ?? 0.0;
               if (amount != 0) {
-                 await apiProvider.addPayment({
-                  'Player_Id': session.playerId,
-                  'Amount': amount,
-                  'Epoch': DateTime.now().millisecondsSinceEpoch ~/ 1000
-                });
+                 try {
+                   await apiProvider.addPayment({
+                    'Player_Id': session.playerId,
+                    'Amount': amount,
+                    'Epoch': DateTime.now().millisecondsSinceEpoch ~/ 1000
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                 } catch (e) {
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Payment failed: $e"), backgroundColor: Colors.red));
+                 }
               }
-              if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text("Add"),
           )

@@ -2,105 +2,81 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared/shared.dart'; // Required for defaultServerUrl
-
+import 'package:shared/shared.dart'; // Correct import
 import '../providers/api_provider.dart';
-import '../providers/app_settings_provider.dart';
 
-class ServerSettingsDialog extends StatefulWidget {
-  const ServerSettingsDialog({super.key});
-
-  @override
-  State<ServerSettingsDialog> createState() => _ServerSettingsDialogState();
-}
-
-class _ServerSettingsDialogState extends State<ServerSettingsDialog> {
-  late TextEditingController _urlController;
-  late TextEditingController _apiKeyController;
-  late String _initialServerUrl;
-
-  bool _isUrlChanged = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final appSettingsProvider =
-        Provider.of<AppSettingsProvider>(context, listen: false);
-
-    _initialServerUrl = appSettingsProvider.currentSettings.localServerUrl;
-    _urlController = TextEditingController(text: _initialServerUrl);
-    _apiKeyController = TextEditingController(
-        text: appSettingsProvider.currentSettings.localServerApiKey);
-  }
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _apiKeyController.dispose();
-    super.dispose();
-  }
+class ServerSettingsDialog extends StatelessWidget {
+  const ServerSettingsDialog({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final appSettingsProvider =
-        Provider.of<AppSettingsProvider>(context, listen: false);
-    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    final api = Provider.of<ApiProvider>(context);
 
     return AlertDialog(
-      title: const Text('Server Settings'),
-      content: SingleChildScrollView(
-        child: ListBody(
-          children: <Widget>[
-            TextFormField(
-              controller: _urlController,
-              decoration: const InputDecoration(
-                labelText: 'Server URL',
-                hintText: defaultServerUrl,
-              ),
-              onChanged: (currentText) {
-                final hasChanged = currentText != _initialServerUrl;
-                if (hasChanged != _isUrlChanged) {
-                  setState(() {
-                    _isUrlChanged = hasChanged;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _apiKeyController,
-              decoration: const InputDecoration(
-                labelText: 'API Key',
-              ),
-              obscureText: true,
-            ),
-          ],
-        ),
+      title: const Text("Server Maintenance"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(Icons.circle, color: api.isConnected ? Colors.green : Colors.red, size: 12),
+            title: Text(api.isConnected ? "Connected" : "Disconnected"),
+            subtitle: api.lastError != null ? Text(api.lastError!) : null,
+          ),
+          const Divider(),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.cloud_upload),
+            label: const Text("Trigger Remote Backup"),
+            onPressed: api.isConnected ? () => _handleBackup(context, api) : null,
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.cloud_download),
+            label: const Text("Trigger Remote Restore"),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade900),
+            onPressed: api.isConnected ? () => _handleRestore(context, api) : null,
+          ),
+        ],
       ),
-      actions: <Widget>[
-        TextButton(
-          child: const Text('Cancel'),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        ),
-        FilledButton(
-          onPressed: () {
-            final currentSettings = appSettingsProvider.currentSettings;
-
-            // Update settings using copyWith to preserve other fields
-            final newSettings = currentSettings.copyWith(
-              localServerUrl: _urlController.text,
-              localServerApiKey: _apiKeyController.text,
-            );
-
-            appSettingsProvider.updateSettings(newSettings);
-            apiProvider.retryConnection();
-            Navigator.of(context).pop();
-          },
-          child: Text(_isUrlChanged ? 'Save & Reconnect' : 'Retry'),
-        ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+        if (!api.isConnected)
+          TextButton(
+            onPressed: () => api.retryConnection(),
+            child: const Text("Retry Connection"),
+          ),
       ],
     );
+  }
+
+  Future<void> _handleBackup(BuildContext context, ApiProvider api) async {
+    try {
+      await api.triggerRemoteBackup(Shared.remoteApiKey);
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Backup successful")));
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Backup failed: $e")));
+    }
+  }
+
+  Future<void> _handleRestore(BuildContext context, ApiProvider api) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Restore?"),
+        content: const Text("This will overwrite your local database with the remote copy."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Restore")),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await api.triggerRemoteRestore(Shared.remoteApiKey);
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Restore complete")));
+      } catch (e) {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Restore failed: $e")));
+      }
+    }
   }
 }
