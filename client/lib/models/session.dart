@@ -1,54 +1,52 @@
 // client/lib/models/session.dart
 
 class Session {
-  final int? sessionId;
+  final int sessionId;
   final int playerId;
-  final int startEpoch; // REQUIRED: Cannot be null
-  final int? stopEpoch;
-  final int pokerTableId;
+  final int? pokerTableId;
   final int? seatNumber;
+  final int startEpoch;
   final bool isPrepaid;
   final double prepayAmount;
-  final double rate; // Optional for creation, but useful if model is reused
 
   Session({
-    this.sessionId,
+    required this.sessionId,
     required this.playerId,
-    required this.startEpoch,
-    this.stopEpoch,
-    required this.pokerTableId,
+    this.pokerTableId,
     this.seatNumber,
-    this.isPrepaid = false,
-    this.prepayAmount = 0.0,
-    this.rate = 0.0,
+    required this.startEpoch,
+    required this.isPrepaid,
+    required this.prepayAmount,
   });
 
-  // Convert to Map for JSON encoding (Sent to Server)
   Map<String, dynamic> toMap() {
-    return {
-      if (sessionId != null) 'Session_Id': sessionId,
+    final map = <String, dynamic>{
       'Player_Id': playerId,
-      'Start_Epoch': startEpoch, // This was likely missing or null before!
-      'Stop_Epoch': stopEpoch,
       'PokerTable_Id': pokerTableId,
       'Seat_Number': seatNumber,
+      'Start_Epoch': startEpoch,
       'Is_Prepaid': isPrepaid ? 1 : 0,
       'Prepay_Amount': prepayAmount,
     };
+
+    // Only include Session_Id if we are updating an existing record.
+    // A value of 0 means it's a new record waiting for the DB to assign an ID.
+    if (sessionId > 0) {
+      map['Session_Id'] = sessionId;
+    }
+
+    return map;
   }
 
-  // Create from Map (Received from Server/DB)
   factory Session.fromMap(Map<String, dynamic> map) {
     return Session(
-      sessionId: map['Session_Id'],
-      playerId: map['Player_Id'] ?? 0,
-      startEpoch: map['Start_Epoch'] ?? 0,
-      stopEpoch: map['Stop_Epoch'],
-      pokerTableId: map['PokerTable_Id'] ?? -1,
-      seatNumber: map['Seat_Number'],
-      isPrepaid: (map['Is_Prepaid'] == 1 || map['Is_Prepaid'] == true),
-      prepayAmount: (map['Prepay_Amount'] ?? 0.0).toDouble(),
-      rate: (map['Rate'] ?? 0.0).toDouble(),
+      sessionId: map['Session_Id'] as int,
+      playerId: map['Player_Id'] as int,
+      pokerTableId: map['PokerTable_Id'] as int?,
+      seatNumber: map['Seat_Number'] as int?,
+      startEpoch: map['Start_Epoch'] as int,
+      isPrepaid: (map['Is_Prepaid'] ?? 0) == 1,
+      prepayAmount: (map['Prepay_Amount'] ?? 0).toDouble(),
     );
   }
 }
