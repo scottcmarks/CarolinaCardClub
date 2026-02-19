@@ -11,8 +11,6 @@ class SessionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
-
-    // FIX: Use the smart getter we just restored
     final sessions = api.displayedSessions;
 
     return Container(
@@ -117,6 +115,7 @@ class SessionPanel extends StatelessWidget {
             );
           },
         ),
+        // Only allow clicking if the session is currently active
         onTap: isActive ? () => _showStopDialog(context, session, api) : null,
       ),
     );
@@ -132,10 +131,28 @@ class SessionPanel extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Ensure your ApiProvider has this method.
-              // api.stopSession(session.sessionId);
+            onPressed: () async {
+              Navigator.pop(ctx); // Close dialog immediately
+
+              // Calculate current epoch time for the stop timestamp
+              final stopEpoch = (DateTime.now().millisecondsSinceEpoch / 1000).round();
+
+              try {
+                // Call the newly added method with both arguments
+                await api.stopSession(session.sessionId, stopEpoch);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("${session.name}'s session stopped successfully."))
+                  );
+                }
+              } catch (e) {
+                 if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Failed to stop session: $e"))
+                  );
+                }
+              }
             },
             child: const Text("Stop Session"),
           ),

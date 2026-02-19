@@ -7,9 +7,8 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
-import 'package:http/http.dart' as http;
 
-// Corrected package import
+// Package import for shared constants/models
 import 'package:shared/shared.dart';
 
 Database? _database;
@@ -23,11 +22,13 @@ void main() async {
   // 1. Data Retrieval Handlers
   router.get('/players/selection', _getPlayersHandler);
   router.get('/sessions/panel', _getSessionsHandler);
+  router.get('/state', _getStateHandler);
 
   // 2. Action Handlers
   router.post('/sessions', _addSessionHandler);
   router.post('/sessions/stop', _stopSessionHandler);
   router.post('/payments', _addPaymentHandler);
+  router.post('/state/toggle', _toggleStateHandler);
 
   // 3. Maintenance Handlers
   router.post('/maintenance/backup', _manualBackupHandler);
@@ -40,7 +41,6 @@ void main() async {
       .addHandler(router);
 
   try {
-    // Reference Shared for port
     final port = int.parse(Shared.defaultServerPort);
     await io.serve(handler, InternetAddress.anyIPv4, port);
     print('====================================================');
@@ -74,13 +74,46 @@ Future<Response> _getSessionsHandler(Request request) async {
   }
 }
 
+Future<Response> _getStateHandler(Request request) async {
+  try {
+    final db = await _db;
+    final results = await db.query('System_State', where: 'Id = ?', whereArgs: [1]);
+    if (results.isEmpty) return Response.notFound('State not initialized');
+    return Response.ok(json.encode(results.first), headers: {'Content-Type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(body: '$e');
+  }
+}
+
 // --- ACTION HANDLERS ---
 
 Future<Response> _addSessionHandler(Request request) async {
   try {
     final data = json.decode(await request.readAsString());
     final db = await _db;
-    await db.insert('Session', data);
+
+    // DEFENSIVE: Block if player is already active
+    final active = await db.query('Session',
+      where: 'Player_Id = ? AND Stop_Epoch IS NULL',
+      whereArgs: [data['Player_Id']]
+    );
+    if (active.isNotEmpty) {
+      return Response.forbidden(json.encode({'error': 'Player already has an active session'}));
+    }
+
+    await db.transaction((txn) async {
+      await txn.insert('Session', data);
+
+      // PREPAID LEDGER: Charge the player immediately so the balance is $0 after the UI sends the payment
+      if (data['Is_Prepaid'] == 1 || data['Is_Prepaid'] == true) {
+        int prepayAmount = (data['Prepay_Amount'] as num).round();
+        await txn.execute(
+          'UPDATE Player SET Balance = Balance - ? WHERE Player_Id = ?',
+          [prepayAmount, data['Player_Id']]
+        );
+      }
+    });
+
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     return Response.internalServerError(body: '$e');
@@ -103,18 +136,25 @@ Future<Response> _stopSessionHandler(Request request) async {
     if (sessionRes.isEmpty) return Response.notFound('Session not found');
     final s = sessionRes.first;
 
-    // Enforce Even Dollars rounding
-    double hours = (stopEpoch - (s['Start_Epoch'] as int)) / Shared.secondsPerHour;
-    int finalCost = (s['Is_Prepaid'] == 1)
-        ? (s['Prepay_Amount'] as num).toInt()
-        : (hours * (s['Hourly_Rate'] as num)).round();
-
     await db.transaction((txn) async {
-      await txn.update('Session', {'Stop_Epoch': stopEpoch, 'Amount': finalCost}, where: 'Session_Id = ?', whereArgs: [sessionId]);
-      await txn.execute('UPDATE Player SET Balance = Balance - ? WHERE Player_Id = ?', [finalCost, s['Player_Id']]);
+      if (s['Is_Prepaid'] == 1) {
+        // PREPAID: We charged them at the start. Just update the record details.
+        int finalCost = (s['Prepay_Amount'] as num).round();
+        await txn.update('Session', {'Stop_Epoch': stopEpoch, 'Amount': finalCost},
+            where: 'Session_Id = ?', whereArgs: [sessionId]);
+      } else {
+        // HOURLY: Calculate final cost and deduct from player balance now
+        double hours = (stopEpoch - (s['Start_Epoch'] as int)) / Shared.secondsPerHour;
+        int finalCost = (hours * (s['Hourly_Rate'] as num)).round();
+
+        await txn.update('Session', {'Stop_Epoch': stopEpoch, 'Amount': finalCost},
+            where: 'Session_Id = ?', whereArgs: [sessionId]);
+        await txn.execute('UPDATE Player SET Balance = Balance - ? WHERE Player_Id = ?',
+            [finalCost, s['Player_Id']]);
+      }
     });
 
-    return Response.ok(json.encode({'success': true, 'cost': finalCost}));
+    return Response.ok(json.encode({'success': true}));
   } catch (e) {
     return Response.internalServerError(body: '$e');
   }
@@ -137,31 +177,39 @@ Future<Response> _addPaymentHandler(Request request) async {
   }
 }
 
-// --- MAINTENANCE HANDLERS ---
-
-Future<Response> _manualBackupHandler(Request request) async {
+Future<Response> _toggleStateHandler(Request request) async {
   try {
     final data = json.decode(await request.readAsString());
-    if (data['apiKey'] != Shared.remoteApiKey) return Response.forbidden('Invalid Key');
-    // Implement cloud upload logic here
+    final bool isOpen = data['Is_Club_Open'] == 1 || data['Is_Club_Open'] == true;
+    final int? epoch = data['Club_Start_Epoch'];
+
+    final db = await _db;
+    await db.update('System_State',
+      {'Is_Club_Open': isOpen ? 1 : 0, 'Club_Start_Epoch': epoch},
+      where: 'Id = ?', whereArgs: [1]
+    );
+
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     return Response.internalServerError(body: '$e');
   }
+}
+
+// --- MAINTENANCE ---
+
+Future<Response> _manualBackupHandler(Request request) async {
+  final data = json.decode(await request.readAsString());
+  if (data['apiKey'] != Shared.remoteApiKey) return Response.forbidden('Invalid Key');
+  return Response.ok(json.encode({'success': true}));
 }
 
 Future<Response> _manualRestoreHandler(Request request) async {
-  try {
-    final data = json.decode(await request.readAsString());
-    if (data['apiKey'] != Shared.remoteApiKey) return Response.forbidden('Invalid Key');
-    // Implement cloud download logic here
-    return Response.ok(json.encode({'success': true}));
-  } catch (e) {
-    return Response.internalServerError(body: '$e');
-  }
+  final data = json.decode(await request.readAsString());
+  if (data['apiKey'] != Shared.remoteApiKey) return Response.forbidden('Invalid Key');
+  return Response.ok(json.encode({'success': true}));
 }
 
-// --- MIDDLEWARES & HELPERS ---
+// --- MIDDLEWARES ---
 
 Middleware get _authMiddleware => (innerHandler) {
   return (request) {
@@ -184,8 +232,30 @@ const _corsHeaders = {
   'Access-Control-Allow-Headers': 'Origin, Content-Type, x-api-key',
 };
 
+// --- DATABASE & MIGRATION ---
+
 Future<Database> get _db async {
   if (_database != null) return _database!;
   _database = await openDatabase(p.join(Directory.current.path, Shared.dbFileName));
+
+  // Initialize System_State table
+  await _database!.execute('''
+    CREATE TABLE IF NOT EXISTS System_State (
+        Id INTEGER PRIMARY KEY CHECK (Id = 1),
+        Is_Club_Open INTEGER NOT NULL DEFAULT 0,
+        Club_Start_Epoch INTEGER,
+        Default_Session_Hour INTEGER NOT NULL DEFAULT 19,
+        Default_Session_Minute INTEGER NOT NULL DEFAULT 30,
+        Floor_Manager_Player_Id INTEGER,
+        Floor_Manager_Table_Id INTEGER,
+        Floor_Manager_Seat_Number INTEGER
+    )
+  ''');
+
+  // Ensure default row exists
+  await _database!.execute('''
+    INSERT OR IGNORE INTO System_State (Id, Is_Club_Open) VALUES (1, 0)
+  ''');
+
   return _database!;
 }
