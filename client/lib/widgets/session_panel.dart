@@ -3,10 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/api_provider.dart';
-import '../models/session_panel_item.dart';
+import '../models/session.dart'; // Updated from SessionPanelItem
 
 class SessionPanel extends StatelessWidget {
-  const SessionPanel({Key? key}) : super(key: key);
+  // FIXED: Converted 'key' to a super parameter
+  const SessionPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +82,7 @@ class SessionPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildSessionCard(BuildContext context, SessionPanelItem session, ApiProvider api) {
+  Widget _buildSessionCard(BuildContext context, Session session, ApiProvider api) {
     final tableName = session.pokerTableId != null
         ? "Table ${session.pokerTableId} - Seat ${session.seatNumber ?? '?'}"
         : "Unseated (Legacy)";
@@ -101,27 +102,30 @@ class SessionPanel extends StatelessWidget {
         subtitle: Text("$tableName ${isActive ? '' : '(Closed)'}"),
         trailing: Consumer<ApiProvider>(
           builder: (ctx, provider, _) {
-            final balance = provider.getDynamicBalance(
-              playerId: session.playerId,
-              currentTime: DateTime.now()
-            );
-            return Text(
-              "\$${balance.toString()}",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: balance < 0 ? Colors.red : Colors.green,
-              ),
-            );
+            try {
+              // Safely find the player object to feed into the new dynamic balance method
+              final player = provider.players.firstWhere((p) => p.playerId == session.playerId);
+              final balance = provider.getDynamicBalance(player);
+
+              return Text(
+                "\$$balance", // Simplified for integer display
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: balance < 0 ? Colors.red : Colors.green,
+                ),
+              );
+            } catch (e) {
+              return const Text("\$---"); // Fallback if player data is missing
+            }
           },
         ),
-        // Only allow clicking if the session is currently active
         onTap: isActive ? () => _showStopDialog(context, session, api) : null,
       ),
     );
   }
 
-  void _showStopDialog(BuildContext context, SessionPanelItem session, ApiProvider api) {
+  void _showStopDialog(BuildContext context, Session session, ApiProvider api) {
      showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -132,13 +136,11 @@ class SessionPanel extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              Navigator.pop(ctx); // Close dialog immediately
+              Navigator.pop(ctx);
 
-              // Calculate current epoch time for the stop timestamp
               final stopEpoch = (DateTime.now().millisecondsSinceEpoch / 1000).round();
 
               try {
-                // Call the newly added method with both arguments
                 await api.stopSession(session.sessionId, stopEpoch);
 
                 if (context.mounted) {

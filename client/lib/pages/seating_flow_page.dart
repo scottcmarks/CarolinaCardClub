@@ -9,7 +9,7 @@ import 'table_view_page.dart';
 
 class SeatingFlowPage extends StatefulWidget {
   final PlayerSelectionItem player;
-  const SeatingFlowPage({Key? key, required this.player}) : super(key: key);
+  const SeatingFlowPage({super.key, required this.player});
 
   @override
   State<SeatingFlowPage> createState() => _SeatingFlowPageState();

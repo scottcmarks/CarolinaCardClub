@@ -9,7 +9,7 @@ import 'settings_page.dart';
 import '../providers/api_provider.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +22,7 @@ class HomePage extends StatelessWidget {
             builder: (ctx, api, _) => Switch(
               value: api.isClubSessionOpen,
               onChanged: (val) => api.toggleClubSession(),
-              activeColor: Colors.green,
+              activeThumbColor: Colors.green,
               inactiveThumbColor: Colors.red,
             ),
           ),

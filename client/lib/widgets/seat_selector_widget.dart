@@ -8,13 +8,14 @@ class SeatSelectorWidget extends StatefulWidget {
   final List<int> occupiedSeats;
   final Function(int) onSeatSelected;
 
+  // FIXED: Converted 'key' to a super parameter
   const SeatSelectorWidget({
-    Key? key,
+    super.key,
     this.initialSeat,
     this.maxSeats = 10,
     this.occupiedSeats = const [],
     required this.onSeatSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<SeatSelectorWidget> createState() => _SeatSelectorWidgetState();
@@ -51,7 +52,8 @@ class _SeatSelectorWidgetState extends State<SeatSelectorWidget> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              // FIXED: Replaced deprecated withOpacity with withValues
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(2, 2),
             )

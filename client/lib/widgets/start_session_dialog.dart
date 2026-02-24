@@ -5,12 +5,10 @@ import 'package:provider/provider.dart';
 import '../providers/api_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
-import '../models/poker_table.dart';
-import '../pages/table_view_page.dart';
 
 class StartSessionDialog extends StatefulWidget {
   final PlayerSelectionItem player;
-  const StartSessionDialog({Key? key, required this.player}) : super(key: key);
+  const StartSessionDialog({super.key, required this.player});
 
   @override
   State<StartSessionDialog> createState() => _StartSessionDialogState();
@@ -35,7 +33,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
         children: [
           DropdownButtonFormField<int?>(
             decoration: const InputDecoration(labelText: "Table"),
-            value: _selectedTableId,
+            initialValue: _selectedTableId,
             items: [
               const DropdownMenuItem(value: null, child: Text("Unseated")),
               ...tables.map((t) => DropdownMenuItem(value: t.pokerTableId, child: Text(t.name))),

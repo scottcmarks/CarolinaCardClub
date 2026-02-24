@@ -4,15 +4,13 @@ import 'package:shared/shared.dart';
 
 class AppSettings {
   final String serverIp;
-  final String serverPort;
+  final int serverPort;
   final String localApiKey;
+  final int scanTimeoutMs;
   final String preferredTheme;
-
   final int? floorManagerPlayerId;
   final int floorManagerReservedTable;
   final int floorManagerReservedSeat;
-
-  // Time Settings
   final int defaultSessionHour;
   final int defaultSessionMinute;
 
@@ -20,6 +18,7 @@ class AppSettings {
     this.serverIp = Shared.defaultServerIp,
     this.serverPort = Shared.defaultServerPort,
     this.localApiKey = Shared.defaultLocalApiKey,
+    this.scanTimeoutMs = Shared.defaultScanTimeout,
     this.preferredTheme = Shared.defaultTheme,
     this.floorManagerPlayerId = Shared.defaultFloorManagerPlayerId,
     this.floorManagerReservedTable = Shared.defaultFloorManagerReservedTable,
@@ -28,11 +27,38 @@ class AppSettings {
     this.defaultSessionMinute = Shared.defaultSessionMinute,
   });
 
+  AppSettings copyWith({
+    String? serverIp,
+    int? serverPort,
+    String? localApiKey,
+    int? scanTimeoutMs,
+    String? preferredTheme,
+    int? floorManagerPlayerId,
+    int? floorManagerReservedTable,
+    int? floorManagerReservedSeat,
+    int? defaultSessionHour,
+    int? defaultSessionMinute,
+  }) {
+    return AppSettings(
+      serverIp: serverIp ?? this.serverIp,
+      serverPort: serverPort ?? this.serverPort,
+      localApiKey: localApiKey ?? this.localApiKey,
+      scanTimeoutMs: scanTimeoutMs ?? this.scanTimeoutMs,
+      preferredTheme: preferredTheme ?? this.preferredTheme,
+      floorManagerPlayerId: floorManagerPlayerId ?? this.floorManagerPlayerId,
+      floorManagerReservedTable: floorManagerReservedTable ?? this.floorManagerReservedTable,
+      floorManagerReservedSeat: floorManagerReservedSeat ?? this.floorManagerReservedSeat,
+      defaultSessionHour: defaultSessionHour ?? this.defaultSessionHour,
+      defaultSessionMinute: defaultSessionMinute ?? this.defaultSessionMinute,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'serverIp': serverIp,
       'serverPort': serverPort,
       'localApiKey': localApiKey,
+      'scanTimeoutMs': scanTimeoutMs,
       'preferredTheme': preferredTheme,
       'floorManagerPlayerId': floorManagerPlayerId,
       'floorManagerReservedTable': floorManagerReservedTable,
@@ -47,6 +73,7 @@ class AppSettings {
       serverIp: map['serverIp'] ?? Shared.defaultServerIp,
       serverPort: map['serverPort'] ?? Shared.defaultServerPort,
       localApiKey: map['localApiKey'] ?? Shared.defaultLocalApiKey,
+      scanTimeoutMs: map['scanTimeoutMs'] ?? Shared.defaultScanTimeout,
       preferredTheme: map['preferredTheme'] ?? Shared.defaultTheme,
       floorManagerPlayerId: map['floorManagerPlayerId'],
       floorManagerReservedTable: map['floorManagerReservedTable'] ?? Shared.defaultFloorManagerReservedTable,
