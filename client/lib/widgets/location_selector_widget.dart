@@ -14,10 +14,15 @@ class LocationSelectorWidget extends StatefulWidget {
   final bool isSubPageMode;
   final int? highlightedSeat;
 
+  // FIXED: Converted 'key' to a super parameter to satisfy the Dart linter
   const LocationSelectorWidget({
-    Key? key, required this.table, required this.occupancy, required this.onSeatSelected,
-    this.isSubPageMode = false, this.highlightedSeat,
-  }) : super(key: key);
+    super.key,
+    required this.table,
+    required this.occupancy,
+    required this.onSeatSelected,
+    this.isSubPageMode = false,
+    this.highlightedSeat,
+  });
 
   @override
   State<LocationSelectorWidget> createState() => _LocationSelectorWidgetState();

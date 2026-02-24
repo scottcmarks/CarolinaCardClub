@@ -5,10 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared/shared.dart';
 import '../providers/app_settings_provider.dart';
-import '../models/app_settings.dart';
+import '../widgets/subnet_scan_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({super.key});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -18,9 +18,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _ipController;
   late TextEditingController _portController;
   late TextEditingController _apiKeyController;
+  late TextEditingController _timeoutController;
   late TextEditingController _fmIdController;
-  late TextEditingController _fmTableController;
-  late TextEditingController _fmSeatController;
   late TextEditingController _hourController;
   late TextEditingController _minuteController;
 
@@ -29,13 +28,13 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final s = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
     _ipController = TextEditingController(text: s.serverIp);
-    _portController = TextEditingController(text: s.serverPort);
+    _portController = TextEditingController(text: s.serverPort.toString());
     _apiKeyController = TextEditingController(text: s.localApiKey);
+    _timeoutController = TextEditingController(text: s.scanTimeoutMs.toString());
     _fmIdController = TextEditingController(text: s.floorManagerPlayerId?.toString() ?? '');
-    _fmTableController = TextEditingController(text: s.floorManagerReservedTable.toString());
-    _fmSeatController = TextEditingController(text: s.floorManagerReservedSeat.toString());
-    _hourController = TextEditingController(text: s.defaultSessionHour.toString());
-    _minuteController = TextEditingController(text: s.defaultSessionMinute.toString());
+
+    _hourController = TextEditingController(text: Shared.defaultSessionHour.toString());
+    _minuteController = TextEditingController(text: Shared.defaultSessionMinute.toString());
   }
 
   @override
@@ -43,9 +42,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _ipController.dispose();
     _portController.dispose();
     _apiKeyController.dispose();
+    _timeoutController.dispose();
     _fmIdController.dispose();
-    _fmTableController.dispose();
-    _fmSeatController.dispose();
     _hourController.dispose();
     _minuteController.dispose();
     super.dispose();
@@ -53,21 +51,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _save() {
     final provider = Provider.of<AppSettingsProvider>(context, listen: false);
-    final current = provider.currentSettings;
 
-    provider.updateSettings(AppSettings(
+    provider.updateSettings(provider.currentSettings.copyWith(
       serverIp: _ipController.text.isEmpty ? Shared.defaultServerIp : _ipController.text,
-      serverPort: _portController.text.isEmpty ? Shared.defaultServerPort : _portController.text,
+      serverPort: int.tryParse(_portController.text) ?? Shared.defaultServerPort,
       localApiKey: _apiKeyController.text.isEmpty ? Shared.defaultLocalApiKey : _apiKeyController.text,
-      preferredTheme: current.preferredTheme,
+      scanTimeoutMs: int.tryParse(_timeoutController.text) ?? Shared.defaultScanTimeout,
       floorManagerPlayerId: int.tryParse(_fmIdController.text),
-      floorManagerReservedTable: int.tryParse(_fmTableController.text) ?? Shared.defaultFloorManagerReservedTable,
-      floorManagerReservedSeat: int.tryParse(_fmSeatController.text) ?? Shared.defaultFloorManagerReservedSeat,
-      defaultSessionHour: int.tryParse(_hourController.text) ?? Shared.defaultSessionHour,
-      defaultSessionMinute: int.tryParse(_minuteController.text) ?? Shared.defaultSessionMinute,
     ));
 
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("All Configuration Saved")));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("All Configuration Saved")),
+    );
   }
 
   @override
@@ -78,29 +73,42 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text("Network Configuration", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
           _buildTextField("Server IP", _ipController, Shared.defaultServerIp),
-          _buildTextField("Server Port", _portController, Shared.defaultServerPort),
+          _buildIntField("Server Port", _portController, Shared.defaultServerPort.toString()),
           _buildTextField("Local API Key", _apiKeyController, "Secret Key"),
+          _buildIntField("Scan Timeout (ms)", _timeoutController, Shared.defaultScanTimeout.toString()),
+
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => showDialog(
+              context: context,
+              builder: (context) => const SubnetScanDialog(),
+            ),
+            icon: const Icon(Icons.radar),
+            label: const Text("Auto-Discover Server"),
+          ),
 
           const SizedBox(height: 24),
           const Text("Club Session Start Time", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _buildIntField("Default Hour (24h)", _hourController, "19")),
+              Expanded(child: _buildIntField("Hour (24h)", _hourController, Shared.defaultSessionHour.toString())),
               const SizedBox(width: 16),
-              Expanded(child: _buildIntField("Default Minute", _minuteController, "30")),
+              Expanded(child: _buildIntField("Minute", _minuteController, Shared.defaultSessionMinute.toString())),
             ],
           ),
 
           const SizedBox(height: 24),
           const Text("Floor Manager Configuration", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
           _buildIntField("Manager Player ID", _fmIdController, "Default: ${Shared.defaultFloorManagerPlayerId}"),
-          _buildIntField("Reserved Table ID", _fmTableController, "Default: ${Shared.defaultFloorManagerReservedTable}"),
-          _buildIntField("Reserved Seat Number", _fmSeatController, "Default: ${Shared.defaultFloorManagerReservedSeat}"),
 
           const SizedBox(height: 32),
           ElevatedButton(
             onPressed: _save,
+            style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
             child: const Text("Save All Configuration"),
           ),
         ],
@@ -113,7 +121,12 @@ class _SettingsPageState extends State<SettingsPage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
-        decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+        ),
       ),
     );
   }
@@ -123,7 +136,12 @@ class _SettingsPageState extends State<SettingsPage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
-        decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+        ),
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       ),

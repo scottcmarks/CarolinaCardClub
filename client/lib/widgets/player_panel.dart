@@ -10,7 +10,8 @@ import '../models/app_settings.dart';
 import 'start_session_dialog.dart';
 
 class PlayerPanel extends StatelessWidget {
-  const PlayerPanel({Key? key}) : super(key: key);
+  // FIXED: Converted 'key' to a super parameter
+  const PlayerPanel({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -7,10 +7,9 @@ import '../providers/api_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
-import '../widgets/location_selector_widget.dart';
 
 class PlayerSelectionPanel extends StatefulWidget {
-  const PlayerSelectionPanel({Key? key}) : super(key: key);
+  const PlayerSelectionPanel({super.key});
 
   @override
   State<PlayerSelectionPanel> createState() => _PlayerSelectionPanelState();
@@ -47,10 +46,8 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
           itemCount: players.length,
           itemBuilder: (ctx, index) {
             final player = players[index];
-            final displayBalance = apiProvider.getDynamicBalance(
-              playerId: player.playerId,
-              currentTime: DateTime.now(),
-            );
+
+            final int displayBalance = apiProvider.getDynamicBalance(player);
             final balanceColor = displayBalance < 0 ? Colors.red.shade700 : Colors.grey.shade700;
 
             return Card(
@@ -58,7 +55,7 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
               child: ListTile(
                 title: Text(player.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
-                  "Balance: \$${displayBalance.toStringAsFixed(2)}",
+                  "Balance: \$$displayBalance",
                   style: TextStyle(color: balanceColor, fontWeight: FontWeight.bold),
                 ),
                 trailing: player.isActive
@@ -79,7 +76,6 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
       return;
     }
 
-    // Filter active tables only
     final activeTables = apiProvider.pokerTables.where((t) => t.isActive).toList();
 
     if (activeTables.isEmpty) {
@@ -87,23 +83,20 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
       return;
     }
 
-    // --- LOGIC ---
     final double hourlyRate = player.hourlyRate;
     final int prepayHours = player.prepayHours;
     final double prepayCost = hourlyRate * prepayHours;
 
     final bool isVip = hourlyRate == 0;
-
-    final bool canNormallyStart = player.balance >= -0.01;
+    final bool canNormallyStart = player.balance >= 0;
 
     final bool offerPrepayOption = !isVip && canNormallyStart && prepayCost > 0;
     final bool showAddMoneyFlow = !isVip && !canNormallyStart;
 
-    // Build Occupancy Map for Start Dialog
-    final occupancyMap = <int, List<int>>{};
+    final occupancyMap = <int, Map<int, String>>{};
     for (var s in apiProvider.sessions) {
       if (s.pokerTableId != null && s.seatNumber != null) {
-        occupancyMap.putIfAbsent(s.pokerTableId!, () => []).add(s.seatNumber!);
+        occupancyMap.putIfAbsent(s.pokerTableId!, () => {})[s.seatNumber!] = "Occupied";
       }
     }
 
@@ -122,6 +115,7 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
           prepayHours: prepayHours,
           onStart: (tableId, seatNum, isPrepaid) async {
              await apiProvider.addSession(Session(
+              sessionId: 0,
               playerId: player.playerId,
               startEpoch: DateTime.now().millisecondsSinceEpoch ~/ 1000,
               pokerTableId: tableId,
@@ -129,14 +123,13 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
               isPrepaid: isPrepaid,
               prepayAmount: isPrepaid ? prepayCost : 0.0,
             ));
-            if (context.mounted) Navigator.pop(ctx);
+            if (ctx.mounted) Navigator.pop(ctx);
           },
           onAddPayment: (amount) async {
-             await apiProvider.addPayment({
-              'Player_Id': player.playerId,
-              'Amount': amount,
-              'Epoch': DateTime.now().millisecondsSinceEpoch ~/ 1000
-            });
+             await apiProvider.addPayment(
+               playerId: player.playerId,
+               amount: amount,
+             );
           }
         ),
       );
@@ -148,17 +141,16 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Negative Balance"),
-        content: Text("${player.name} owes \$${(-player.balance).toStringAsFixed(2)}.\nMust clear balance to start."),
+        content: Text("${player.name} owes \$${-player.balance}.\nMust clear balance to start."),
         actions: [
            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
            ElevatedButton(
             child: const Text("Clear Debt"),
             onPressed: () async {
-               await apiProvider.addPayment({
-                'Player_Id': player.playerId,
-                'Amount': -player.balance,
-                'Epoch': DateTime.now().millisecondsSinceEpoch ~/ 1000
-              });
+               await apiProvider.addPayment(
+                 playerId: player.playerId,
+                 amount: (-player.balance).toDouble(),
+               );
               if (ctx.mounted) Navigator.pop(ctx);
             },
           )
@@ -171,7 +163,7 @@ class _PlayerSelectionPanelState extends State<PlayerSelectionPanel> {
 class _StartSessionDialog extends StatefulWidget {
   final PlayerSelectionItem player;
   final List<PokerTable> tables;
-  final Map<int, List<int>> occupancyMap;
+  final Map<int, Map<int, String>> occupancyMap;
   final bool canPrepay;
   final bool isVip;
   final double prepayCost;
@@ -196,108 +188,66 @@ class _StartSessionDialog extends StatefulWidget {
 }
 
 class _StartSessionDialogState extends State<_StartSessionDialog> {
-  late int _selectedTableId;
-  int? _selectedSeat;
+  int? _selectedTableId;
+  int? _selectedSeatNumber;
   bool _isPrepaid = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Default to first non-full table
-    _selectedTableId = widget.tables.first.pokerTableId;
-    for(var t in widget.tables) {
-      final occupied = widget.occupancyMap[t.pokerTableId] ?? [];
-      if (occupied.length < t.capacity) {
-        _selectedTableId = t.pokerTableId;
-        break;
-      }
-    }
-
-    if (widget.isVip) _isPrepaid = true;
-  }
+  bool _isSubmitting = false;
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text("Start: ${widget.player.name}"),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!widget.isVip)
-              Text("Current Balance: \$${widget.player.balance.toStringAsFixed(2)}"),
-
+      title: Text("Seat ${widget.player.name}"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<int?>(
+            decoration: const InputDecoration(labelText: "Select Table"),
+            initialValue: _selectedTableId,
+            items: [
+              const DropdownMenuItem(value: null, child: Text("Unseated (Lobby)")),
+              ...widget.tables.map((t) => DropdownMenuItem(
+                value: t.pokerTableId,
+                child: Text(t.name)
+              )),
+            ],
+            onChanged: _isSubmitting ? null : (val) {
+              setState(() {
+                _selectedTableId = val;
+                _selectedSeatNumber = null;
+              });
+            },
+          ),
+          if (widget.canPrepay) ...[
             const SizedBox(height: 16),
-            LocationSelectorWidget(
-              tables: widget.tables,
-              occupancyMap: widget.occupancyMap,
-              onChanged: (tableId, seatNum) {
-                setState(() {
-                  _selectedTableId = tableId;
-                  _selectedSeat = seatNum;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-
-            if (widget.isVip) ...[
-               const ListTile(
-                 leading: Icon(Icons.star, color: Colors.amber),
-                 title: Text("VIP Session"),
-                 subtitle: Text("No hourly charge."),
-               )
-            ] else if (widget.canPrepay) ...[
-              CheckboxListTile(
-                title: const Text("Prepay Session?"),
-                subtitle: Text("${widget.prepayHours} hrs for \$${widget.prepayCost.toStringAsFixed(2)}"),
-                value: _isPrepaid,
-                onChanged: (val) {
-                  setState(() => _isPrepaid = val ?? false);
-                  if (_isPrepaid) _checkPrepayFunds();
-                },
+            SwitchListTile(
+              title: const Text("Prepay Session"),
+              subtitle: Text(
+                _isPrepaid
+                  ? "\$${widget.prepayCost.round()} upfront for ${widget.prepayHours} hours"
+                  : "Standard Hourly Billing"
               ),
-            ]
-          ],
-        ),
+              value: _isPrepaid,
+              onChanged: _isSubmitting ? null : (val) => setState(() => _isPrepaid = val),
+            ),
+          ]
+        ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text("Cancel")
+        ),
         ElevatedButton(
-          onPressed: () => widget.onStart(_selectedTableId, _selectedSeat, _isPrepaid),
-          child: const Text("Start Session"),
+          onPressed: _isSubmitting ? null : () async {
+            setState(() => _isSubmitting = true);
+            await widget.onStart(_selectedTableId ?? 0, _selectedSeatNumber, _isPrepaid);
+            if (mounted) setState(() => _isSubmitting = false);
+          },
+          child: _isSubmitting
+              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text("Confirm Seat"),
         ),
       ],
     );
-  }
-
-  void _checkPrepayFunds() {
-    final deficit = widget.prepayCost - widget.player.balance;
-    if (deficit > 0) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text("Add Funds"),
-          content: Text("Add \$${deficit.toStringAsFixed(2)} for prepay?"),
-          actions: [
-            TextButton(
-              child: const Text("No"),
-              onPressed: () {
-                setState(() => _isPrepaid = false);
-                Navigator.pop(ctx);
-              },
-            ),
-            ElevatedButton(
-              child: const Text("Add & Continue"),
-              onPressed: () async {
-                await widget.onAddPayment(deficit);
-                if (mounted) Navigator.pop(ctx);
-              },
-            )
-          ],
-        ),
-      );
-    }
   }
 }

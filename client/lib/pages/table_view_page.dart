@@ -11,7 +11,7 @@ class TableViewPage extends StatelessWidget {
   final int? pendingPlayerId;
   final int? highlightedSeat;
 
-  const TableViewPage({Key? key, required this.table, this.pendingPlayerId, this.highlightedSeat}) : super(key: key);
+  const TableViewPage({super.key, required this.table, this.pendingPlayerId, this.highlightedSeat});
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +26,7 @@ class TableViewPage extends StatelessWidget {
       occupancy: occupancy,
       highlightedSeat: highlightedSeat,
       isSubPageMode: pendingPlayerId != null,
-      onSeatSelected: (num) => Navigator.pop(context, num),
+      onSeatSelected: (seatNum) => Navigator.pop(context, seatNum),
     );
   }
 }
