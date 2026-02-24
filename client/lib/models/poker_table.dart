@@ -2,40 +2,32 @@
 
 class PokerTable {
   final int pokerTableId;
-  final String name;
+  final String tableName;
   final int capacity;
-  final bool isActive;
+  final bool isActive; // Restored
 
   PokerTable({
     required this.pokerTableId,
-    required this.name,
+    required this.tableName,
     required this.capacity,
     required this.isActive,
   });
 
-  // Factory for parsing JSON from API
-  factory PokerTable.fromMap(Map<String, dynamic> map) {
+  String get name => tableName;
+
+  factory PokerTable.fromJson(Map<String, dynamic> json) {
     return PokerTable(
-      pokerTableId: map['Poker_Table_Id'] ?? 0,
-      name: map['Name'] ?? 'Unknown',
-      capacity: map['Capacity'] ?? 9,
-      // Handle SQLite (1/0) or JSON (true/false) booleans
-      isActive: map['Is_Active'] == 1 || map['Is_Active'] == true,
+      pokerTableId: json['pokerTableId'] as int,
+      tableName: (json['tableName'] ?? json['name'] ?? 'Table ${json['pokerTableId']}') as String,
+      capacity: json['capacity'] as int,
+      isActive: json['isActive'] ?? true,
     );
   }
 
-  // --- ADDED THIS METHOD ---
-  PokerTable copyWith({
-    int? pokerTableId,
-    String? name,
-    int? capacity,
-    bool? isActive,
-  }) {
-    return PokerTable(
-      pokerTableId: pokerTableId ?? this.pokerTableId,
-      name: name ?? this.name,
-      capacity: capacity ?? this.capacity,
-      isActive: isActive ?? this.isActive,
-    );
-  }
+  Map<String, dynamic> toJson() => {
+    'pokerTableId': pokerTableId,
+    'tableName': tableName,
+    'capacity': capacity,
+    'isActive': isActive,
+  };
 }

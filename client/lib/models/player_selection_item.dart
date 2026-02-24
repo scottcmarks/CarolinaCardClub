@@ -3,30 +3,40 @@
 class PlayerSelectionItem {
   final int playerId;
   final String name;
-  final int balance;
-  final double hourlyRate;
-  final int prepayHours;
-  final bool isActive;
+  final int balance;      // Integer Dollars
+  final bool isActive;    // Restored
+  final int hourlyRate;   // Integer Dollars per hour
+  final int prepayHours;  // Integer Hours
 
   PlayerSelectionItem({
     required this.playerId,
     required this.name,
     required this.balance,
-    required this.hourlyRate,
-    required this.prepayHours,
-    required this.isActive,
+    this.isActive = false,
+    this.hourlyRate = 10,
+    this.prepayHours = 0,
   });
 
-  factory PlayerSelectionItem.fromMap(Map<String, dynamic> map) {
+  // Dual-compatibility getter for legacy code
+  String get playerName => name;
+
+  factory PlayerSelectionItem.fromJson(Map<String, dynamic> json) {
     return PlayerSelectionItem(
-      // Corrected to match your database schema singular naming
-      playerId: (map['Player_Id'] ?? -1) as int,
-      name: (map['Name'] ?? "") as String,
-      // Robust conversion from num to int for Even Dollars logic
-      balance: (map['Balance'] as num? ?? 0).toInt(),
-      hourlyRate: (map['Hourly_Rate'] as num? ?? 0.0).toDouble(),
-      prepayHours: (map['Prepay_Hours'] as num? ?? 0).toInt(),
-      isActive: (map['Is_Active'] as int? ?? 0) == 1,
+      playerId: json['playerId'] as int,
+      name: (json['name'] ?? json['playerName'] ?? 'Unknown') as String,
+      balance: (json['balance'] as num).toInt(),
+      isActive: json['isActive'] ?? false,
+      hourlyRate: (json['hourlyRate'] ?? 10).toInt(),
+      prepayHours: (json['prepayHours'] ?? 0).toInt(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'playerId': playerId,
+    'name': name,
+    'balance': balance,
+    'isActive': isActive,
+    'hourlyRate': hourlyRate,
+    'prepayHours': prepayHours,
+  };
 }

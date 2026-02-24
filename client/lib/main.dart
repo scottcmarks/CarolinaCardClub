@@ -22,12 +22,16 @@ class CarolinaCardClubApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
         ChangeNotifierProvider(create: (_) => TimeProvider()),
 
-        ChangeNotifierProxyProvider<AppSettingsProvider, ApiProvider>(
-          create: (context) => ApiProvider(
-            Provider.of<AppSettingsProvider>(context, listen: false)
-          ),
-          update: (context, settings, previous) {
-            return previous ?? ApiProvider(settings);
+        ChangeNotifierProxyProvider2<AppSettingsProvider, TimeProvider, ApiProvider>(
+          create: (context) {
+            final settingsProv = Provider.of<AppSettingsProvider>(context, listen: false);
+            return ApiProvider(settingsProv.currentSettings);
+          },
+          update: (context, settingsProv, timeProv, previous) {
+            // Ensure the API provider always has the latest settings and time offset
+            final api = previous ?? ApiProvider(settingsProv.currentSettings);
+            api.updateTimeOffset(timeProv.offset);
+            return api;
           },
         ),
       ],
@@ -43,12 +47,6 @@ class CarolinaCardClubApp extends StatelessWidget {
               primarySwatch: Colors.blue,
               useMaterial3: true,
               scaffoldBackgroundColor: Colors.white,
-            ),
-            darkTheme: ThemeData.dark().copyWith(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: Colors.blue,
-                brightness: Brightness.dark
-              ),
             ),
             home: const HomePage(),
           );

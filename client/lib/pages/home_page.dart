@@ -2,69 +2,152 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/api_provider.dart';
+import '../providers/time_provider.dart';
 import '../widgets/player_panel.dart';
 import '../widgets/session_panel.dart';
-import '../widgets/server_settings_dialog.dart';
+import '../widgets/real_time_clock.dart';
 import 'settings_page.dart';
-import '../providers/api_provider.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    // Refresh data once the widget is mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshData();
+    });
+  }
+
+  Future<void> _refreshData() async {
+    final api = Provider.of<ApiProvider>(context, listen: false);
+    try {
+      await api.fetchTables();
+      await api.fetchPlayers();
+      await api.fetchSessions();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Sync Error: $e")),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final api = Provider.of<ApiProvider>(context);
+    final timeProvider = Provider.of<TimeProvider>(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Carolina Card Club"),
+        elevation: 2,
         actions: [
-          // Club Session Toggle
-          Consumer<ApiProvider>(
-            builder: (ctx, api, _) => Switch(
-              value: api.isClubSessionOpen,
-              onChanged: (val) => api.toggleClubSession(),
-              activeThumbColor: Colors.green,
-              inactiveThumbColor: Colors.red,
+          // 1. GAME CLOCK BADGE
+          // Visual feedback if a time offset is active (turns orange)
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: timeProvider.offset != Duration.zero
+                  ? Colors.orange.shade100
+                  : Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: timeProvider.offset != Duration.zero
+                    ? Colors.orange
+                    : Colors.blue.shade200,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.access_time,
+                  size: 16,
+                  color: timeProvider.offset != Duration.zero
+                      ? Colors.orange.shade900
+                      : Colors.blue.shade900
+                ),
+                const SizedBox(width: 8),
+                const RealTimeClock(),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
 
+          // 2. REFRESH BUTTON
           IconButton(
-            icon: const Icon(Icons.dns),
-            tooltip: "Server Maintenance",
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => const ServerSettingsDialog()
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshData,
+            tooltip: "Refresh Server Data",
+          ),
+
+          // 3. CLUB SESSION TOGGLE
+          // Uses Game Clock (TimeProvider) for session start epoch
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: Row(
+              children: [
+                const Text("Club Session", style: TextStyle(fontSize: 13)),
+                const SizedBox(width: 8),
+                Switch(
+                  value: api.isClubSessionOpen,
+                  activeThumbColor: Colors.green,
+                  onChanged: (val) async {
+                    try {
+                      if (val) {
+                        // Use Game Clock for the start timestamp
+                        final startEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
+                        await api.startClubSession(startEpoch);
+                      } else {
+                        await api.stopClubSession();
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Session Toggle Error: $e")),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
             ),
           ),
 
+          // 4. SETTINGS
           IconButton(
             icon: const Icon(Icons.settings),
-            tooltip: "Settings",
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsPage())
-            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+            },
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      // FIX: CrossAxisAlignment.stretch forces full height
       body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Left Panel (Player Selection) - 1/3 width
-          Expanded(
-            flex: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border(right: BorderSide(color: Colors.grey.shade300)),
-              ),
-              child: const PlayerPanel(),
-            ),
+          // Left Sidebar: Player Actions
+          const SizedBox(
+            width: 350,
+            child: PlayerPanel(),
           ),
 
-          // Right Panel (Session Management) - 2/3 width
+          const VerticalDivider(width: 1),
+
+          // Right Content: Session List and History
           const Expanded(
-            flex: 2,
             child: SessionPanel(),
           ),
         ],

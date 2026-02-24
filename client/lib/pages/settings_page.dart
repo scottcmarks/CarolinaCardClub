@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared/shared.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/time_provider.dart';
 import '../widgets/subnet_scan_dialog.dart';
+import '../widgets/set_clock_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -68,7 +70,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("System Settings")),
+      appBar: AppBar(title: const Text("System Settings")), // FIXED: appBar
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -104,6 +106,27 @@ class _SettingsPageState extends State<SettingsPage> {
           const Text("Floor Manager Configuration", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
           _buildIntField("Manager Player ID", _fmIdController, "Default: ${Shared.defaultFloorManagerPlayerId}"),
+
+          const Divider(height: 48),
+          const Text("System Debugging", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          Consumer<TimeProvider>(
+            builder: (context, time, _) => Card(
+              color: Colors.orange.shade50,
+              child: ListTile(
+                leading: const Icon(Icons.history_toggle_off, color: Colors.orange),
+                title: const Text("Game Clock Offset"),
+                subtitle: Text("${time.offset.inMinutes} minutes from system time"),
+                trailing: ElevatedButton(
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => const SetClockDialog(),
+                  ),
+                  child: const Text("Set Clock"),
+                ),
+              ),
+            ),
+          ),
 
           const SizedBox(height: 32),
           ElevatedButton(

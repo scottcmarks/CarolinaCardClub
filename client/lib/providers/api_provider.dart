@@ -1,205 +1,155 @@
 // client/lib/providers/api_provider.dart
 
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'app_settings_provider.dart';
-import '../models/poker_table.dart';
+import '../models/app_settings.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
+import '../models/poker_table.dart';
 
 class ApiProvider with ChangeNotifier {
-  static const int httpOK = 200;
-  final AppSettingsProvider _appSettingsProvider;
+  final AppSettings settings;
 
-  bool _isConnected = false;
-  bool _hasAttemptedAutoScan = false;
+  List<PlayerSelectionItem> players = [];
+  List<Session> sessions = [];
+  List<PokerTable> pokerTables = [];
 
-  // Volatile UI State for PlayerPanel
-  int? _selectedPlayerId;
+  // Alias for UI components expecting .tables
+  List<PokerTable> get tables => pokerTables;
 
-  List<PokerTable> _pokerTables = [];
-  List<PlayerSelectionItem> _players = [];
-  List<Session> _sessions = [];
+  int? selectedPlayerId;
+  bool isClubSessionOpen = false;
+  DateTime? clubSessionStartDateTime;
+  Duration _timeOffset = Duration.zero;
 
-  ApiProvider(this._appSettingsProvider) {
-    reloadServerDatabase();
+  ApiProvider(this.settings);
+
+  void updateTimeOffset(Duration offset) {
+    if (_timeOffset != offset) {
+      _timeOffset = offset;
+      notifyListeners();
+    }
   }
 
-  // --- Getters ---
-  bool get isConnected => _isConnected;
-  bool get hasAttemptedAutoScan => _hasAttemptedAutoScan;
-  int? get selectedPlayerId => _selectedPlayerId;
-  List<PokerTable> get pokerTables => _pokerTables;
-  List<PlayerSelectionItem> get players => _players;
-  List<Session> get sessions => _sessions;
+  /// Returns balance in integer dollars
+  int getDynamicBalance(PlayerSelectionItem player) {
+    int currentBalance = player.balance;
 
-  String get baseUrl =>
-      'http://${_appSettingsProvider.currentSettings.serverIp}:${_appSettingsProvider.currentSettings.serverPort}';
+    final gameNow = DateTime.now().add(_timeOffset);
+    final nowEpoch = (gameNow.millisecondsSinceEpoch / 1000).round();
 
-  // --- UI Selection State ---
+    final activeSessions = sessions.where((s) =>
+      s.playerId == player.playerId && s.stopTime == null
+    );
+
+    for (var session in activeSessions) {
+      final elapsedSeconds = nowEpoch - session.startEpoch;
+      if (elapsedSeconds > 0) {
+        // Calculate cost and round to nearest dollar
+        final double cost = (elapsedSeconds * player.hourlyRate) / 3600;
+        currentBalance -= cost.round();
+      }
+    }
+    return currentBalance;
+  }
+
+  // --- UI Actions ---
+
   void selectPlayer(int? playerId) {
-    _selectedPlayerId = playerId;
+    selectedPlayerId = playerId;
     notifyListeners();
   }
-
-  // --- Dashboard Data Getters ---
 
   List<Session> get displayedSessions {
-    List<Session> filtered = _sessions;
-    if (_selectedPlayerId != null) {
-      filtered = filtered.where((s) => s.playerId == _selectedPlayerId).toList();
+    if (selectedPlayerId != null) {
+      return sessions.where((s) => s.playerId == selectedPlayerId).toList();
     }
-    return filtered;
+    return sessions;
   }
 
-  DateTime? get clubSessionStartDateTime {
-    if (!isClubSessionOpen) return null;
-    final now = DateTime.now();
-    final settings = _appSettingsProvider.currentSettings;
-    return DateTime(
-      now.year, now.month, now.day,
-      settings.defaultSessionHour,
-      settings.defaultSessionMinute,
-    );
+  List<int> getOccupiedSeatsForTable(int tableId) {
+    return sessions
+        .where((s) => s.pokerTableId == tableId && s.stopTime == null)
+        .map((s) => s.seatNumber ?? 0)
+        .toList();
   }
 
-  // --- Business Logic: Dynamic Balance ---
+  // --- API Implementation ---
 
-  int getDynamicBalance(PlayerSelectionItem player) {
-    final activeSession = _sessions.firstWhere(
-      (s) => s.playerId == player.playerId && s.stopTime == null,
-      orElse: () => Session(
-        sessionId: -1,
-        playerId: -1,
-        startEpoch: 0,
-        isPrepaid: false,
-        prepayAmount: 0,
-      ),
-    );
+  String get _baseUrl => "http://${settings.serverIp}:${settings.serverPort}";
+  Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+    'x-api-key': settings.localApiKey,
+  };
 
-    if (activeSession.sessionId == -1) {
-      return player.balance;
-    }
-
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final elapsedSeconds = now - activeSession.startEpoch;
-
-    final int cost = ((elapsedSeconds * player.hourlyRate) / 3600.0).round();
-
-    return player.balance - cost;
-  }
-
-  // --- Session State Logic ---
-
-  bool get isClubSessionOpen {
-    final now = DateTime.now();
-    final settings = _appSettingsProvider.currentSettings;
-    final sessionStart = DateTime(
-      now.year, now.month, now.day,
-      settings.defaultSessionHour,
-      settings.defaultSessionMinute,
-    );
-    return now.isAfter(sessionStart);
-  }
-
-  Future<bool> toggleClubSession() async {
-    final newState = !isClubSessionOpen;
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/session'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': _appSettingsProvider.currentSettings.localApiKey,
-        },
-        body: jsonEncode({'open': newState}),
-      ).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == httpOK) {
-        await reloadServerDatabase();
-        return true;
-      }
-      return false;
-    } catch (_) {
-      return false;
+  Future<void> fetchPlayers() async {
+    final res = await http.get(Uri.parse("$_baseUrl/players"), headers: _headers);
+    if (res.statusCode == 200) {
+      final List data = jsonDecode(res.body);
+      players = data.map((json) => PlayerSelectionItem.fromJson(json)).toList();
+      notifyListeners();
     }
   }
 
-  // --- Data Fetching & Parsing ---
-
-  Future<void> reloadServerDatabase() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/state'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': _appSettingsProvider.currentSettings.localApiKey,
-        },
-      ).timeout(const Duration(seconds: 3));
-
-      if (response.statusCode == httpOK) {
-        _isConnected = true;
-        final data = jsonDecode(response.body);
-
-        if (data['tables'] != null) {
-          _pokerTables = (data['tables'] as List).map((t) => PokerTable.fromMap(t)).toList();
-        }
-        if (data['players'] != null) {
-          _players = (data['players'] as List).map((p) => PlayerSelectionItem.fromMap(p)).toList();
-        }
-        if (data['sessions'] != null) {
-          _sessions = (data['sessions'] as List).map((s) => Session.fromMap(s)).toList();
-        }
-      } else {
-        _isConnected = false;
-      }
-    } catch (_) {
-      _isConnected = false;
+  Future<void> fetchTables() async {
+    final res = await http.get(Uri.parse("$_baseUrl/tables"), headers: _headers);
+    if (res.statusCode == 200) {
+      final List data = jsonDecode(res.body);
+      pokerTables = data.map((json) => PokerTable.fromJson(json)).toList();
+      notifyListeners();
     }
-    notifyListeners();
+  }
+
+  Future<void> fetchSessions() async {
+    final res = await http.get(Uri.parse("$_baseUrl/sessions"), headers: _headers);
+    if (res.statusCode == 200) {
+      final List data = jsonDecode(res.body);
+      sessions = data.map((json) => Session.fromJson(json)).toList();
+      notifyListeners();
+    }
   }
 
   Future<void> addSession(Session session) async {
-    await http.post(
-      Uri.parse('$baseUrl/sessions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': _appSettingsProvider.currentSettings.localApiKey
-      },
-      body: jsonEncode(session.toMap()),
-    );
-    await reloadServerDatabase();
+    await http.post(Uri.parse("$_baseUrl/sessions"), headers: _headers, body: jsonEncode(session.toJson()));
+    await reloadAll();
   }
 
   Future<void> stopSession(int sessionId, int stopEpoch) async {
-    await http.put(
-      Uri.parse('$baseUrl/sessions/$sessionId/stop'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': _appSettingsProvider.currentSettings.localApiKey,
-      },
-      body: jsonEncode({'stopEpoch': stopEpoch}),
-    );
-    await reloadServerDatabase();
+    await http.post(Uri.parse("$_baseUrl/sessions/$sessionId/stop"), headers: _headers, body: jsonEncode({'stopEpoch': stopEpoch}));
+    await reloadAll();
   }
 
-  Future<void> addPayment({required int playerId, required double amount}) async {
+  // FIXED: Positional arguments to match player_selection_panel.dart
+  Future<void> addPayment(int playerId, int amount) async {
     await http.post(
-      Uri.parse('$baseUrl/payments'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': _appSettingsProvider.currentSettings.localApiKey
-      },
-      body: jsonEncode({'playerId': playerId, 'amount': amount}),
+      Uri.parse("$_baseUrl/players/$playerId/payments"),
+      headers: _headers,
+      body: jsonEncode({'amount': amount}),
     );
+    await fetchPlayers();
   }
 
-  Future<void> fetchPlayers() => reloadServerDatabase();
-  Future<void> fetchSessions() => reloadServerDatabase();
-
-  void markAutoScanAttempted() {
-    _hasAttemptedAutoScan = true;
+  Future<void> startClubSession(int startEpoch) async {
+    await http.post(Uri.parse("$_baseUrl/club/start"), headers: _headers, body: jsonEncode({'startEpoch': startEpoch}));
+    isClubSessionOpen = true;
     notifyListeners();
+  }
+
+  Future<void> stopClubSession() async {
+    await http.post(Uri.parse("$_baseUrl/club/stop"), headers: _headers);
+    isClubSessionOpen = false;
+    notifyListeners();
+  }
+
+  Future<void> reloadServerDatabase() async {
+    await http.post(Uri.parse("$_baseUrl/system/reload"), headers: _headers);
+    await reloadAll();
+  }
+
+  Future<void> reloadAll() async {
+    await fetchTables();
+    await fetchPlayers();
+    await fetchSessions();
   }
 }
