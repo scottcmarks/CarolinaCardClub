@@ -2,9 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/api_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
+import '../providers/api_provider.dart';
+import '../providers/time_provider.dart';
+import 'seat_selector_widget.dart';
 
 class StartSessionDialog extends StatefulWidget {
   final PlayerSelectionItem player;
@@ -16,75 +18,90 @@ class StartSessionDialog extends StatefulWidget {
 
 class _StartSessionDialogState extends State<StartSessionDialog> {
   int? _selectedTableId;
-  int? _selectedSeatNumber;
+  int? _selectedSeat;
   bool _isPrepaid = false;
-  bool _isSubmitting = false;
+  final TextEditingController _amountController = TextEditingController(text: "20");
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final api = Provider.of<ApiProvider>(context, listen: false);
-    final tables = api.pokerTables.where((t) => t.isActive).toList();
-    final double calculatedPrepay = widget.player.hourlyRate * widget.player.prepayHours;
+    final api = Provider.of<ApiProvider>(context);
+    final timeProvider = Provider.of<TimeProvider>(context);
 
     return AlertDialog(
       title: Text("Seat ${widget.player.name}"),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButtonFormField<int?>(
-            decoration: const InputDecoration(labelText: "Table"),
-            initialValue: _selectedTableId,
-            items: [
-              const DropdownMenuItem(value: null, child: Text("Unseated")),
-              ...tables.map((t) => DropdownMenuItem(value: t.pokerTableId, child: Text(t.name))),
-            ],
-            onChanged: _isSubmitting ? null : (v) => setState(() => _selectedTableId = v),
-          ),
-          SwitchListTile(
-            title: const Text("Prepaid Session"),
-            subtitle: Text(_isPrepaid ? "\$${calculatedPrepay.toInt()} upfront" : "Hourly billing"),
-            value: _isPrepaid,
-            onChanged: _isSubmitting ? null : (v) => setState(() => _isPrepaid = v),
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<int>(
+              decoration: const InputDecoration(labelText: "Select Table"),
+              // FIXED: Use initialValue to satisfy Flutter 3.33+ linter
+              initialValue: _selectedTableId,
+              items: api.tables.map((t) => DropdownMenuItem(
+                value: t.pokerTableId,
+                child: Text(t.tableName),
+              )).toList(),
+              onChanged: (val) => setState(() {
+                _selectedTableId = val;
+                _selectedSeat = null;
+              }),
+            ),
+            const SizedBox(height: 16),
+
+            if (_selectedTableId != null)
+              SeatSelectorWidget(
+                initialSeat: _selectedSeat,
+                maxSeats: api.tables.firstWhere((t) => t.pokerTableId == _selectedTableId).capacity,
+                occupiedSeats: api.getOccupiedSeatsForTable(_selectedTableId!),
+                onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
+              ),
+
+            SwitchListTile(
+              title: const Text("Prepaid"),
+              value: _isPrepaid,
+              onChanged: (val) => setState(() => _isPrepaid = val),
+            ),
+            if (_isPrepaid)
+              TextFormField(
+                controller: _amountController,
+                decoration: const InputDecoration(labelText: "Amount (Dollars)"),
+                keyboardType: TextInputType.number,
+              ),
+          ],
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
-          onPressed: _isSubmitting ? null : () => _submit(api, calculatedPrepay),
-          child: _isSubmitting ? const SizedBox(height: 15, width: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Text("Confirm"),
+          onPressed: () async {
+            // FIXED: Capture Navigator before async gap to avoid linter warning
+            final navigator = Navigator.of(context);
+
+            final startEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
+            final session = Session(
+              sessionId: 0,
+              playerId: widget.player.playerId,
+              pokerTableId: _selectedTableId,
+              seatNumber: _selectedSeat,
+              startEpoch: startEpoch,
+              isPrepaid: _isPrepaid,
+              prepayAmount: _isPrepaid ? (int.tryParse(_amountController.text) ?? 0) : 0,
+            );
+
+            await api.addSession(session);
+
+            // Close dialog using pre-captured navigator
+            navigator.pop();
+          },
+          child: const Text("Start"),
         ),
       ],
     );
-  }
-
-  Future<void> _submit(ApiProvider api, double prepay) async {
-    setState(() => _isSubmitting = true);
-    try {
-      final s = Session(
-        sessionId: 0,
-        playerId: widget.player.playerId,
-        pokerTableId: _selectedTableId,
-        seatNumber: _selectedSeatNumber,
-        startEpoch: (DateTime.now().millisecondsSinceEpoch ~/ 1000),
-        isPrepaid: _isPrepaid,
-        prepayAmount: _isPrepaid ? prepay : 0.0,
-      );
-
-      await api.addSession(s);
-      if (_isPrepaid) await api.addPayment(playerId: widget.player.playerId, amount: prepay);
-
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        // Refresh local data so Burton shows $0 immediately
-        await api.fetchPlayers();
-        await api.fetchSessions();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
   }
 }

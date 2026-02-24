@@ -2,11 +2,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../providers/api_provider.dart';
-import '../models/session.dart'; // Updated from SessionPanelItem
+import '../providers/time_provider.dart'; // Added
+import '../models/session.dart';
 
 class SessionPanel extends StatelessWidget {
-  // FIXED: Converted 'key' to a super parameter
   const SessionPanel({super.key});
 
   @override
@@ -19,7 +20,7 @@ class SessionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(api, sessions.length),
+          _buildHeader(context, api, sessions.length),
           const Divider(height: 1),
           Expanded(
             child: sessions.isEmpty
@@ -42,41 +43,79 @@ class SessionPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(ApiProvider api, int count) {
-    String title = "Session History";
-    if (api.isClubSessionOpen) {
-      title = "Active Floor";
-    }
+  Widget _buildHeader(BuildContext context, ApiProvider api, int count) {
+    final bool isSessionOpen = api.isClubSessionOpen;
+    final bool isPlayerSelected = api.selectedPlayerId != null;
 
-    if (api.selectedPlayerId != null) {
+    String title = isSessionOpen ? "Active Floor" : "Session History";
+    String subtitle = isSessionOpen ? "Active sessions only" : "All sessions";
+
+    String playerInfo = "(All Players)";
+    if (isPlayerSelected) {
       final player = api.players.firstWhere(
         (p) => p.playerId == api.selectedPlayerId,
         orElse: () => api.players.first
       );
-      title += " (${player.name})";
-    } else {
-      title += " (All)";
+      playerInfo = player.name;
     }
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("$title: $count",
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          if (api.isClubSessionOpen && api.clubSessionStartDateTime != null)
-             Container(
-               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-               decoration: BoxDecoration(
-                 color: Colors.green.shade100,
-                 borderRadius: BorderRadius.circular(4)
-               ),
-               child: Text(
-                 "Billing Active",
-                 style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold),
-               ),
-             ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("$title: $count",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+
+              if (isPlayerSelected)
+                TextButton.icon(
+                  onPressed: () => api.selectPlayer(null),
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: Text(playerInfo),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: Colors.blue.shade700,
+                    backgroundColor: Colors.blue.shade50,
+                  ),
+                )
+              else
+                Text(playerInfo, style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  fontStyle: isSessionOpen ? FontStyle.normal : FontStyle.italic
+                ),
+              ),
+              const Spacer(),
+              if (isSessionOpen && api.clubSessionStartDateTime != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(4)
+                  ),
+                  child: Text(
+                    "Started: ${DateFormat("HH:mm").format(api.clubSessionStartDateTime!)}",
+                    style: TextStyle(
+                      color: Colors.green.shade900,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -103,12 +142,11 @@ class SessionPanel extends StatelessWidget {
         trailing: Consumer<ApiProvider>(
           builder: (ctx, provider, _) {
             try {
-              // Safely find the player object to feed into the new dynamic balance method
               final player = provider.players.firstWhere((p) => p.playerId == session.playerId);
               final balance = provider.getDynamicBalance(player);
 
               return Text(
-                "\$$balance", // Simplified for integer display
+                "\$$balance",
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -116,7 +154,7 @@ class SessionPanel extends StatelessWidget {
                 ),
               );
             } catch (e) {
-              return const Text("\$---"); // Fallback if player data is missing
+              return const Text("\$---");
             }
           },
         ),
@@ -138,11 +176,12 @@ class SessionPanel extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
 
-              final stopEpoch = (DateTime.now().millisecondsSinceEpoch / 1000).round();
+              // RESTORED: Use TimeProvider for stop time
+              final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+              final stopEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
 
               try {
                 await api.stopSession(session.sessionId, stopEpoch);
-
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text("${session.name}'s session stopped successfully."))
