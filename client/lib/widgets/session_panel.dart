@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/api_provider.dart';
-import '../providers/time_provider.dart'; // Added
+import '../providers/time_provider.dart';
 import '../models/session.dart';
 
 class SessionPanel extends StatelessWidget {
@@ -47,7 +47,7 @@ class SessionPanel extends StatelessWidget {
     final bool isSessionOpen = api.isClubSessionOpen;
     final bool isPlayerSelected = api.selectedPlayerId != null;
 
-    String title = isSessionOpen ? "Active Floor" : "Session History";
+    String title = isSessionOpen ? "Active Sessions" : "Session History";
     String subtitle = isSessionOpen ? "Active sessions only" : "All sessions";
 
     String playerInfo = "(All Players)";
@@ -138,21 +138,72 @@ class SessionPanel extends StatelessWidget {
           child: Icon(session.isPrepaid ? Icons.timelapse : Icons.access_time),
         ),
         title: Text(session.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text("$tableName ${isActive ? '' : '(Closed)'}"),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("$tableName ${isActive ? '' : '(Closed)'}"),
+
+            // NEW: Show Start Time and Duration only for closed sessions
+            if (!isActive) ...[
+              const SizedBox(height: 4),
+              Text(
+                "${_formatDateTime(session.startEpoch)} • ${_formatDuration(session.startEpoch, session.stopTime!)}",
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ],
+        ),
         trailing: Consumer<ApiProvider>(
           builder: (ctx, provider, _) {
             try {
               final player = provider.players.firstWhere((p) => p.playerId == session.playerId);
-              final balance = provider.getDynamicBalance(player);
 
-              return Text(
-                "\$$balance",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: balance < 0 ? Colors.red : Colors.green,
-                ),
-              );
+              if (isActive) {
+                // ACTIVE: Show the current running balance
+                final balance = provider.getDynamicBalance(player);
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text("Balance", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                    Text(
+                      "\$$balance",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: balance < 0 ? Colors.red : Colors.green,
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                // CLOSED: Calculate and show the exact amount charged for this session
+                int amount = 0;
+                if (session.isPrepaid) {
+                  amount = session.prepayAmount;
+                } else {
+                  final elapsed = session.stopTime! - session.startEpoch;
+                  if (elapsed > 0) {
+                    amount = ((elapsed * player.hourlyRate) / 3600).round();
+                  }
+                }
+
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text("Amount", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                    Text(
+                      "\$$amount",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800, // Using a neutral blue for static charges
+                      ),
+                    ),
+                  ],
+                );
+              }
             } catch (e) {
               return const Text("\$---");
             }
@@ -162,6 +213,25 @@ class SessionPanel extends StatelessWidget {
       ),
     );
   }
+
+  // --- HELPER METHODS FOR FORMATTING ---
+
+  String _formatDateTime(int epoch) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(epoch * 1000);
+    return DateFormat('MM/dd/yy HH:mm').format(dt);
+  }
+
+  String _formatDuration(int start, int stop) {
+    final diff = stop - start;
+    if (diff <= 0) return "00h00m";
+    final hours = diff ~/ 3600;
+    final minutes = (diff % 3600) ~/ 60;
+
+    // padLeft ensures "9h9m" becomes "09h09m"
+    return "${hours.toString().padLeft(2, '0')}h${minutes.toString().padLeft(2, '0')}m";
+  }
+
+  // -------------------------------------
 
   void _showStopDialog(BuildContext context, Session session, ApiProvider api) {
      showDialog(
@@ -176,7 +246,6 @@ class SessionPanel extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(ctx);
 
-              // RESTORED: Use TimeProvider for stop time
               final timeProvider = Provider.of<TimeProvider>(context, listen: false);
               final stopEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
 

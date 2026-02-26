@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS "Email_Address" (
 CREATE TABLE IF NOT EXISTS "Payment" (
 	"Payment_Id"	INTEGER NOT NULL UNIQUE,
 	"Player_Id"	INTEGER NOT NULL DEFAULT 1,
-	"Amount"	NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+	"Amount"	INTEGER NOT NULL DEFAULT 0,
 	"Epoch"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("Payment_Id" AUTOINCREMENT),
 	FOREIGN KEY("Player_Id") REFERENCES "Player"("Player_Id")
@@ -86,6 +86,16 @@ CREATE TABLE IF NOT EXISTS "Super_Bowl_Players" (
     "Player_Id" INTEGER NOT NULL UNIQUE,
     FOREIGN KEY("Player_Id") REFERENCES "Player"("Player_Id")
 );
+CREATE TABLE IF NOT EXISTS System_State (
+    Id INTEGER PRIMARY KEY CHECK (Id = 1),
+    Is_Club_Open INTEGER NOT NULL DEFAULT 0,
+    Club_Start_Epoch INTEGER,
+    Default_Session_Hour INTEGER NOT NULL DEFAULT 19,
+    Default_Session_Minute INTEGER NOT NULL DEFAULT 30,
+    Floor_Manager_Player_Id INTEGER,
+    Floor_Manager_Table_Id INTEGER,
+    Floor_Manager_Seat_Number INTEGER
+);
 CREATE VIEW "Email_List" AS SELECT
     p.Name as Name,
 
@@ -143,19 +153,39 @@ ORDER BY IFNULL(Most_Recent_Stop_Epoch,99999999999) DESC;
 CREATE VIEW "Player_Selection_List" AS
 SELECT 
     p.Player_Id,
-    IFNULL(p.NickName, p.Name) as Name,
+    IFNULL(p.NickName, p.Name) AS Name,
     pb.Balance,
-    -- Get Rate from the Interval List (which you said has the 0)
-    ri.Rate as Hourly_Rate,
-    -- Get Prepay_Hours from the Category table directly
-    cat.Prepay_Hours as Prepay_Hours,
-    CASE WHEN s.Session_Id IS NOT NULL THEN 1 ELSE 0 END as Is_Active
-FROM Player p
-JOIN Player_Balance pb ON p.Player_Id = pb.Player_Id
-JOIN Player_Category cat ON p.Player_Category_Id = cat.Player_Category_Id
-JOIN Player_Category_Rate_Interval_List ri ON p.Player_Category_Id = ri.Player_Category_Id
-LEFT JOIN Session s ON p.Player_Id = s.Player_Id AND s.Stop_Epoch IS NULL
-ORDER BY p.Name;
+    ri.Rate AS Hourly_Rate,
+    cat.Prepay_Hours AS Prepay_Hours,
+    CASE WHEN s.Session_Id IS NOT NULL THEN 1 ELSE 0 END AS Is_Active
+FROM 
+    Player p
+JOIN 
+    Player_Balance pb ON p.Player_Id = pb.Player_Id
+JOIN 
+    Player_Category cat ON p.Player_Category_Id = cat.Player_Category_Id
+JOIN 
+    Player_Category_Rate_Interval_List ri ON p.Player_Category_Id = ri.Player_Category_Id
+LEFT JOIN 
+    (
+        SELECT 
+            Player_Id,
+            MAX(Start_Epoch) AS Max_Start_Epoch
+        FROM 
+            Session
+        GROUP BY 
+            Player_Id
+    ) AS max_sessions ON p.Player_Id = max_sessions.Player_Id
+LEFT JOIN 
+    Session s ON p.Player_Id = s.Player_Id AND s.Start_Epoch = max_sessions.Max_Start_Epoch
+ORDER BY 
+    CASE 
+        WHEN s.Start_Epoch IS NULL THEN 4
+        WHEN s.Stop_Epoch IS NULL THEN 1
+        WHEN strftime('%s', 'now', '-21 days') <= s.Stop_Epoch THEN 2
+        ELSE 3
+    END,
+    IFNULL(p.NickName, p.Name);
 CREATE VIEW "Player_Total_Payment" AS SELECT p.Player_Id, IFNULL(SUM(pmt.Amount),0) as Total_Payment FROM  Player as p LEFT JOIN Payment as pmt ON p.Player_Id == pmt.Player_Id GROUP BY p.Player_Id;
 CREATE VIEW "Player_Total_Session_Amount" AS SELECT a.Player_Id, a.Name, SUM(a.Amount) as Total_Amount FROM Session_Amount_List as a GROUP BY a.Player_Id;
 CREATE VIEW "Purchased_Seconds" AS SELECT pid.Player_Id, pid.Player_Name, strftime('%Y-%m-%d %I:%M %P', datetime(pid.Payment_Epoch, 'unixepoch')) as Purchase_Time , PRINTF('$%d',pid.Amount) as Amount, PRINTF('$%0.02f/hr',  ri.Rate) as Rate, pid.Amount * 3600 / ri.Rate as Purchased_Secs FROM Payment_Rate_Interval_Id_List as pid LEFT JOIN Rate_Interval_List ri ON pid.Rate_Interval_Id == ri.Rate_Interval_Id ORDER BY Purchase_Time ASC;
@@ -180,7 +210,7 @@ SELECT
     CASE
         WHEN sr.Is_Prepaid = 1 THEN sr.Prepay_Amount
         WHEN sr.Session_Stop_Epoch IS NULL THEN NULL
-        ELSE round(MAX(sr.Session_Stop_Epoch - sr.Session_Start_Epoch, 0) * sr.Rate  / 3600.0 )
+        ELSE CAST(round(MAX(sr.Session_Stop_Epoch - sr.Session_Start_Epoch, 0) * sr.Rate  / 3600.0 ) AS INTEGER)
     END as Amount
 FROM Session_Rate_List as sr;
 CREATE VIEW "Session_List" AS

@@ -91,7 +91,6 @@ class _HomePageState extends State<HomePage> {
           ),
 
           // 3. CLUB SESSION TOGGLE
-          // Uses Game Clock (TimeProvider) for session start epoch
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Row(
@@ -100,15 +99,40 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 8),
                 Switch(
                   value: api.isClubSessionOpen,
-                  activeThumbColor: Colors.green,
+                  activeColor: Colors.green, // Updated property name
                   onChanged: (val) async {
                     try {
                       if (val) {
-                        // Use Game Clock for the start timestamp
+                        // Turning ON
                         final startEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
                         await api.startClubSession(startEpoch);
                       } else {
-                        await api.stopClubSession();
+                        // Turning OFF - Show Confirmation Dialog
+                        final bool? confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (BuildContext ctx) {
+                            return AlertDialog(
+                              title: const Text("Close Club Session?"),
+                              content: const Text(
+                                  "Are you sure you want to close the club session and end all table sessions?"),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(false),
+                                  child: const Text("Cancel"),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                  child: const Text("OK"),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+
+                        if (confirm == true) {
+                          await api.closeClubAndEndSessions();
+                        }
                       }
                     } catch (e) {
                       if (context.mounted) {
