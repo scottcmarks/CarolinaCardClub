@@ -20,7 +20,31 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
   int? _selectedTableId;
   int? _selectedSeat;
   bool _isPrepaid = false;
-  final TextEditingController _amountController = TextEditingController(text: "20");
+  final TextEditingController _amountController = TextEditingController();
+
+  int _suggestedPrepay = 0;
+  bool _initialized = false;
+
+  bool get _isValid => _selectedTableId != null && _selectedSeat != null;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!_initialized) {
+      final api = Provider.of<ApiProvider>(context, listen: false);
+
+      final targetPrepay = widget.player.prepayHours * widget.player.hourlyRate;
+      final currentBalance = api.getDynamicBalance(widget.player);
+      _suggestedPrepay = targetPrepay - currentBalance;
+
+      if (_suggestedPrepay > 0) {
+        _amountController.text = _suggestedPrepay.toString();
+      }
+
+      _initialized = true;
+    }
+  }
 
   @override
   void dispose() {
@@ -41,7 +65,6 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
           children: [
             DropdownButtonFormField<int>(
               decoration: const InputDecoration(labelText: "Select Table"),
-              // FIXED: Use initialValue to satisfy Flutter 3.33+ linter
               initialValue: _selectedTableId,
               items: api.tables.map((t) => DropdownMenuItem(
                 value: t.pokerTableId,
@@ -58,29 +81,31 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
               SeatSelectorWidget(
                 initialSeat: _selectedSeat,
                 maxSeats: api.tables.firstWhere((t) => t.pokerTableId == _selectedTableId).capacity,
-                occupiedSeats: api.getOccupiedSeatsForTable(_selectedTableId!),
+                // UPDATED: Pass the player ID down to check FM privileges
+                occupiedSeats: api.getOccupiedSeatsForTable(_selectedTableId!, seatingPlayerId: widget.player.playerId),
                 onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
               ),
 
-            SwitchListTile(
-              title: const Text("Prepaid"),
-              value: _isPrepaid,
-              onChanged: (val) => setState(() => _isPrepaid = val),
-            ),
-            if (_isPrepaid)
-              TextFormField(
-                controller: _amountController,
-                decoration: const InputDecoration(labelText: "Amount (Dollars)"),
-                keyboardType: TextInputType.number,
+            if (_suggestedPrepay > 0) ...[
+              SwitchListTile(
+                title: const Text("Prepaid"),
+                value: _isPrepaid,
+                onChanged: (val) => setState(() => _isPrepaid = val),
               ),
+              if (_isPrepaid)
+                TextFormField(
+                  controller: _amountController,
+                  decoration: const InputDecoration(labelText: "Amount (Dollars)"),
+                  keyboardType: TextInputType.number,
+                ),
+            ],
           ],
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
-          onPressed: () async {
-            // FIXED: Capture Navigator before async gap to avoid linter warning
+          onPressed: _isValid ? () async {
             final navigator = Navigator.of(context);
 
             final startEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
@@ -95,10 +120,8 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
             );
 
             await api.addSession(session);
-
-            // Close dialog using pre-captured navigator
             navigator.pop();
-          },
+          } : null,
           child: const Text("Start"),
         ),
       ],

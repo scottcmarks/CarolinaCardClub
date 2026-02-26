@@ -15,7 +15,6 @@ class ApiProvider with ChangeNotifier {
   List<Session> sessions = [];
   List<PokerTable> pokerTables = [];
 
-  // Alias for UI components expecting .tables
   List<PokerTable> get tables => pokerTables;
 
   int? selectedPlayerId;
@@ -23,7 +22,15 @@ class ApiProvider with ChangeNotifier {
   DateTime? clubSessionStartDateTime;
   Duration _timeOffset = Duration.zero;
 
+  bool debugFetchPlayers = false;
+
   ApiProvider(this.settings);
+
+  void debugPrintFetchPlayers(String x) {
+    if (debugFetchPlayers) {
+      print(x);
+    }
+  }
 
   void updateTimeOffset(Duration offset) {
     if (_timeOffset != offset) {
@@ -32,7 +39,6 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  /// Returns balance in integer dollars
   int getDynamicBalance(PlayerSelectionItem player) {
     int currentBalance = player.balance;
 
@@ -46,7 +52,6 @@ class ApiProvider with ChangeNotifier {
     for (var session in activeSessions) {
       final elapsedSeconds = nowEpoch - session.startEpoch;
       if (elapsedSeconds > 0) {
-        // Calculate cost and round to nearest dollar
         final double cost = (elapsedSeconds * player.hourlyRate) / 3600;
         currentBalance -= cost.round();
       }
@@ -54,28 +59,66 @@ class ApiProvider with ChangeNotifier {
     return currentBalance;
   }
 
-  // --- UI Actions ---
-
   void selectPlayer(int? playerId) {
     selectedPlayerId = playerId;
     notifyListeners();
   }
 
   List<Session> get displayedSessions {
-    if (selectedPlayerId != null) {
-      return sessions.where((s) => s.playerId == selectedPlayerId).toList();
+    Iterable<Session> filtered = sessions;
+
+    if (isClubSessionOpen) {
+      filtered = filtered.where((s) => s.stopTime == null);
     }
-    return sessions;
+
+    if (selectedPlayerId != null) {
+      filtered = filtered.where((s) => s.playerId == selectedPlayerId);
+    }
+
+    return filtered.toList();
   }
 
-  List<int> getOccupiedSeatsForTable(int tableId) {
-    return sessions
+  // UPDATED: Now accepts the player ID to conditionally block the FM seat
+  List<int> getOccupiedSeatsForTable(int tableId, {int? seatingPlayerId}) {
+    final occupied = sessions
         .where((s) => s.pokerTableId == tableId && s.stopTime == null)
         .map((s) => s.seatNumber ?? 0)
         .toList();
-  }
 
-  // --- API Implementation ---
+    // FM Seat Protection Logic
+    if (seatingPlayerId != null &&
+        seatingPlayerId != settings.floorManagerPlayerId &&
+        tableId == settings.floorManagerReservedTable) {
+
+      final fmSeat = settings.floorManagerReservedSeat;
+
+      // 1. Check if FM has a closed session in the *current* club session
+      bool fmHasClosedSession = false;
+      if (clubSessionStartDateTime != null) {
+        final clubStartEpoch = (clubSessionStartDateTime!.millisecondsSinceEpoch ~/ 1000);
+        fmHasClosedSession = sessions.any((s) =>
+          s.playerId == settings.floorManagerPlayerId &&
+          s.startEpoch >= clubStartEpoch &&
+          s.stopTime != null
+        );
+      }
+
+      // 2. Check if all other seats are taken
+      final table = pokerTables.firstWhere((t) => t.pokerTableId == tableId);
+      final otherSeatsCapacity = table.capacity - 1; // Capacity minus the FM seat
+      final occupiedOtherSeats = occupied.where((seat) => seat != fmSeat).length;
+      bool allOtherSeatsTaken = occupiedOtherSeats >= otherSeatsCapacity;
+
+      // 3. Block the seat if conditions are NOT met
+      if (!(fmHasClosedSession && allOtherSeatsTaken)) {
+        if (!occupied.contains(fmSeat)) {
+          occupied.add(fmSeat);
+        }
+      }
+    }
+
+    return occupied;
+  }
 
   String get _baseUrl => "http://${settings.serverIp}:${settings.serverPort}";
   Map<String, String> get _headers => {
@@ -83,12 +126,49 @@ class ApiProvider with ChangeNotifier {
     'x-api-key': settings.localApiKey,
   };
 
+  // ADDED: Fetch State to sync club bounds on startup
+  Future<void> fetchState() async {
+    try {
+      final res = await http.get(Uri.parse("$_baseUrl/state"), headers: _headers);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        isClubSessionOpen = data['Is_Club_Open'] == 1;
+        if (data['Club_Start_Epoch'] != null) {
+          clubSessionStartDateTime = DateTime.fromMillisecondsSinceEpoch(data['Club_Start_Epoch'] * 1000);
+        } else {
+          clubSessionStartDateTime = null;
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print("🛑 ERROR [ApiProvider - fetchState]: $e");
+    }
+  }
+
   Future<void> fetchPlayers() async {
-    final res = await http.get(Uri.parse("$_baseUrl/players"), headers: _headers);
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      players = data.map((json) => PlayerSelectionItem.fromJson(json)).toList();
-      notifyListeners();
+    final String url = "$_baseUrl/players/selection";
+
+    debugPrintFetchPlayers("🐞 DEBUG [ApiProvider]: Fetching players from $url");
+
+    try {
+      final res = await http.get(Uri.parse(url), headers: _headers);
+
+      if (res.statusCode == 200) {
+        final List data = jsonDecode(res.body);
+
+        players = data.map((json) {
+          try {
+            return PlayerSelectionItem.fromJson(json);
+          } catch (e) {
+            return PlayerSelectionItem(playerId: -1, name: "Parse Error ($e)", balance: 0);
+          }
+        }).toList();
+
+        players.removeWhere((p) => p.playerId == -1);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrintFetchPlayers("🛑 ERROR [ApiProvider]: Network or execution exception: $e");
     }
   }
 
@@ -102,11 +182,16 @@ class ApiProvider with ChangeNotifier {
   }
 
   Future<void> fetchSessions() async {
-    final res = await http.get(Uri.parse("$_baseUrl/sessions"), headers: _headers);
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      sessions = data.map((json) => Session.fromJson(json)).toList();
-      notifyListeners();
+    final String url = "$_baseUrl/sessions/panel";
+    try {
+      final res = await http.get(Uri.parse(url), headers: _headers);
+      if (res.statusCode == 200) {
+        final List data = jsonDecode(res.body);
+        sessions = data.map((json) => Session.fromJson(json)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print("🛑 ERROR [ApiProvider - fetchSessions]: $e");
     }
   }
 
@@ -116,29 +201,63 @@ class ApiProvider with ChangeNotifier {
   }
 
   Future<void> stopSession(int sessionId, int stopEpoch) async {
-    await http.post(Uri.parse("$_baseUrl/sessions/$sessionId/stop"), headers: _headers, body: jsonEncode({'stopEpoch': stopEpoch}));
+    await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
+      'Session_Id': sessionId,
+      'Stop_Epoch': stopEpoch
+    }));
     await reloadAll();
   }
 
-  // FIXED: Positional arguments to match player_selection_panel.dart
   Future<void> addPayment(int playerId, int amount) async {
     await http.post(
-      Uri.parse("$_baseUrl/players/$playerId/payments"),
+      Uri.parse("$_baseUrl/payments"),
       headers: _headers,
-      body: jsonEncode({'amount': amount}),
+      body: jsonEncode({
+        'Player_Id': playerId,
+        'Amount': amount
+      }),
     );
     await fetchPlayers();
   }
 
   Future<void> startClubSession(int startEpoch) async {
-    await http.post(Uri.parse("$_baseUrl/club/start"), headers: _headers, body: jsonEncode({'startEpoch': startEpoch}));
+    await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
+      'Is_Club_Open': true,
+      'Club_Start_Epoch': startEpoch
+    }));
     isClubSessionOpen = true;
+    clubSessionStartDateTime = DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000);
     notifyListeners();
   }
 
-  Future<void> stopClubSession() async {
-    await http.post(Uri.parse("$_baseUrl/club/stop"), headers: _headers);
+  Future<void> closeClubAndEndSessions() async {
+    final int stopEpoch = (DateTime.now().add(_timeOffset).millisecondsSinceEpoch ~/ 1000);
+
+    final activeSessions = sessions.where((s) => s.stopTime == null).toList();
+    for (var s in activeSessions) {
+      await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
+        'Session_Id': s.sessionId,
+        'Stop_Epoch': stopEpoch
+      }));
+    }
+
+    await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
+      'Is_Club_Open': false,
+      'Club_Start_Epoch': null
+    }));
+
     isClubSessionOpen = false;
+    clubSessionStartDateTime = null;
+    await reloadAll();
+  }
+
+  Future<void> stopClubSession() async {
+    await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
+      'Is_Club_Open': false,
+      'Club_Start_Epoch': null
+    }));
+    isClubSessionOpen = false;
+    clubSessionStartDateTime = null;
     notifyListeners();
   }
 
@@ -148,6 +267,7 @@ class ApiProvider with ChangeNotifier {
   }
 
   Future<void> reloadAll() async {
+    await fetchState(); // Always sync state first
     await fetchTables();
     await fetchPlayers();
     await fetchSessions();

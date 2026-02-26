@@ -9,7 +9,7 @@ class Session {
   final int startEpoch;
   final int? stopTime;
   final bool isPrepaid;
-  final int prepayAmount; // Integer Dollars
+  final int prepayAmount;
 
   Session({
     required this.sessionId,
@@ -25,15 +25,15 @@ class Session {
 
   factory Session.fromJson(Map<String, dynamic> json) {
     return Session(
-      sessionId: json['sessionId'] as int,
-      playerId: json['playerId'] as int,
-      name: json['name'] ?? "Unknown",
-      pokerTableId: json['pokerTableId'] as int?,
-      seatNumber: json['seatNumber'] as int?,
-      startEpoch: json['startEpoch'] as int,
-      stopTime: json['stopTime'] as int?,
-      isPrepaid: json['isPrepaid'] ?? false,
-      prepayAmount: (json['prepayAmount'] ?? 0).toInt(),
+      sessionId: (json['sessionId'] ?? json['Session_Id']) as int,
+      playerId: (json['playerId'] ?? json['Player_Id']) as int,
+      name: (json['name'] ?? json['Name'] ?? "Unknown") as String,
+      pokerTableId: (json['pokerTableId'] ?? json['PokerTable_Id']) as int?,
+      seatNumber: (json['seatNumber'] ?? json['Seat_Number']) as int?,
+      startEpoch: (json['startEpoch'] ?? json['Start_Epoch']) as int,
+      stopTime: (json['stopTime'] ?? json['Stop_Epoch']) as int?,
+      isPrepaid: json['isPrepaid'] ?? (json['Is_Prepaid'] == 1),
+      prepayAmount: ((json['prepayAmount'] ?? json['Prepay_Amount'] ?? 0) as num).toInt(),
     );
   }
 

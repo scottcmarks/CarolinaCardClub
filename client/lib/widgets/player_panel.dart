@@ -1,4 +1,4 @@
-// lib/widgets/player_panel.dart
+// client/lib/widgets/player_panel.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +11,7 @@ import '../models/app_settings.dart';
 import 'start_session_dialog.dart';
 
 class PlayerPanel extends StatelessWidget {
-  const PlayerPanel({super.key}); // FIXED: use_super_parameters
+  const PlayerPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -26,36 +26,60 @@ class PlayerPanel extends StatelessWidget {
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView.builder(
-            itemCount: players.length,
-            itemBuilder: (ctx, i) {
-              final player = players[i];
-              final isSelected = api.selectedPlayerId == player.playerId;
-
-              return ListTile(
-                selected: isSelected,
-                selectedTileColor: Colors.blue.shade50,
-                leading: CircleAvatar(child: Text(player.name[0])),
-                title: Text(player.name),
-                subtitle: Text("\$${api.getDynamicBalance(player)}"),
-                onTap: () => api.selectPlayer(isSelected ? null : player.playerId),
-                trailing: IconButton(
-                  icon: const Icon(Icons.play_circle_fill, color: Colors.green),
-                  onPressed: () {
-                    final settings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
-                    if (player.playerId == settings.floorManagerPlayerId) {
-                      _autoSeatFloorManager(context, player, api, settings);
-                    } else {
-                      showDialog(
-                        context: context,
-                        builder: (_) => StartSessionDialog(player: player),
-                      );
-                    }
-                  },
+          child: players.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Text(
+                    "No players found.\nCheck the debug console for network or parsing errors.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                  ),
                 ),
-              );
-            },
-          ),
+              )
+            : ListView.builder(
+                itemCount: players.length,
+                itemBuilder: (ctx, i) {
+                  final player = players[i];
+                  final isSelected = api.selectedPlayerId == player.playerId;
+
+                  return ListTile(
+                    selected: isSelected,
+                    selectedTileColor: Colors.blue.shade50,
+                    leading: CircleAvatar(
+                      child: Text(player.name.isNotEmpty ? player.name[0] : '?')
+                    ),
+                    title: Text(player.name),
+                    subtitle: Text("\$${api.getDynamicBalance(player)}"),
+                    onTap: () => api.selectPlayer(isSelected ? null : player.playerId),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.play_circle_fill, color: Colors.green),
+                      onPressed: () {
+                        // 🛑 BLOCK IF CLUB IS CLOSED
+                        if (!api.isClubSessionOpen) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Cannot seat player. Please start a Club Session first."),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        final settings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
+                        if (player.playerId == settings.floorManagerPlayerId) {
+                          _autoSeatFloorManager(context, player, api, settings);
+                        } else {
+                          showDialog(
+                            context: context,
+                            builder: (_) => StartSessionDialog(player: player),
+                          );
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
         ),
       ],
     );
@@ -76,7 +100,7 @@ class PlayerPanel extends StatelessWidget {
       seatNumber: settings.floorManagerReservedSeat,
       startEpoch: (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round(),
       isPrepaid: false,
-      prepayAmount: 0, // FIXED: Changed from 0.0 to 0 (int)
+      prepayAmount: 0,
     );
 
     try {

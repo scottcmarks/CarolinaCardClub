@@ -4,7 +4,7 @@ class PokerTable {
   final int pokerTableId;
   final String tableName;
   final int capacity;
-  final bool isActive; // Restored
+  final bool isActive;
 
   PokerTable({
     required this.pokerTableId,
@@ -17,10 +17,10 @@ class PokerTable {
 
   factory PokerTable.fromJson(Map<String, dynamic> json) {
     return PokerTable(
-      pokerTableId: json['pokerTableId'] as int,
-      tableName: (json['tableName'] ?? json['name'] ?? 'Table ${json['pokerTableId']}') as String,
-      capacity: json['capacity'] as int,
-      isActive: json['isActive'] ?? true,
+      pokerTableId: (json['pokerTableId'] ?? json['PokerTable_Id']) as int,
+      tableName: (json['tableName'] ?? json['Name'] ?? json['name'] ?? 'Table ${json['PokerTable_Id'] ?? json['pokerTableId']}') as String,
+      capacity: (json['capacity'] ?? json['Capacity'] ?? 9) as int,
+      isActive: json['isActive'] ?? (json['IsActive'] == 1), // Schema uses IsActive without underscore
     );
   }
 
