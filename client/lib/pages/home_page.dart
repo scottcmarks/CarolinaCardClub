@@ -20,7 +20,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // Refresh data once the widget is mounted
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshData();
     });
@@ -29,9 +28,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _refreshData() async {
     final api = Provider.of<ApiProvider>(context, listen: false);
     try {
-      await api.fetchTables();
-      await api.fetchPlayers();
-      await api.fetchSessions();
+      await api.reloadAll();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -51,8 +48,6 @@ class _HomePageState extends State<HomePage> {
         title: const Text("Carolina Card Club"),
         elevation: 2,
         actions: [
-          // 1. GAME CLOCK BADGE
-          // Visual feedback if a time offset is active (turns orange)
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -83,14 +78,12 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // 2. REFRESH BUTTON
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refreshData,
             tooltip: "Refresh Server Data",
           ),
 
-          // 3. CLUB SESSION TOGGLE
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Row(
@@ -99,16 +92,15 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 8),
                 Switch(
                   value: api.isClubSessionOpen,
-                  activeColor: Colors.green, // Updated property name
+                  activeColor: Colors.green,
                   onChanged: (val) async {
+                    final nowEpoch = timeProvider.nowEpoch;
+
                     try {
                       if (val) {
-                        // Turning ON
-                        final startEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
-                        await api.startClubSession(startEpoch);
+                        await api.startClubSession(nowEpoch);
                       } else {
-                        // Turning OFF - Show Confirmation Dialog
-                        final bool? confirm = await showDialog<bool>(
+                        final bool? confirmed = await showDialog<bool>(
                           context: context,
                           builder: (BuildContext ctx) {
                             return AlertDialog(
@@ -130,8 +122,9 @@ class _HomePageState extends State<HomePage> {
                           },
                         );
 
-                        if (confirm == true) {
-                          await api.closeClubAndEndSessions();
+                        // UPDATED HERE
+                        if (confirmed == true) {
+                          await api.closeClubAndEndSessions(nowEpoch);
                         }
                       }
                     } catch (e) {
@@ -147,7 +140,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // 4. SETTINGS
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -162,15 +154,11 @@ class _HomePageState extends State<HomePage> {
       ),
       body: Row(
         children: [
-          // Left Sidebar: Player Actions
           const SizedBox(
             width: 350,
             child: PlayerPanel(),
           ),
-
           const VerticalDivider(width: 1),
-
-          // Right Content: Session List and History
           const Expanded(
             child: SessionPanel(),
           ),

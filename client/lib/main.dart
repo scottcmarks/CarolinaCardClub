@@ -28,9 +28,7 @@ class CarolinaCardClubApp extends StatelessWidget {
             return ApiProvider(settingsProv.currentSettings);
           },
           update: (context, settingsProv, timeProv, previous) {
-            // Ensure the API provider always has the latest settings and time offset
             final api = previous ?? ApiProvider(settingsProv.currentSettings);
-            api.updateTimeOffset(timeProv.offset);
             return api;
           },
         ),

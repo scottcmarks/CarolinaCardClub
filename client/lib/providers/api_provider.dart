@@ -19,8 +19,10 @@ class ApiProvider with ChangeNotifier {
 
   int? selectedPlayerId;
   bool isClubSessionOpen = false;
-  DateTime? clubSessionStartDateTime;
-  Duration _timeOffset = Duration.zero;
+
+  int? clubSessionStartEpoch;
+  int defaultSessionHour = 19;
+  int defaultSessionMinute = 30;
 
   bool debugFetchPlayers = false;
 
@@ -32,18 +34,9 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  void updateTimeOffset(Duration offset) {
-    if (_timeOffset != offset) {
-      _timeOffset = offset;
-      notifyListeners();
-    }
-  }
-
-  int getDynamicBalance(PlayerSelectionItem player) {
+  // UPDATED SIGNATURE
+  int getDynamicBalance(PlayerSelectionItem player, int nowEpoch) {
     int currentBalance = player.balance;
-
-    final gameNow = DateTime.now().add(_timeOffset);
-    final nowEpoch = (gameNow.millisecondsSinceEpoch / 1000).round();
 
     final activeSessions = sessions.where((s) =>
       s.playerId == player.playerId && s.stopTime == null
@@ -75,41 +68,38 @@ class ApiProvider with ChangeNotifier {
       filtered = filtered.where((s) => s.playerId == selectedPlayerId);
     }
 
-    return filtered.toList();
+    final sortedList = filtered.toList();
+    sortedList.sort((a, b) => b.startEpoch.compareTo(a.startEpoch));
+
+    return sortedList;
   }
 
-  // UPDATED: Now accepts the player ID to conditionally block the FM seat
   List<int> getOccupiedSeatsForTable(int tableId, {int? seatingPlayerId}) {
     final occupied = sessions
         .where((s) => s.pokerTableId == tableId && s.stopTime == null)
         .map((s) => s.seatNumber ?? 0)
         .toList();
 
-    // FM Seat Protection Logic
     if (seatingPlayerId != null &&
         seatingPlayerId != settings.floorManagerPlayerId &&
         tableId == settings.floorManagerReservedTable) {
 
       final fmSeat = settings.floorManagerReservedSeat;
 
-      // 1. Check if FM has a closed session in the *current* club session
       bool fmHasClosedSession = false;
-      if (clubSessionStartDateTime != null) {
-        final clubStartEpoch = (clubSessionStartDateTime!.millisecondsSinceEpoch ~/ 1000);
+      if (clubSessionStartEpoch != null) {
         fmHasClosedSession = sessions.any((s) =>
           s.playerId == settings.floorManagerPlayerId &&
-          s.startEpoch >= clubStartEpoch &&
+          s.startEpoch >= clubSessionStartEpoch! &&
           s.stopTime != null
         );
       }
 
-      // 2. Check if all other seats are taken
       final table = pokerTables.firstWhere((t) => t.pokerTableId == tableId);
-      final otherSeatsCapacity = table.capacity - 1; // Capacity minus the FM seat
+      final otherSeatsCapacity = table.capacity - 1;
       final occupiedOtherSeats = occupied.where((seat) => seat != fmSeat).length;
       bool allOtherSeatsTaken = occupiedOtherSeats >= otherSeatsCapacity;
 
-      // 3. Block the seat if conditions are NOT met
       if (!(fmHasClosedSession && allOtherSeatsTaken)) {
         if (!occupied.contains(fmSeat)) {
           occupied.add(fmSeat);
@@ -126,18 +116,17 @@ class ApiProvider with ChangeNotifier {
     'x-api-key': settings.localApiKey,
   };
 
-  // ADDED: Fetch State to sync club bounds on startup
   Future<void> fetchState() async {
     try {
       final res = await http.get(Uri.parse("$_baseUrl/state"), headers: _headers);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         isClubSessionOpen = data['Is_Club_Open'] == 1;
-        if (data['Club_Start_Epoch'] != null) {
-          clubSessionStartDateTime = DateTime.fromMillisecondsSinceEpoch(data['Club_Start_Epoch'] * 1000);
-        } else {
-          clubSessionStartDateTime = null;
-        }
+
+        clubSessionStartEpoch = data['Club_Start_Epoch'];
+        defaultSessionHour = data['Default_Session_Hour'] ?? 19;
+        defaultSessionMinute = data['Default_Session_Minute'] ?? 30;
+
         notifyListeners();
       }
     } catch (e) {
@@ -148,14 +137,10 @@ class ApiProvider with ChangeNotifier {
   Future<void> fetchPlayers() async {
     final String url = "$_baseUrl/players/selection";
 
-    debugPrintFetchPlayers("🐞 DEBUG [ApiProvider]: Fetching players from $url");
-
     try {
       final res = await http.get(Uri.parse(url), headers: _headers);
-
       if (res.statusCode == 200) {
         final List data = jsonDecode(res.body);
-
         players = data.map((json) {
           try {
             return PlayerSelectionItem.fromJson(json);
@@ -208,31 +193,38 @@ class ApiProvider with ChangeNotifier {
     await reloadAll();
   }
 
-  Future<void> addPayment(int playerId, int amount) async {
+  // UPDATED SIGNATURE
+  Future<void> addPayment(int playerId, int amount, int epoch) async {
     await http.post(
       Uri.parse("$_baseUrl/payments"),
       headers: _headers,
       body: jsonEncode({
         'Player_Id': playerId,
-        'Amount': amount
+        'Amount': amount,
+        'Epoch': epoch
       }),
     );
     await fetchPlayers();
   }
 
-  Future<void> startClubSession(int startEpoch) async {
+  // UPDATED SIGNATURE
+  Future<void> startClubSession(int nowEpoch) async {
+    final now = DateTime.fromMillisecondsSinceEpoch(nowEpoch * 1000);
+    final defaultStart = DateTime(now.year, now.month, now.day, defaultSessionHour, defaultSessionMinute);
+    final startEpoch = (defaultStart.millisecondsSinceEpoch / 1000).round();
+
     await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
       'Is_Club_Open': true,
       'Club_Start_Epoch': startEpoch
     }));
+
     isClubSessionOpen = true;
-    clubSessionStartDateTime = DateTime.fromMillisecondsSinceEpoch(startEpoch * 1000);
+    clubSessionStartEpoch = startEpoch;
     notifyListeners();
   }
 
-  Future<void> closeClubAndEndSessions() async {
-    final int stopEpoch = (DateTime.now().add(_timeOffset).millisecondsSinceEpoch ~/ 1000);
-
+  // UPDATED SIGNATURE
+  Future<void> closeClubAndEndSessions(int stopEpoch) async {
     final activeSessions = sessions.where((s) => s.stopTime == null).toList();
     for (var s in activeSessions) {
       await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
@@ -247,18 +239,8 @@ class ApiProvider with ChangeNotifier {
     }));
 
     isClubSessionOpen = false;
-    clubSessionStartDateTime = null;
+    clubSessionStartEpoch = null;
     await reloadAll();
-  }
-
-  Future<void> stopClubSession() async {
-    await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
-      'Is_Club_Open': false,
-      'Club_Start_Epoch': null
-    }));
-    isClubSessionOpen = false;
-    clubSessionStartDateTime = null;
-    notifyListeners();
   }
 
   Future<void> reloadServerDatabase() async {
@@ -267,7 +249,7 @@ class ApiProvider with ChangeNotifier {
   }
 
   Future<void> reloadAll() async {
-    await fetchState(); // Always sync state first
+    await fetchState();
     await fetchTables();
     await fetchPlayers();
     await fetchSessions();

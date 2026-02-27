@@ -33,9 +33,13 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
 
     if (!_initialized) {
       final api = Provider.of<ApiProvider>(context, listen: false);
+      final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+
+      // Cleaned up: Using the new getter
+      final nowEpoch = timeProvider.nowEpoch;
 
       final targetPrepay = widget.player.prepayHours * widget.player.hourlyRate;
-      final currentBalance = api.getDynamicBalance(widget.player);
+      final currentBalance = api.getDynamicBalance(widget.player, nowEpoch);
       _suggestedPrepay = targetPrepay - currentBalance;
 
       if (_suggestedPrepay > 0) {
@@ -81,7 +85,6 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
               SeatSelectorWidget(
                 initialSeat: _selectedSeat,
                 maxSeats: api.tables.firstWhere((t) => t.pokerTableId == _selectedTableId).capacity,
-                // UPDATED: Pass the player ID down to check FM privileges
                 occupiedSeats: api.getOccupiedSeatsForTable(_selectedTableId!, seatingPlayerId: widget.player.playerId),
                 onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
               ),
@@ -108,7 +111,15 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
           onPressed: _isValid ? () async {
             final navigator = Navigator.of(context);
 
-            final startEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
+            // Cleaned up: Using the new getter
+            int startEpoch = timeProvider.nowEpoch;
+
+            if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
+              if (api.clubSessionStartEpoch! > startEpoch) {
+                startEpoch = api.clubSessionStartEpoch!;
+              }
+            }
+
             final session = Session(
               sessionId: 0,
               playerId: widget.player.playerId,
