@@ -98,7 +98,7 @@ class SessionPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (isSessionOpen && api.clubSessionStartDateTime != null)
+              if (isSessionOpen && api.clubSessionStartEpoch != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -106,7 +106,7 @@ class SessionPanel extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4)
                   ),
                   child: Text(
-                    "Started: ${DateFormat("HH:mm").format(api.clubSessionStartDateTime!)}",
+                    "Started: ${DateFormat("HH:mm").format(DateTime.fromMillisecondsSinceEpoch(api.clubSessionStartEpoch! * 1000))}",
                     style: TextStyle(
                       color: Colors.green.shade900,
                       fontWeight: FontWeight.bold,
@@ -135,7 +135,7 @@ class SessionPanel extends StatelessWidget {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: session.isPrepaid ? Colors.purple.shade100 : Colors.blue.shade100,
-          child: Icon(session.isPrepaid ? Icons.timelapse : Icons.access_time),
+          child: Icon(session.isPrepaid ? Icons.timer_off_outlined : Icons.timer_outlined),
         ),
         title: Text(session.name, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
@@ -143,7 +143,6 @@ class SessionPanel extends StatelessWidget {
           children: [
             Text("$tableName ${isActive ? '' : '(Closed)'}"),
 
-            // NEW: Show Start Time and Duration only for closed sessions
             if (!isActive) ...[
               const SizedBox(height: 4),
               Text(
@@ -153,14 +152,16 @@ class SessionPanel extends StatelessWidget {
             ],
           ],
         ),
-        trailing: Consumer<ApiProvider>(
-          builder: (ctx, provider, _) {
+        trailing: Consumer2<ApiProvider, TimeProvider>(
+          builder: (ctx, provider, time, _) {
+            // Cleaned up: Using the new getter
+            final nowEpoch = time.nowEpoch;
+
             try {
               final player = provider.players.firstWhere((p) => p.playerId == session.playerId);
 
               if (isActive) {
-                // ACTIVE: Show the current running balance
-                final balance = provider.getDynamicBalance(player);
+                final balance = provider.getDynamicBalance(player, nowEpoch);
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -177,7 +178,6 @@ class SessionPanel extends StatelessWidget {
                   ],
                 );
               } else {
-                // CLOSED: Calculate and show the exact amount charged for this session
                 int amount = 0;
                 if (session.isPrepaid) {
                   amount = session.prepayAmount;
@@ -198,7 +198,7 @@ class SessionPanel extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade800, // Using a neutral blue for static charges
+                        color: Colors.blue.shade800,
                       ),
                     ),
                   ],
@@ -214,8 +214,6 @@ class SessionPanel extends StatelessWidget {
     );
   }
 
-  // --- HELPER METHODS FOR FORMATTING ---
-
   String _formatDateTime(int epoch) {
     final dt = DateTime.fromMillisecondsSinceEpoch(epoch * 1000);
     return DateFormat('MM/dd/yy HH:mm').format(dt);
@@ -227,11 +225,8 @@ class SessionPanel extends StatelessWidget {
     final hours = diff ~/ 3600;
     final minutes = (diff % 3600) ~/ 60;
 
-    // padLeft ensures "9h9m" becomes "09h09m"
     return "${hours.toString().padLeft(2, '0')}h${minutes.toString().padLeft(2, '0')}m";
   }
-
-  // -------------------------------------
 
   void _showStopDialog(BuildContext context, Session session, ApiProvider api) {
      showDialog(
@@ -247,7 +242,8 @@ class SessionPanel extends StatelessWidget {
               Navigator.pop(ctx);
 
               final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-              final stopEpoch = (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round();
+              // Cleaned up: Using the new getter
+              final stopEpoch = timeProvider.nowEpoch;
 
               try {
                 await api.stopSession(session.sessionId, stopEpoch);

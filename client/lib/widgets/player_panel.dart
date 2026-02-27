@@ -9,6 +9,7 @@ import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/app_settings.dart';
 import 'start_session_dialog.dart';
+import 'settle_payment_dialog.dart'; // NEW: Import the payment dialog
 
 class PlayerPanel extends StatelessWidget {
   const PlayerPanel({super.key});
@@ -16,6 +17,9 @@ class PlayerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
+    final timeProvider = Provider.of<TimeProvider>(context);
+
+    final nowEpoch = timeProvider.nowEpoch;
     final players = api.players;
 
     return Column(
@@ -50,32 +54,48 @@ class PlayerPanel extends StatelessWidget {
                       child: Text(player.name.isNotEmpty ? player.name[0] : '?')
                     ),
                     title: Text(player.name),
-                    subtitle: Text("\$${api.getDynamicBalance(player)}"),
+                    subtitle: Text("\$${api.getDynamicBalance(player, nowEpoch)}"),
                     onTap: () => api.selectPlayer(isSelected ? null : player.playerId),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.play_circle_fill, color: Colors.green),
-                      onPressed: () {
-                        // 🛑 BLOCK IF CLUB IS CLOSED
-                        if (!api.isClubSessionOpen) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Cannot seat player. Please start a Club Session first."),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                          return;
-                        }
 
-                        final settings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
-                        if (player.playerId == settings.floorManagerPlayerId) {
-                          _autoSeatFloorManager(context, player, api, settings);
-                        } else {
-                          showDialog(
-                            context: context,
-                            builder: (_) => StartSessionDialog(player: player),
-                          );
-                        }
-                      },
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.currency_exchange_outlined, color: Colors.blue.shade700),
+                          tooltip: "Settle Balance",
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => SettlePaymentDialog(player: player),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.play_circle_fill, color: Colors.green),
+                          tooltip: "Seat Player",
+                          onPressed: () {
+                            if (!api.isClubSessionOpen) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Cannot seat player. Please start a Club Session first."),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                              return;
+                            }
+
+                            final settings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
+                            if (player.playerId == settings.floorManagerPlayerId) {
+                              _autoSeatFloorManager(context, player, api, settings);
+                            } else {
+                              showDialog(
+                                context: context,
+                                builder: (_) => StartSessionDialog(player: player),
+                              );
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -93,12 +113,20 @@ class PlayerPanel extends StatelessWidget {
   ) async {
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
+    int startEpoch = timeProvider.nowEpoch;
+
+    if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
+      if (api.clubSessionStartEpoch! > startEpoch) {
+        startEpoch = api.clubSessionStartEpoch!;
+      }
+    }
+
     final fmSession = Session(
       sessionId: 0,
       playerId: player.playerId,
       pokerTableId: settings.floorManagerReservedTable,
       seatNumber: settings.floorManagerReservedSeat,
-      startEpoch: (timeProvider.currentTime.millisecondsSinceEpoch / 1000).round(),
+      startEpoch: startEpoch,
       isPrepaid: false,
       prepayAmount: 0,
     );

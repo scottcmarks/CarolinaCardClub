@@ -4,45 +4,41 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 class TimeProvider with ChangeNotifier {
-  DateTime _realNow = DateTime.now();
+  DateTime _realTime = DateTime.now();
   Duration _offset = Duration.zero;
   Timer? _timer;
 
-  DateTime get currentTime => _realNow.add(_offset);
-  Duration get offset => _offset;
-
   TimeProvider() {
-    _startTimer();
-  }
-
-  void _startTimer() {
-    _realNow = DateTime.now();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _realNow = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _realTime = DateTime.now();
       notifyListeners();
     });
   }
 
-  /// Sets the offset directly. Used for resetting to zero.
+  // The actual real-world time
+  DateTime get realTime => _realTime;
+
+  // The active time offset for debugging/simulating
+  Duration get offset => _offset;
+
+  // The possibly offset time
+  DateTime get currentTime => _realTime.add(_offset);
+
+  // The possibly offset time formatted as an epoch integer number of seconds
+  int get nowEpoch => (currentTime.millisecondsSinceEpoch / 1000).round();
+
   void setOffset(Duration newOffset) {
     _offset = newOffset;
     notifyListeners();
   }
 
-  /// Sets the clock to match a specific target time by calculating the offset.
-  void syncToTime(TimeOfDay target) {
-    final now = DateTime.now();
-    final targetDateTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      target.hour,
-      target.minute,
-      now.second,
-    );
+  void addOffset(Duration additionalOffset) {
+    _offset += additionalOffset;
+    notifyListeners();
+  }
 
-    // Offset = Target Time - Real Time
-    _offset = targetDateTime.difference(now);
+  void resetOffset() {
+    _offset = Duration.zero;
     notifyListeners();
   }
 
