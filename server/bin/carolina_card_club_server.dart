@@ -36,8 +36,11 @@ void main() async {
   // 2. Action Handlers
   router.post('/sessions', _addSessionHandler);
   router.post('/sessions/stop', _stopSessionHandler);
+  router.post('/sessions/move', _moveSessionHandler);
   router.post('/payments', _addPaymentHandler);
   router.post('/state/toggle', _toggleStateHandler);
+  router.post('/tables/toggle', _toggleTableHandler);
+  router.post('/state/defaults', _updateDefaultsHandler); // NEW: Update Hour/Minute
 
   // 3. Maintenance Handlers
   router.post('/maintenance/backup', _manualBackupHandler);
@@ -171,6 +174,35 @@ Future<Response> _stopSessionHandler(Request request) async {
   }
 }
 
+Future<Response> _moveSessionHandler(Request request) async {
+  try {
+    final data = json.decode(await request.readAsString());
+
+    final int sessionId = data['sessionId'] ?? data['Session_Id'];
+    final int newTableId = data['pokerTableId'] ?? data['PokerTable_Id'];
+    final int newSeatNumber = data['seatNumber'] ?? data['Seat_Number'];
+
+    final db = await _db;
+
+    int count = await db.update(
+      'Session',
+      {
+        'PokerTable_Id': newTableId,
+        'Seat_Number': newSeatNumber
+      },
+      where: 'Session_Id = ?',
+      whereArgs: [sessionId]
+    );
+
+    if (count == 0) return Response(httpNotFound, body: 'Session not found');
+
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_moveSessionHandler]: $e');
+    return Response.internalServerError(body: '$e');
+  }
+}
+
 Future<Response> _addPaymentHandler(Request request) async {
   try {
     final data = json.decode(await request.readAsString());
@@ -211,6 +243,54 @@ Future<Response> _toggleStateHandler(Request request) async {
 
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
+    return Response.internalServerError(body: '$e');
+  }
+}
+
+Future<Response> _toggleTableHandler(Request request) async {
+  try {
+    final data = json.decode(await request.readAsString());
+
+    final int tableId = data['pokerTableId'] ?? data['PokerTable_Id'];
+    final bool isActive = data['isActive'] == true || data['IsActive'] == 1 || data['IsActive'] == true;
+
+    final db = await _db;
+
+    int count = await db.update(
+      'PokerTable',
+      {'IsActive': isActive ? 1 : 0},
+      where: 'PokerTable_Id = ?',
+      whereArgs: [tableId]
+    );
+
+    if (count == 0) return Response(httpNotFound, body: 'Table not found');
+
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_toggleTableHandler]: $e');
+    return Response.internalServerError(body: '$e');
+  }
+}
+
+// NEW: Update default session start time
+Future<Response> _updateDefaultsHandler(Request request) async {
+  try {
+    final data = json.decode(await request.readAsString());
+    final int hour = data['hour'] ?? 19;
+    final int minute = data['minute'] ?? 30;
+
+    final db = await _db;
+    await db.update('System_State',
+      {
+        'Default_Session_Hour': hour,
+        'Default_Session_Minute': minute
+      },
+      where: 'Id = ?', whereArgs: [1]
+    );
+
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_updateDefaultsHandler]: $e');
     return Response.internalServerError(body: '$e');
   }
 }

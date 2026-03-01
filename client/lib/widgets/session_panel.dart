@@ -141,7 +141,12 @@ class SessionPanel extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("$tableName ${isActive ? '' : '(Closed)'}"),
+            // UPDATED: Shows (Running) for active, and nothing for closed
+            Text(isActive ? "$tableName (Running)" : tableName,
+                 style: TextStyle(
+                   color: isActive ? Colors.green.shade700 : Colors.black87,
+                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal
+                 )),
 
             if (!isActive) ...[
               const SizedBox(height: 4),
@@ -154,7 +159,6 @@ class SessionPanel extends StatelessWidget {
         ),
         trailing: Consumer2<ApiProvider, TimeProvider>(
           builder: (ctx, provider, time, _) {
-            // Cleaned up: Using the new getter
             final nowEpoch = time.nowEpoch;
 
             try {
@@ -242,7 +246,6 @@ class SessionPanel extends StatelessWidget {
               Navigator.pop(ctx);
 
               final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-              // Cleaned up: Using the new getter
               final stopEpoch = timeProvider.nowEpoch;
 
               try {

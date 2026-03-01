@@ -19,10 +19,12 @@ class StartSessionDialog extends StatefulWidget {
 class _StartSessionDialogState extends State<StartSessionDialog> {
   int? _selectedTableId;
   int? _selectedSeat;
+
   bool _isPrepaid = false;
   final TextEditingController _amountController = TextEditingController();
 
-  int _suggestedPrepay = 0;
+  int _currentBalance = 0;
+  int _targetPrepay = 0;
   bool _initialized = false;
 
   bool get _isValid => _selectedTableId != null && _selectedSeat != null;
@@ -35,15 +37,12 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
       final api = Provider.of<ApiProvider>(context, listen: false);
       final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-      // Cleaned up: Using the new getter
-      final nowEpoch = timeProvider.nowEpoch;
+      _targetPrepay = widget.player.prepayHours * widget.player.hourlyRate;
+      _currentBalance = api.getDynamicBalance(widget.player, timeProvider.nowEpoch);
 
-      final targetPrepay = widget.player.prepayHours * widget.player.hourlyRate;
-      final currentBalance = api.getDynamicBalance(widget.player, nowEpoch);
-      _suggestedPrepay = targetPrepay - currentBalance;
-
-      if (_suggestedPrepay > 0) {
-        _amountController.text = _suggestedPrepay.toString();
+      // Smart Default: If they owe money, autofill the exact amount needed to clear the debt
+      if (_currentBalance < 0) {
+        _amountController.text = (_currentBalance * -1).toString();
       }
 
       _initialized = true;
@@ -56,52 +55,148 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
     super.dispose();
   }
 
+  void _showErrorPopup(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Insufficient Funds", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: Text(message, style: const TextStyle(fontSize: 16)),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK"),
+          )
+        ],
+      )
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
     final timeProvider = Provider.of<TimeProvider>(context);
+
+    final activeTables = api.activeTables;
+
+    // Logic to determine if we need to show ANY money UI
+    final bool needsPaymentUI = _targetPrepay > 0 || _currentBalance < 0;
 
     return AlertDialog(
       title: Text("Seat ${widget.player.name}"),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<int>(
-              decoration: const InputDecoration(labelText: "Select Table"),
-              initialValue: _selectedTableId,
-              items: api.tables.map((t) => DropdownMenuItem(
-                value: t.pokerTableId,
-                child: Text(t.tableName),
-              )).toList(),
-              onChanged: (val) => setState(() {
-                _selectedTableId = val;
-                _selectedSeat = null;
-              }),
-            ),
-            const SizedBox(height: 16),
+            if (activeTables.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Text(
+                  "There are no active tables to seat this player. Please open a table in Settings.",
+                  style: TextStyle(color: Colors.red, fontStyle: FontStyle.italic),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else ...[
 
-            if (_selectedTableId != null)
-              SeatSelectorWidget(
-                initialSeat: _selectedSeat,
-                maxSeats: api.tables.firstWhere((t) => t.pokerTableId == _selectedTableId).capacity,
-                occupiedSeats: api.getOccupiedSeatsForTable(_selectedTableId!, seatingPlayerId: widget.player.playerId),
-                onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
-              ),
+              // --- NEGATIVE BALANCE WARNING ---
+              if (_currentBalance < 0)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade200),
+                    borderRadius: BorderRadius.circular(8)
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                          SizedBox(width: 8),
+                          Text("Action Required", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Player has a negative balance (-\$${-_currentBalance}) that must be cleared before proceeding.",
+                        style: TextStyle(color: Colors.red.shade900),
+                      ),
+                    ],
+                  ),
+                ),
 
-            if (_suggestedPrepay > 0) ...[
-              SwitchListTile(
-                title: const Text("Prepaid"),
-                value: _isPrepaid,
-                onChanged: (val) => setState(() => _isPrepaid = val),
+              DropdownButtonFormField<int>(
+                decoration: const InputDecoration(labelText: "Select Table"),
+                initialValue: _selectedTableId,
+                items: activeTables.map((t) => DropdownMenuItem(
+                  value: t.pokerTableId,
+                  child: Text(t.tableName),
+                )).toList(),
+                onChanged: (val) => setState(() {
+                  _selectedTableId = val;
+                  _selectedSeat = null;
+                }),
               ),
-              if (_isPrepaid)
+              const SizedBox(height: 16),
+
+              if (_selectedTableId != null)
+                SeatSelectorWidget(
+                  initialSeat: _selectedSeat,
+                  maxSeats: activeTables.firstWhere((t) => t.pokerTableId == _selectedTableId).capacity,
+                  // UPDATED: Added tableName parameter
+                  tableName: activeTables.firstWhere((t) => t.pokerTableId == _selectedTableId).tableName,
+                  // UPDATED: Now uses the new Name mapping function
+                  occupiedSeats: api.getOccupiedSeatsAndNamesForTable(_selectedTableId!, seatingPlayerId: widget.player.playerId),
+                  onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
+                ),
+
+              // --- CONDITIONAL PAYMENT & PREPAY CONTROLS ---
+              if (needsPaymentUI) ...[
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _amountController,
-                  decoration: const InputDecoration(labelText: "Amount (Dollars)"),
+                  decoration: const InputDecoration(
+                    labelText: "Payment / Cash Received",
+                    prefixIcon: Icon(Icons.attach_money),
+                    border: OutlineInputBorder(),
+                  ),
                   keyboardType: TextInputType.number,
+                  onChanged: (val) => setState(() {}),
                 ),
-            ],
+                const SizedBox(height: 12),
+
+                // ONLY show Prepay toggle if their hourly rate is > 0
+                if (_targetPrepay > 0)
+                  SwitchListTile(
+                    title: const Text("Prepaid Session", style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text("Minimum balance \$$_targetPrepay required"),
+                    value: _isPrepaid,
+                    activeThumbColor: Colors.blue,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) {
+                      setState(() {
+                        _isPrepaid = val;
+                        // Auto-fill convenience logic when toggled
+                        int currentInput = int.tryParse(_amountController.text) ?? 0;
+                        int resultingBalance = _currentBalance + currentInput;
+
+                        if (_isPrepaid && resultingBalance < _targetPrepay) {
+                          _amountController.text = (_targetPrepay - _currentBalance).toString();
+                        } else if (!_isPrepaid && resultingBalance < 0) {
+                          _amountController.text = (-_currentBalance).toString();
+                        }
+                      });
+                    },
+                  ),
+              ]
+            ]
           ],
         ),
       ),
@@ -109,31 +204,69 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
           onPressed: _isValid ? () async {
+            // 1. Parse Input
+            int paymentAmount = int.tryParse(_amountController.text) ?? 0;
+            int resultingBalance = _currentBalance + paymentAmount;
+
+            // 2. Exact Validation Rules
+            if (!_isPrepaid && resultingBalance < 0) {
+              _showErrorPopup(
+                "Resulting balance cannot be negative.\n\n"
+                "You must collect at least \$${-_currentBalance} to clear the existing debt."
+              );
+              return;
+            }
+
+            if (_isPrepaid && resultingBalance < _targetPrepay) {
+              _showErrorPopup(
+                "Insufficient funds for a Prepaid Session.\n\n"
+                "The resulting balance must be at least \$$_targetPrepay. "
+                "You must collect at least \$${_targetPrepay - _currentBalance}."
+              );
+              return;
+            }
+
+            // 3. Execution Phase (Math is Validated)
             final navigator = Navigator.of(context);
+            final messenger = ScaffoldMessenger.of(context);
 
-            // Cleaned up: Using the new getter
             int startEpoch = timeProvider.nowEpoch;
-
             if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
               if (api.clubSessionStartEpoch! > startEpoch) {
                 startEpoch = api.clubSessionStartEpoch!;
               }
             }
 
-            final session = Session(
-              sessionId: 0,
-              playerId: widget.player.playerId,
-              pokerTableId: _selectedTableId,
-              seatNumber: _selectedSeat,
-              startEpoch: startEpoch,
-              isPrepaid: _isPrepaid,
-              prepayAmount: _isPrepaid ? (int.tryParse(_amountController.text) ?? 0) : 0,
-            );
+            try {
+              // Only log a payment if they actually handed over cash
+              if (paymentAmount != 0) {
+                await api.addPayment(widget.player.playerId, paymentAmount, startEpoch);
+              }
 
-            await api.addSession(session);
-            navigator.pop();
+              // Create the session. If prepaid, lock in the cost. If not, cost is 0 (billed dynamically).
+              final session = Session(
+                sessionId: 0,
+                playerId: widget.player.playerId,
+                name: widget.player.name,
+                pokerTableId: _selectedTableId,
+                seatNumber: _selectedSeat,
+                startEpoch: startEpoch,
+                isPrepaid: _isPrepaid,
+                prepayAmount: _isPrepaid ? _targetPrepay : 0,
+              );
+
+              await api.addSession(session);
+              navigator.pop();
+            } catch (e) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text("Error: $e"),
+                  backgroundColor: Colors.red.shade800,
+                )
+              );
+            }
           } : null,
-          child: const Text("Start"),
+          child: const Text("Start Session"),
         ),
       ],
     );
