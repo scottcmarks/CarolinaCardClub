@@ -17,6 +17,8 @@ class ApiProvider with ChangeNotifier {
 
   List<PokerTable> get tables => pokerTables;
 
+  List<PokerTable> get activeTables => pokerTables.where((t) => t.isActive).toList();
+
   int? selectedPlayerId;
   bool isClubSessionOpen = false;
 
@@ -34,7 +36,6 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  // UPDATED SIGNATURE
   int getDynamicBalance(PlayerSelectionItem player, int nowEpoch) {
     int currentBalance = player.balance;
 
@@ -74,12 +75,18 @@ class ApiProvider with ChangeNotifier {
     return sortedList;
   }
 
-  List<int> getOccupiedSeatsForTable(int tableId, {int? seatingPlayerId}) {
-    final occupied = sessions
-        .where((s) => s.pokerTableId == tableId && s.stopTime == null)
-        .map((s) => s.seatNumber ?? 0)
-        .toList();
+  Map<int, String> getOccupiedSeatsAndNamesForTable(int tableId, {int? seatingPlayerId}) {
+    final Map<int, String> occupied = {};
 
+    // 1. Map all active players to their seats
+    final activeSessions = sessions.where((s) => s.pokerTableId == tableId && s.stopTime == null);
+    for (var s in activeSessions) {
+      if (s.seatNumber != null) {
+        occupied[s.seatNumber!] = s.name;
+      }
+    }
+
+    // 2. Floor Manager Logic
     if (seatingPlayerId != null &&
         seatingPlayerId != settings.floorManagerPlayerId &&
         tableId == settings.floorManagerReservedTable) {
@@ -97,12 +104,13 @@ class ApiProvider with ChangeNotifier {
 
       final table = pokerTables.firstWhere((t) => t.pokerTableId == tableId);
       final otherSeatsCapacity = table.capacity - 1;
-      final occupiedOtherSeats = occupied.where((seat) => seat != fmSeat).length;
+      final occupiedOtherSeats = occupied.keys.where((seat) => seat != fmSeat).length;
       bool allOtherSeatsTaken = occupiedOtherSeats >= otherSeatsCapacity;
 
       if (!(fmHasClosedSession && allOtherSeatsTaken)) {
-        if (!occupied.contains(fmSeat)) {
-          occupied.add(fmSeat);
+        if (!occupied.containsKey(fmSeat)) {
+          // Explicitly mark it as Reserved
+          occupied[fmSeat] = "Reserved";
         }
       }
     }
@@ -193,7 +201,19 @@ class ApiProvider with ChangeNotifier {
     await reloadAll();
   }
 
-  // UPDATED SIGNATURE
+  Future<void> moveSession(int sessionId, int newTableId, int newSeat) async {
+    await http.post(
+      Uri.parse("$_baseUrl/sessions/move"),
+      headers: _headers,
+      body: jsonEncode({
+        'Session_Id': sessionId,
+        'PokerTable_Id': newTableId,
+        'Seat_Number': newSeat,
+      }),
+    );
+    await reloadAll();
+  }
+
   Future<void> addPayment(int playerId, int amount, int epoch) async {
     await http.post(
       Uri.parse("$_baseUrl/payments"),
@@ -207,7 +227,6 @@ class ApiProvider with ChangeNotifier {
     await fetchPlayers();
   }
 
-  // UPDATED SIGNATURE
   Future<void> startClubSession(int nowEpoch) async {
     final now = DateTime.fromMillisecondsSinceEpoch(nowEpoch * 1000);
     final defaultStart = DateTime(now.year, now.month, now.day, defaultSessionHour, defaultSessionMinute);
@@ -223,7 +242,6 @@ class ApiProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // UPDATED SIGNATURE
   Future<void> closeClubAndEndSessions(int stopEpoch) async {
     final activeSessions = sessions.where((s) => s.stopTime == null).toList();
     for (var s in activeSessions) {
@@ -241,6 +259,44 @@ class ApiProvider with ChangeNotifier {
     isClubSessionOpen = false;
     clubSessionStartEpoch = null;
     await reloadAll();
+  }
+
+  Future<void> toggleTableStatus(int tableId, bool isActive) async {
+    await http.post(
+      Uri.parse("$_baseUrl/tables/toggle"),
+      headers: _headers,
+      body: jsonEncode({
+        'PokerTable_Id': tableId,
+        'IsActive': isActive,
+      }),
+    );
+    await reloadAll();
+  }
+
+  // NEW: Update Default Session Time
+  Future<void> updateDefaultSessionTime(int hour, int minute) async {
+    await http.post(
+      Uri.parse("$_baseUrl/state/defaults"),
+      headers: _headers,
+      body: jsonEncode({
+        'hour': hour,
+        'minute': minute
+      }),
+    );
+    await fetchState();
+  }
+
+  // NEW: Trigger Remote Backup
+  Future<void> triggerRemoteBackup() async {
+    final res = await http.post(
+      Uri.parse("$_baseUrl/maintenance/backup"),
+      headers: _headers,
+      body: jsonEncode({'apiKey': settings.localApiKey}),
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Server rejected backup. Check API Key. Status: ${res.statusCode}');
+    }
   }
 
   Future<void> reloadServerDatabase() async {

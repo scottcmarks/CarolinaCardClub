@@ -1,19 +1,21 @@
 // client/lib/widgets/seat_selector_widget.dart
 
 import 'package:flutter/material.dart';
+import 'table_oval_widget.dart';
 
 class SeatSelectorWidget extends StatefulWidget {
   final int? initialSeat;
   final int maxSeats;
-  final List<int> occupiedSeats;
+  final Map<int, String> occupiedSeats; // UPDATED: Now receives a Map
+  final String tableName;               // NEW: Needs the table name
   final Function(int) onSeatSelected;
 
-  // FIXED: Converted 'key' to a super parameter
   const SeatSelectorWidget({
     super.key,
     this.initialSeat,
     this.maxSeats = 10,
-    this.occupiedSeats = const [],
+    this.occupiedSeats = const {},
+    required this.tableName,
     required this.onSeatSelected,
   });
 
@@ -41,7 +43,7 @@ class _SeatSelectorWidgetState extends State<SeatSelectorWidget> {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => _showKeypad(context),
+      onTap: () => _showTableMap(context),
       child: Container(
         width: 60,
         height: 60,
@@ -52,7 +54,6 @@ class _SeatSelectorWidgetState extends State<SeatSelectorWidget> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              // FIXED: Replaced deprecated withOpacity with withValues
               color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(2, 2),
@@ -71,50 +72,33 @@ class _SeatSelectorWidgetState extends State<SeatSelectorWidget> {
     );
   }
 
-  void _showKeypad(BuildContext context) {
+  void _showTableMap(BuildContext context) {
+    // Initialize the controller with our current data
+    final controller = TableOvalController(initialSeats: widget.occupiedSeats);
+
     showDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: const Text("Select Seat"),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: GridView.builder(
-              shrinkWrap: true,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 1.2,
-              ),
-              itemCount: widget.maxSeats,
-              itemBuilder: (context, index) {
-                final seatNum = index + 1;
-                final isOccupied = widget.occupiedSeats.contains(seatNum);
-                final isSelected = _selectedSeat == seatNum;
+          title: Text("Select Seat at ${widget.tableName}"),
+          content: AspectRatio(
+            aspectRatio: 1.5, // Forces a nice wide oval shape
+            child: SizedBox(
+              width: 600,
+              child: TableOvalWidget(
+                tableName: widget.tableName,
+                maxSeats: widget.maxSeats,
+                controller: controller,
+                selectedSeat: _selectedSeat,
+                touched: (seat, occupantName) {
+                  // Ignore taps on seats that are occupied or reserved
+                  if (occupantName != null) return;
 
-                return ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isSelected
-                        ? Colors.blueAccent
-                        : (isOccupied ? Colors.grey.shade400 : Colors.grey.shade200),
-                    foregroundColor: isSelected
-                        ? Colors.white
-                        : (isOccupied ? Colors.white60 : Colors.black),
-                  ),
-                  onPressed: isOccupied
-                    ? null
-                    : () {
-                        setState(() => _selectedSeat = seatNum);
-                        widget.onSeatSelected(seatNum);
-                        Navigator.pop(ctx);
-                      },
-                  child: Text(
-                    "$seatNum",
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                );
-              },
+                  setState(() => _selectedSeat = seat);
+                  widget.onSeatSelected(seat);
+                  Navigator.pop(ctx);
+                },
+              ),
             ),
           ),
           actions: [

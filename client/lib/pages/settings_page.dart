@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared/shared.dart';
+import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
 import '../providers/time_provider.dart';
 import '../widgets/subnet_scan_dialog.dart';
 import '../widgets/set_clock_dialog.dart';
+import '../widgets/table_closing_wizard.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -51,9 +53,12 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  void _save() {
+  // UPDATED: Now saves the Hour and Minute defaults to the server database
+  void _save() async {
     final provider = Provider.of<AppSettingsProvider>(context, listen: false);
+    final api = Provider.of<ApiProvider>(context, listen: false);
 
+    // Save network & local configs
     provider.updateSettings(provider.currentSettings.copyWith(
       serverIp: _ipController.text.isEmpty ? Shared.defaultServerIp : _ipController.text,
       serverPort: int.tryParse(_portController.text) ?? Shared.defaultServerPort,
@@ -62,15 +67,33 @@ class _SettingsPageState extends State<SettingsPage> {
       floorManagerPlayerId: int.tryParse(_fmIdController.text),
     ));
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("All Configuration Saved")),
-    );
+    // Save the Hour and Minute defaults to the server database
+    int hour = int.tryParse(_hourController.text) ?? Shared.defaultSessionHour;
+    int minute = int.tryParse(_minuteController.text) ?? Shared.defaultSessionMinute;
+
+    try {
+      await api.updateDefaultSessionTime(hour, minute);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("All Configuration & Defaults Saved"), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text("Failed to save defaults to server: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final api = Provider.of<ApiProvider>(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text("System Settings")), // FIXED: appBar
+      appBar: AppBar(title: const Text("System Settings")),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -107,6 +130,38 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildIntField("Manager Player ID", _fmIdController, "Default: ${Shared.defaultFloorManagerPlayerId}"),
 
+          // --- NEW: DATABASE MAINTENANCE SECTION ---
+          const Divider(height: 48),
+          const Text("Database Maintenance", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.blue.shade800,
+              padding: const EdgeInsets.symmetric(vertical: 12)
+            ),
+            icon: const Icon(Icons.cloud_upload),
+            label: const Text("Backup Database to Remote Vault"),
+            onPressed: () async {
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Initiating backup..."))
+                );
+                await api.triggerRemoteBackup();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Backup Successful!"), backgroundColor: Colors.green)
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Backup Failed: $e"), backgroundColor: Colors.red)
+                  );
+                }
+              }
+            },
+          ),
+
           const Divider(height: 48),
           const Text("System Debugging", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
@@ -129,11 +184,60 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
 
           const SizedBox(height: 32),
+
+          const Text("Table Management", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          Card(
+            elevation: 1,
+            child: Column(
+              children: api.tables.map((table) {
+                return Column(
+                  children: [
+                    SwitchListTile(
+                      title: Text(table.tableName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text("Capacity: ${table.capacity} seats"),
+                      value: table.isActive,
+                      activeThumbColor: Colors.green,
+                      onChanged: (val) {
+                        if (val) {
+                          // Instantly toggle ON
+                          api.toggleTableStatus(table.pokerTableId, true);
+                        } else {
+                          // Verify if it's safe to toggle OFF
+                          final activeSessions = api.sessions.where(
+                            (s) => s.pokerTableId == table.pokerTableId && s.stopTime == null
+                          ).toList();
+
+                          if (activeSessions.isEmpty) {
+                            api.toggleTableStatus(table.pokerTableId, false);
+                          } else {
+                            // Launch Wizard to handle stranded players
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (_) => TableClosingWizard(
+                                closingTable: table,
+                                strandedSessions: activeSessions,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    const Divider(height: 0),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+
+          const SizedBox(height: 32),
           ElevatedButton(
             onPressed: _save,
             style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
             child: const Text("Save All Configuration"),
           ),
+          const SizedBox(height: 32),
         ],
       ),
     );

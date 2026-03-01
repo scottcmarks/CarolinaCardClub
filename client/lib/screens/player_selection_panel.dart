@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/api_provider.dart';
+import '../providers/time_provider.dart'; // NEW: Imported TimeProvider
 import '../models/player_selection_item.dart';
 
 class PlayerSelectionPanel extends StatelessWidget {
@@ -11,14 +12,15 @@ class PlayerSelectionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
+    final timeProvider = Provider.of<TimeProvider>(context); // NEW: Inject TimeProvider
     final players = api.players;
 
     return ListView.builder(
       itemCount: players.length,
       itemBuilder: (context, index) {
         final player = players[index];
-        // Ensure the dynamic balance (int) is treated correctly
-        final int currentBalance = api.getDynamicBalance(player);
+        // FIXED: Added timeProvider.nowEpoch to calculate balance based on simulated time
+        final int currentBalance = api.getDynamicBalance(player, timeProvider.nowEpoch);
 
         return ListTile(
           title: Text(player.name),
@@ -44,11 +46,14 @@ class PlayerSelectionPanel extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              // FIX: Convert input to int and use positional arguments
               final amount = double.tryParse(controller.text)?.round() ?? 0;
               if (amount > 0) {
-                // FIXED: Positional arguments (playerId, amount)
-                await api.addPayment(player.playerId, amount);
+                // NEW: Grab the time context right before executing the network request
+                final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+
+                // FIXED: Positional arguments now include the simulated epoch
+                await api.addPayment(player.playerId, amount, timeProvider.nowEpoch);
+
                 if (context.mounted) Navigator.pop(context);
               }
             },

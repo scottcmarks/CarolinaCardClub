@@ -7,6 +7,7 @@ import '../providers/time_provider.dart';
 import '../widgets/player_panel.dart';
 import '../widgets/session_panel.dart';
 import '../widgets/real_time_clock.dart';
+import '../widgets/server_disconnect_dialog.dart'; // NEW: Import the disconnect dialog
 import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -30,9 +31,18 @@ class _HomePageState extends State<HomePage> {
     try {
       await api.reloadAll();
     } catch (e) {
+      // NEW: Intercept the error and show the friendly dialog instead of a SnackBar
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Sync Error: $e")),
+        showDialog(
+          context: context,
+          barrierDismissible: false, // Forces the user to click a button
+          builder: (ctx) => ServerDisconnectDialog(
+            rawError: e.toString(),
+            onRetry: () {
+              // Simply call this exact same function again to try reconnecting
+              _refreshData();
+            },
+          ),
         );
       }
     }
@@ -80,7 +90,7 @@ class _HomePageState extends State<HomePage> {
 
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _refreshData,
+            onPressed: _refreshData, // This triggers the updated function with our dialog
             tooltip: "Refresh Server Data",
           ),
 
@@ -92,7 +102,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 8),
                 Switch(
                   value: api.isClubSessionOpen,
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                   onChanged: (val) async {
                     final nowEpoch = timeProvider.nowEpoch;
 
@@ -122,7 +132,6 @@ class _HomePageState extends State<HomePage> {
                           },
                         );
 
-                        // UPDATED HERE
                         if (confirmed == true) {
                           await api.closeClubAndEndSessions(nowEpoch);
                         }
