@@ -1,4 +1,4 @@
-// shared/lib/constants.dart
+// shared/lib/src/constants.dart
 
 class Shared {
   // --- Remote Server Configuration ---
@@ -17,20 +17,18 @@ class Shared {
 
   // --- Defaults ---
   static const String defaultServerIp = '127.0.0.1';
-  static const int defaultServerPort = 5109; // Updated to int
-  static const String defaultTheme = 'system';
-  static const int defaultScanTimeout = 600; // New: migrated to constants
+  static const int defaultServerPort = 5109;
+
   static const int defaultSessionHour = 19;
   static const int defaultSessionMinute = 30;
-  static const int secondsPerHour = 3600;
-
-  // --- Floor Manager (Preserved) ---
+  static const int defaultScanTimeout = 500;
   static const int defaultFloorManagerPlayerId = 1;
-  static const int defaultFloorManagerReservedTable = 1;
-  static const int defaultFloorManagerReservedSeat = 7;
 
-  // --- UI Layout (Preserved) ---
-  static const double seatSizeMultiplier = 0.13;
-  static const double tableWidthMultiplier = 0.75;
-  static const double tableHeightMultiplier = 0.65;
+  // --- Standardized HTTP Status Codes ---
+  static const int httpOK = 200;
+  static const int httpCreated = 201;
+  static const int httpBadRequest = 400;
+  static const int httpForbidden = 403;
+  static const int httpNotFound = 404;
+  static const int httpError = 500;
 }

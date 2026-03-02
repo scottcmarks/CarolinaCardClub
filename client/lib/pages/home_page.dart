@@ -7,7 +7,7 @@ import '../providers/time_provider.dart';
 import '../widgets/player_panel.dart';
 import '../widgets/session_panel.dart';
 import '../widgets/real_time_clock.dart';
-import '../widgets/server_disconnect_dialog.dart'; // NEW: Import the disconnect dialog
+import '../widgets/server_disconnect_dialog.dart';
 import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -28,18 +28,18 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _refreshData() async {
     final api = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+
     try {
-      await api.reloadAll();
+      await api.reloadAll(timeProvider.nowEpoch);
     } catch (e) {
-      // NEW: Intercept the error and show the friendly dialog instead of a SnackBar
       if (mounted) {
         showDialog(
           context: context,
-          barrierDismissible: false, // Forces the user to click a button
+          barrierDismissible: false,
           builder: (ctx) => ServerDisconnectDialog(
             rawError: e.toString(),
             onRetry: () {
-              // Simply call this exact same function again to try reconnecting
               _refreshData();
             },
           ),
@@ -90,7 +90,7 @@ class _HomePageState extends State<HomePage> {
 
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _refreshData, // This triggers the updated function with our dialog
+            onPressed: _refreshData,
             tooltip: "Refresh Server Data",
           ),
 

@@ -8,13 +8,8 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 
+// Import your shared constants
 import 'package:shared/shared.dart';
-
-const httpOK = 200;
-const httpCreated = 201;
-const httpForbidden = 403;
-const httpNotFound = 404;
-const httpError = 500;
 
 Database? _database;
 
@@ -69,7 +64,7 @@ Future<Response> _addSessionHandler(Request request) async {
       whereArgs: [playerId]
     );
     if (active.isNotEmpty) {
-      return Response(httpForbidden, body: json.encode({'error': 'Player already has an active session'}));
+      return Response(Shared.httpForbidden, body: json.encode({'error': 'Player already has an active session'}));
     }
 
     final Map<String, dynamic> insertData = {
@@ -100,7 +95,7 @@ Future<Response> _stopSessionHandler(Request request) async {
 
     final active = await db.query('Session', where: 'Session_Id = ?', whereArgs: [sessionId]);
     if (active.isEmpty) {
-      return Response(httpNotFound, body: json.encode({'error': 'Session not found'}));
+      return Response(Shared.httpNotFound, body: json.encode({'error': 'Session not found'}));
     }
 
     await db.update('Session', {'Stop_Epoch': stopEpoch}, where: 'Session_Id = ?', whereArgs: [sessionId]);
@@ -136,9 +131,9 @@ Future<Response> _addPaymentHandler(Request request) async {
     final data = json.decode(await request.readAsString());
     final db = await _db;
 
+    // STRICT GAME TIME ENFORCEMENT
     if (data['Epoch'] == null) {
-      return Response(400,
-        body: json.encode({'error': 'Missing required parameter: Epoch'}));
+      return Response(Shared.httpBadRequest, body: json.encode({'error': 'Missing required parameter: Epoch (must use synchronized game time)'}));
     }
 
     final Map<String, dynamic> insertData = {
@@ -158,7 +153,17 @@ Future<Response> _addPaymentHandler(Request request) async {
 Future<Response> _getPlayersHandler(Request request) async {
   try {
     final db = await _db;
+
+    // Grab the "Game Time" epoch from the Flutter client
+    final epochStr = request.url.queryParameters['epoch'];
+    final nowEpoch = epochStr != null ? int.parse(epochStr) : (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+
+    // 1. Inject the Game Time directly into the SQLite state table
+    await db.update('System_State', {'Current_Game_Epoch': nowEpoch}, where: 'Id = 1');
+
+    // 2. Query the time-aware view! SQLite handles the time-traveling logic automatically.
     final results = await db.query('Player_Selection_List');
+
     return Response.ok(json.encode(results), headers: {'Content-Type': 'application/json'});
   } catch (e) {
     print('🛑 ERROR [_getPlayersHandler]: $e');
@@ -249,7 +254,6 @@ Future<Response> _updateDefaultsHandler(Request request) async {
   }
 }
 
-// --- MAINTENANCE HANDLERS ---
 Future<Response> _manualBackupHandler(Request request) async {
   print('Backing up database...');
   return Response.ok(json.encode({'success': true}));
@@ -265,12 +269,11 @@ Future<Response> _manualReloadHandler(Request request) async {
   return Response.ok(json.encode({'success': true}));
 }
 
-// --- MIDDLEWARE ---
 Middleware _authMiddleware = (innerHandler) {
   return (request) {
     if (request.method == 'OPTIONS') return innerHandler(request);
     if (request.headers['x-api-key'] != Shared.defaultLocalApiKey) {
-      return Response(httpForbidden, body: 'Invalid or missing x-api-key');
+      return Response(Shared.httpForbidden, body: 'Invalid or missing x-api-key');
     }
     return innerHandler(request);
   };
@@ -287,7 +290,6 @@ const _corsHeaders = {
   'Access-Control-Allow-Headers': 'Origin, Content-Type, x-api-key',
 };
 
-// --- DATABASE & MIGRATION ---
 Future<Database> get _db async {
   if (_database != null) return _database!;
   _database = await openDatabase(p.join(Directory.current.path, Shared.dbFileName));
@@ -301,12 +303,14 @@ Future<Database> get _db async {
         Default_Session_Minute INTEGER NOT NULL DEFAULT 30,
         Floor_Manager_Player_Id INTEGER,
         Floor_Manager_Table_Id INTEGER,
-        Floor_Manager_Seat_Number INTEGER
+        Floor_Manager_Seat_Number INTEGER,
+        Current_Game_Epoch INTEGER
     )
   ''');
 
   await _database!.execute('''
-    INSERT OR IGNORE INTO System_State (Id, Is_Club_Open) VALUES (1, 0)
+    INSERT OR IGNORE INTO System_State (Id, Is_Club_Open, Current_Game_Epoch)
+    VALUES (1, 0, strftime('%s', 'now'))
   ''');
 
   return _database!;

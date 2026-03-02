@@ -53,12 +53,10 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  // UPDATED: Now saves the Hour and Minute defaults to the server database
   void _save() async {
     final provider = Provider.of<AppSettingsProvider>(context, listen: false);
     final api = Provider.of<ApiProvider>(context, listen: false);
 
-    // Save network & local configs
     provider.updateSettings(provider.currentSettings.copyWith(
       serverIp: _ipController.text.isEmpty ? Shared.defaultServerIp : _ipController.text,
       serverPort: int.tryParse(_portController.text) ?? Shared.defaultServerPort,
@@ -67,7 +65,6 @@ class _SettingsPageState extends State<SettingsPage> {
       floorManagerPlayerId: int.tryParse(_fmIdController.text),
     ));
 
-    // Save the Hour and Minute defaults to the server database
     int hour = int.tryParse(_hourController.text) ?? Shared.defaultSessionHour;
     int minute = int.tryParse(_minuteController.text) ?? Shared.defaultSessionMinute;
 
@@ -130,7 +127,6 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildIntField("Manager Player ID", _fmIdController, "Default: ${Shared.defaultFloorManagerPlayerId}"),
 
-          // --- NEW: DATABASE MAINTENANCE SECTION ---
           const Divider(height: 48),
           const Text("Database Maintenance", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
@@ -199,19 +195,18 @@ class _SettingsPageState extends State<SettingsPage> {
                       value: table.isActive,
                       activeThumbColor: Colors.green,
                       onChanged: (val) {
+                        final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
+
                         if (val) {
-                          // Instantly toggle ON
-                          api.toggleTableStatus(table.pokerTableId, true);
+                          api.toggleTableStatus(table.pokerTableId, true, nowEpoch);
                         } else {
-                          // Verify if it's safe to toggle OFF
                           final activeSessions = api.sessions.where(
                             (s) => s.pokerTableId == table.pokerTableId && s.stopTime == null
                           ).toList();
 
                           if (activeSessions.isEmpty) {
-                            api.toggleTableStatus(table.pokerTableId, false);
+                            api.toggleTableStatus(table.pokerTableId, false, nowEpoch);
                           } else {
-                            // Launch Wizard to handle stranded players
                             showDialog(
                               context: context,
                               barrierDismissible: false,

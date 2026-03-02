@@ -218,7 +218,6 @@ class SessionPanel extends StatelessWidget {
                 } else {
                   final elapsed = session.stopTime! - session.startEpoch;
                   if (elapsed > 0) {
-                    // THE FIX: Uses the session's permanently locked rate!
                     amount = ((elapsed * session.hourlyRate) / 3600).round();
                   }
                 }
