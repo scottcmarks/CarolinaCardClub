@@ -9,7 +9,8 @@ import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/app_settings.dart';
 import 'start_session_dialog.dart';
-import 'settle_payment_dialog.dart'; // NEW: Import the payment dialog
+import 'settle_payment_dialog.dart';
+import 'player_card.dart';
 
 class PlayerPanel extends StatelessWidget {
   const PlayerPanel({super.key});
@@ -47,19 +48,22 @@ class PlayerPanel extends StatelessWidget {
                   final player = players[i];
                   final isSelected = api.selectedPlayerId == player.playerId;
 
-                  return ListTile(
-                    selected: isSelected,
-                    selectedTileColor: Colors.blue.shade50,
-                    leading: CircleAvatar(
-                      child: Text(player.name.isNotEmpty ? player.name[0] : '?')
-                    ),
-                    title: Text(player.name),
-                    subtitle: Text("\$${api.getDynamicBalance(player, nowEpoch)}"),
+                  // Using your custom PlayerCard
+                  return PlayerCard(
+                    player: player,
+                    isSelected: isSelected,
                     onTap: () => api.selectPlayer(isSelected ? null : player.playerId),
-
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Dynamic Balance Display (matching your ApiProvider signature)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 16.0),
+                          child: Text(
+                            "\$${api.getDynamicBalance(player, nowEpoch)}",
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                         IconButton(
                           icon: Icon(Icons.currency_exchange_outlined, color: Colors.blue.shade700),
                           tooltip: "Settle Balance",
@@ -112,9 +116,9 @@ class PlayerPanel extends StatelessWidget {
     AppSettings settings
   ) async {
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-
     int startEpoch = timeProvider.nowEpoch;
 
+    // Matching your ApiProvider signature
     if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
       if (api.clubSessionStartEpoch! > startEpoch) {
         startEpoch = api.clubSessionStartEpoch!;
@@ -133,6 +137,7 @@ class PlayerPanel extends StatelessWidget {
 
     try {
       await api.addSession(fmSession);
+      api.selectPlayer(player.playerId);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));

@@ -4,38 +4,29 @@ class PlayerSelectionItem {
   final int playerId;
   final String name;
   final int balance;
-  final bool isActive;
-  final int hourlyRate;
+  final double hourlyRate; // Standardized as double
   final int prepayHours;
+  final bool isActive;
 
   PlayerSelectionItem({
     required this.playerId,
     required this.name,
     required this.balance,
-    this.isActive = false,
-    this.hourlyRate = 10,
-    this.prepayHours = 0,
+    required this.hourlyRate,
+    required this.prepayHours,
+    required this.isActive,
   });
 
-  String get playerName => name;
-
+  // Standardized to fromJson to match the rest of the app's network logic
   factory PlayerSelectionItem.fromJson(Map<String, dynamic> json) {
     return PlayerSelectionItem(
-      playerId: (json['playerId'] ?? json['Player_Id']) as int,
-      name: (json['name'] ?? json['Name'] ?? json['playerName'] ?? 'Unknown') as String,
-      balance: ((json['balance'] ?? json['Balance'] ?? 0) as num).toInt(),
-      isActive: json['isActive'] ?? (json['Is_Active'] == 1),
-      hourlyRate: ((json['hourlyRate'] ?? json['Hourly_Rate'] ?? 10) as num).toInt(),
-      prepayHours: ((json['prepayHours'] ?? json['Prepay_Hours'] ?? 0) as num).toInt(),
+      playerId: (json['Player_Id'] ?? -1) as int,
+      name: (json['Name'] ?? "") as String,
+      balance: (json['Balance'] as num? ?? 0).toInt(),
+      // Force conversion to double to safely handle SQLite whole integers
+      hourlyRate: (json['Hourly_Rate'] as num? ?? 0.0).toDouble(),
+      prepayHours: (json['Prepay_Hours'] as num? ?? 0).toInt(),
+      isActive: (json['Is_Active'] as int? ?? 0) == 1,
     );
   }
-
-  Map<String, dynamic> toJson() => {
-    'playerId': playerId,
-    'name': name,
-    'balance': balance,
-    'isActive': isActive,
-    'hourlyRate': hourlyRate,
-    'prepayHours': prepayHours,
-  };
 }
