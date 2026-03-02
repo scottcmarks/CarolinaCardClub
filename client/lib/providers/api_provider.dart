@@ -7,6 +7,7 @@ import '../models/app_settings.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
+import 'package:shared/shared.dart';
 
 class ApiProvider with ChangeNotifier {
   final AppSettings settings;
@@ -43,8 +44,6 @@ class ApiProvider with ChangeNotifier {
     );
 
     for (var session in activeSessions) {
-      // THE FIX: Prepaid sessions do NOT incur hourly ticking costs.
-      // Their costs are already locked and deducted by the DB.
       if (!session.isPrepaid) {
         final elapsedSeconds = nowEpoch - session.startEpoch;
         if (elapsedSeconds > 0) {
@@ -127,7 +126,7 @@ class ApiProvider with ChangeNotifier {
   Future<void> fetchState() async {
     try {
       final res = await http.get(Uri.parse("$_baseUrl/state"), headers: _headers);
-      if (res.statusCode == 200) {
+      if (res.statusCode == Shared.httpOK) {
         final data = jsonDecode(res.body);
         isClubSessionOpen = data['Is_Club_Open'] == 1;
         clubSessionStartEpoch = data['Club_Start_Epoch'];
@@ -140,11 +139,11 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchPlayers() async {
-    final String url = "$_baseUrl/players/selection";
+  Future<void> fetchPlayers(int nowEpoch) async {
+    final String url = "$_baseUrl/players/selection?epoch=$nowEpoch";
     try {
       final res = await http.get(Uri.parse(url), headers: _headers);
-      if (res.statusCode == 200) {
+      if (res.statusCode == Shared.httpOK) {
         final List data = jsonDecode(res.body);
         players = data.map((json) {
           try {
@@ -164,7 +163,7 @@ class ApiProvider with ChangeNotifier {
 
   Future<void> fetchTables() async {
     final res = await http.get(Uri.parse("$_baseUrl/tables"), headers: _headers);
-    if (res.statusCode == 200) {
+    if (res.statusCode == Shared.httpOK) {
       final List data = jsonDecode(res.body);
       pokerTables = data.map((json) => PokerTable.fromJson(json)).toList();
       notifyListeners();
@@ -175,7 +174,7 @@ class ApiProvider with ChangeNotifier {
     final String url = "$_baseUrl/sessions/panel";
     try {
       final res = await http.get(Uri.parse(url), headers: _headers);
-      if (res.statusCode == 200) {
+      if (res.statusCode == Shared.httpOK) {
         final List data = jsonDecode(res.body);
         sessions = data.map((json) => Session.fromJson(json)).toList();
         notifyListeners();
@@ -185,21 +184,29 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addSession(Session session) async {
-    await http.post(Uri.parse("$_baseUrl/sessions"), headers: _headers, body: jsonEncode(session.toJson()));
-    await reloadAll();
+  Future<void> addSession(Session session, int nowEpoch) async {
+    final res = await http.post(Uri.parse("$_baseUrl/sessions"), headers: _headers, body: jsonEncode(session.toJson()));
+    if (res.statusCode != Shared.httpOK) {
+      final error = jsonDecode(res.body)['error'] ?? 'Failed to add session';
+      throw Exception(error);
+    }
+    await reloadAll(nowEpoch);
   }
 
   Future<void> stopSession(int sessionId, int stopEpoch) async {
-    await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
+    final res = await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
       'Session_Id': sessionId,
       'Stop_Epoch': stopEpoch
     }));
-    await reloadAll();
+    if (res.statusCode != Shared.httpOK) {
+      final error = jsonDecode(res.body)['error'] ?? 'Failed to stop session';
+      throw Exception(error);
+    }
+    await reloadAll(stopEpoch);
   }
 
-  Future<void> moveSession(int sessionId, int newTableId, int newSeat) async {
-    await http.post(
+  Future<void> moveSession(int sessionId, int newTableId, int newSeat, int nowEpoch) async {
+    final res = await http.post(
       Uri.parse("$_baseUrl/sessions/move"),
       headers: _headers,
       body: jsonEncode({
@@ -208,11 +215,15 @@ class ApiProvider with ChangeNotifier {
         'Seat_Number': newSeat,
       }),
     );
-    await reloadAll();
+    if (res.statusCode != Shared.httpOK) {
+      final error = jsonDecode(res.body)['error'] ?? 'Failed to move session';
+      throw Exception(error);
+    }
+    await reloadAll(nowEpoch);
   }
 
   Future<void> addPayment(int playerId, int amount, int epoch) async {
-    await http.post(
+    final res = await http.post(
       Uri.parse("$_baseUrl/payments"),
       headers: _headers,
       body: jsonEncode({
@@ -221,7 +232,11 @@ class ApiProvider with ChangeNotifier {
         'Epoch': epoch
       }),
     );
-    await fetchPlayers();
+    if (res.statusCode != Shared.httpOK) {
+      final error = jsonDecode(res.body)['error'] ?? 'Failed to process payment';
+      throw Exception(error);
+    }
+    await fetchPlayers(epoch);
   }
 
   Future<void> startClubSession(int nowEpoch) async {
@@ -229,10 +244,14 @@ class ApiProvider with ChangeNotifier {
     final defaultStart = DateTime(now.year, now.month, now.day, defaultSessionHour, defaultSessionMinute);
     final startEpoch = (defaultStart.millisecondsSinceEpoch / 1000).round();
 
-    await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
+    final res = await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
       'Is_Club_Open': true,
       'Club_Start_Epoch': startEpoch
     }));
+
+    if (res.statusCode != Shared.httpOK) {
+      throw Exception('Failed to start club session');
+    }
 
     isClubSessionOpen = true;
     clubSessionStartEpoch = startEpoch;
@@ -242,24 +261,31 @@ class ApiProvider with ChangeNotifier {
   Future<void> closeClubAndEndSessions(int stopEpoch) async {
     final activeSessions = sessions.where((s) => s.stopTime == null).toList();
     for (var s in activeSessions) {
-      await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
+      final res = await http.post(Uri.parse("$_baseUrl/sessions/stop"), headers: _headers, body: jsonEncode({
         'Session_Id': s.sessionId,
         'Stop_Epoch': stopEpoch
       }));
+      if (res.statusCode != Shared.httpOK) {
+        print("Warning: Failed to stop session ${s.sessionId} during club close.");
+      }
     }
 
-    await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
+    final res = await http.post(Uri.parse("$_baseUrl/state/toggle"), headers: _headers, body: jsonEncode({
       'Is_Club_Open': false,
       'Club_Start_Epoch': null
     }));
 
+    if (res.statusCode != Shared.httpOK) {
+      throw Exception('Failed to toggle club state off');
+    }
+
     isClubSessionOpen = false;
     clubSessionStartEpoch = null;
-    await reloadAll();
+    await reloadAll(stopEpoch);
   }
 
-  Future<void> toggleTableStatus(int tableId, bool isActive) async {
-    await http.post(
+  Future<void> toggleTableStatus(int tableId, bool isActive, int nowEpoch) async {
+    final res = await http.post(
       Uri.parse("$_baseUrl/tables/toggle"),
       headers: _headers,
       body: jsonEncode({
@@ -267,11 +293,14 @@ class ApiProvider with ChangeNotifier {
         'IsActive': isActive,
       }),
     );
-    await reloadAll();
+    if (res.statusCode != Shared.httpOK) {
+      throw Exception('Failed to toggle table status');
+    }
+    await reloadAll(nowEpoch);
   }
 
   Future<void> updateDefaultSessionTime(int hour, int minute) async {
-    await http.post(
+    final res = await http.post(
       Uri.parse("$_baseUrl/state/defaults"),
       headers: _headers,
       body: jsonEncode({
@@ -279,6 +308,9 @@ class ApiProvider with ChangeNotifier {
         'minute': minute
       }),
     );
+    if (res.statusCode != Shared.httpOK) {
+      throw Exception('Failed to update default session time');
+    }
     await fetchState();
   }
 
@@ -289,20 +321,23 @@ class ApiProvider with ChangeNotifier {
       body: jsonEncode({'apiKey': settings.localApiKey}),
     );
 
-    if (res.statusCode != 200) {
+    if (res.statusCode != Shared.httpOK) {
       throw Exception('Server rejected backup. Check API Key. Status: ${res.statusCode}');
     }
   }
 
-  Future<void> reloadServerDatabase() async {
-    await http.post(Uri.parse("$_baseUrl/system/reload"), headers: _headers);
-    await reloadAll();
+  Future<void> reloadServerDatabase(int nowEpoch) async {
+    final res = await http.post(Uri.parse("$_baseUrl/system/reload"), headers: _headers);
+    if (res.statusCode != Shared.httpOK) {
+      throw Exception('Failed to reload server database');
+    }
+    await reloadAll(nowEpoch);
   }
 
-  Future<void> reloadAll() async {
+  Future<void> reloadAll(int nowEpoch) async {
     await fetchState();
     await fetchTables();
-    await fetchPlayers();
+    await fetchPlayers(nowEpoch);
     await fetchSessions();
   }
 }
