@@ -116,6 +116,37 @@ class SessionPanel extends StatelessWidget {
                 ),
             ],
           ),
+
+          if (isSessionOpen && api.activeTables.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: api.activeTables.map((t) {
+                final occupiedCount = api.getOccupiedSeatsAndNamesForTable(t.pokerTableId).length;
+                final isFull = occupiedCount >= t.capacity;
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isFull ? Colors.red.shade50 : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isFull ? Colors.red.shade200 : Colors.blue.shade200
+                    ),
+                  ),
+                  child: Text(
+                    isFull ? "${t.tableName} (Full)" : "${t.tableName} ($occupiedCount/${t.capacity})",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isFull ? Colors.red.shade900 : Colors.blue.shade900,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ]
         ],
       ),
     );
@@ -124,7 +155,7 @@ class SessionPanel extends StatelessWidget {
   Widget _buildSessionCard(BuildContext context, Session session, ApiProvider api) {
     final tableName = session.pokerTableId != null
         ? "Table ${session.pokerTableId} - Seat ${session.seatNumber ?? '?'}"
-        : "Unseated (Legacy)";
+        : "legacy";
 
     final bool isActive = session.stopTime == null;
 
@@ -141,7 +172,6 @@ class SessionPanel extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // UPDATED: Shows (Running) for active, and nothing for closed
             Text(isActive ? "$tableName (Running)" : tableName,
                  style: TextStyle(
                    color: isActive ? Colors.green.shade700 : Colors.black87,
@@ -188,7 +218,8 @@ class SessionPanel extends StatelessWidget {
                 } else {
                   final elapsed = session.stopTime! - session.startEpoch;
                   if (elapsed > 0) {
-                    amount = ((elapsed * player.hourlyRate) / 3600).round();
+                    // THE FIX: Uses the session's permanently locked rate!
+                    amount = ((elapsed * session.hourlyRate) / 3600).round();
                   }
                 }
 

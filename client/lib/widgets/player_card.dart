@@ -7,12 +7,14 @@ class PlayerCard extends StatelessWidget {
   final PlayerSelectionItem player;
   final bool isSelected;
   final VoidCallback onTap;
+  final Widget trailing; // NEW: Accept action buttons from the panel
 
   const PlayerCard({
     super.key,
     required this.player,
     required this.isSelected,
     required this.onTap,
+    required this.trailing,
   });
 
   @override
@@ -27,16 +29,15 @@ class PlayerCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       color: cardColor,
-      clipBehavior: Clip.hardEdge, // Ensures splash effects are clipped to the card shape
+      clipBehavior: Clip.hardEdge,
       shape: isSelected
           ? RoundedRectangleBorder(
-              side:
-                  BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
+              side: BorderSide(color: Theme.of(context).primaryColor, width: 2.0),
               borderRadius: BorderRadius.circular(4.0),
             )
           : null,
       child: ListTile(
-        onTap: onTap, // FIX: onTap must be here to prevent the ListTile from "swallowing" the click
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
         title: Text(
           player.name,
@@ -44,6 +45,7 @@ class PlayerCard extends StatelessWidget {
           softWrap: false,
           maxLines: 1,
         ),
+        trailing: trailing, // Insert the buttons here!
       ),
     );
   }

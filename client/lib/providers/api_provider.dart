@@ -16,15 +16,14 @@ class ApiProvider with ChangeNotifier {
   List<PokerTable> pokerTables = [];
 
   List<PokerTable> get tables => pokerTables;
-
   List<PokerTable> get activeTables => pokerTables.where((t) => t.isActive).toList();
 
   int? selectedPlayerId;
   bool isClubSessionOpen = false;
 
   int? clubSessionStartEpoch;
-  int defaultSessionHour = 19;
-  int defaultSessionMinute = 30;
+  late int defaultSessionHour = settings.defaultSessionHour;
+  late int defaultSessionMinute = settings.defaultSessionMinute;
 
   bool debugFetchPlayers = false;
 
@@ -44,10 +43,14 @@ class ApiProvider with ChangeNotifier {
     );
 
     for (var session in activeSessions) {
-      final elapsedSeconds = nowEpoch - session.startEpoch;
-      if (elapsedSeconds > 0) {
-        final double cost = (elapsedSeconds * player.hourlyRate) / 3600;
-        currentBalance -= cost.round();
+      // THE FIX: Prepaid sessions do NOT incur hourly ticking costs.
+      // Their costs are already locked and deducted by the DB.
+      if (!session.isPrepaid) {
+        final elapsedSeconds = nowEpoch - session.startEpoch;
+        if (elapsedSeconds > 0) {
+          final double cost = (elapsedSeconds * session.hourlyRate) / 3600;
+          currentBalance -= cost.round();
+        }
       }
     }
     return currentBalance;
@@ -78,7 +81,6 @@ class ApiProvider with ChangeNotifier {
   Map<int, String> getOccupiedSeatsAndNamesForTable(int tableId, {int? seatingPlayerId}) {
     final Map<int, String> occupied = {};
 
-    // 1. Map all active players to their seats
     final activeSessions = sessions.where((s) => s.pokerTableId == tableId && s.stopTime == null);
     for (var s in activeSessions) {
       if (s.seatNumber != null) {
@@ -86,7 +88,6 @@ class ApiProvider with ChangeNotifier {
       }
     }
 
-    // 2. Floor Manager Logic
     if (seatingPlayerId != null &&
         seatingPlayerId != settings.floorManagerPlayerId &&
         tableId == settings.floorManagerReservedTable) {
@@ -109,7 +110,6 @@ class ApiProvider with ChangeNotifier {
 
       if (!(fmHasClosedSession && allOtherSeatsTaken)) {
         if (!occupied.containsKey(fmSeat)) {
-          // Explicitly mark it as Reserved
           occupied[fmSeat] = "Reserved";
         }
       }
@@ -130,11 +130,9 @@ class ApiProvider with ChangeNotifier {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         isClubSessionOpen = data['Is_Club_Open'] == 1;
-
         clubSessionStartEpoch = data['Club_Start_Epoch'];
-        defaultSessionHour = data['Default_Session_Hour'] ?? 19;
-        defaultSessionMinute = data['Default_Session_Minute'] ?? 30;
-
+        defaultSessionHour = data['Default_Session_Hour'] ?? settings.defaultSessionHour;
+        defaultSessionMinute = data['Default_Session_Minute'] ?? settings.defaultSessionMinute;
         notifyListeners();
       }
     } catch (e) {
@@ -144,7 +142,6 @@ class ApiProvider with ChangeNotifier {
 
   Future<void> fetchPlayers() async {
     final String url = "$_baseUrl/players/selection";
-
     try {
       final res = await http.get(Uri.parse(url), headers: _headers);
       if (res.statusCode == 200) {
@@ -153,7 +150,7 @@ class ApiProvider with ChangeNotifier {
           try {
             return PlayerSelectionItem.fromJson(json);
           } catch (e) {
-            return PlayerSelectionItem(playerId: -1, name: "Parse Error ($e)", balance: 0);
+            return PlayerSelectionItem(playerId: -1, name: "Parse Error ($e)", balance: 0, hourlyRate: 0.0, prepayHours: 0, isActive: false);
           }
         }).toList();
 
@@ -273,7 +270,6 @@ class ApiProvider with ChangeNotifier {
     await reloadAll();
   }
 
-  // NEW: Update Default Session Time
   Future<void> updateDefaultSessionTime(int hour, int minute) async {
     await http.post(
       Uri.parse("$_baseUrl/state/defaults"),
@@ -286,7 +282,6 @@ class ApiProvider with ChangeNotifier {
     await fetchState();
   }
 
-  // NEW: Trigger Remote Backup
   Future<void> triggerRemoteBackup() async {
     final res = await http.post(
       Uri.parse("$_baseUrl/maintenance/backup"),

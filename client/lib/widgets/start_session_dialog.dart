@@ -29,6 +29,20 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
 
   bool get _isValid => _selectedTableId != null && _selectedSeat != null;
 
+  String get _prepaySubtitle {
+    if (_currentBalance >= _targetPrepay) {
+      return "Cost: \$$_targetPrepay (Fully covered by balance)";
+    } else if (_currentBalance < 0) {
+      final totalNeeded = _targetPrepay - _currentBalance;
+      return "Requires \$$totalNeeded payment (Cost + Debt)";
+    } else if (_currentBalance > 0) {
+      final totalNeeded = _targetPrepay - _currentBalance;
+      return "Requires \$$totalNeeded payment (After applied credit)";
+    } else {
+      return "Cost: \$$_targetPrepay";
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -37,10 +51,9 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
       final api = Provider.of<ApiProvider>(context, listen: false);
       final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-      _targetPrepay = widget.player.prepayHours * widget.player.hourlyRate;
+      _targetPrepay = (widget.player.prepayHours * widget.player.hourlyRate).round();
       _currentBalance = api.getDynamicBalance(widget.player, timeProvider.nowEpoch);
 
-      // Smart Default: If they owe money, autofill the exact amount needed to clear the debt
       if (_currentBalance < 0) {
         _amountController.text = (_currentBalance * -1).toString();
       }
@@ -77,8 +90,6 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
     final timeProvider = Provider.of<TimeProvider>(context);
 
     final activeTables = api.activeTables;
-
-    // Logic to determine if we need to show ANY money UI
     final bool needsPaymentUI = _targetPrepay > 0 || _currentBalance < 0;
 
     return AlertDialog(
@@ -98,8 +109,6 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 ),
               )
             else ...[
-
-              // --- NEGATIVE BALANCE WARNING ---
               if (_currentBalance < 0)
                 Container(
                   width: double.infinity,
@@ -129,13 +138,31 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                   ),
                 ),
 
+              // NEW: Grey-out dropdown mapping
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: "Select Table"),
                 initialValue: _selectedTableId,
-                items: activeTables.map((t) => DropdownMenuItem(
-                  value: t.pokerTableId,
-                  child: Text(t.tableName),
-                )).toList(),
+                items: activeTables.map((t) {
+                  final occupiedCount = api.getOccupiedSeatsAndNamesForTable(
+                    t.pokerTableId,
+                    seatingPlayerId: widget.player.playerId
+                  ).length;
+                  final isFull = occupiedCount >= t.capacity;
+
+                  return DropdownMenuItem<int>(
+                    value: t.pokerTableId,
+                    enabled: !isFull,
+                    child: Text(
+                      isFull
+                          ? "${t.tableName} (Full)"
+                          : "${t.tableName}  ($occupiedCount/${t.capacity} seated)",
+                      style: TextStyle(
+                        color: isFull ? Colors.grey : null,
+                        fontStyle: isFull ? FontStyle.italic : null,
+                      ),
+                    ),
+                  );
+                }).toList(),
                 onChanged: (val) => setState(() {
                   _selectedTableId = val;
                   _selectedSeat = null;
@@ -147,14 +174,11 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 SeatSelectorWidget(
                   initialSeat: _selectedSeat,
                   maxSeats: activeTables.firstWhere((t) => t.pokerTableId == _selectedTableId).capacity,
-                  // UPDATED: Added tableName parameter
                   tableName: activeTables.firstWhere((t) => t.pokerTableId == _selectedTableId).tableName,
-                  // UPDATED: Now uses the new Name mapping function
                   occupiedSeats: api.getOccupiedSeatsAndNamesForTable(_selectedTableId!, seatingPlayerId: widget.player.playerId),
                   onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
                 ),
 
-              // --- CONDITIONAL PAYMENT & PREPAY CONTROLS ---
               if (needsPaymentUI) ...[
                 const SizedBox(height: 16),
                 const Divider(height: 1),
@@ -172,18 +196,16 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // ONLY show Prepay toggle if their hourly rate is > 0
                 if (_targetPrepay > 0)
                   SwitchListTile(
                     title: const Text("Prepaid Session", style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text("Minimum balance \$$_targetPrepay required"),
+                    subtitle: Text(_prepaySubtitle),
                     value: _isPrepaid,
                     activeThumbColor: Colors.blue,
                     contentPadding: EdgeInsets.zero,
                     onChanged: (val) {
                       setState(() {
                         _isPrepaid = val;
-                        // Auto-fill convenience logic when toggled
                         int currentInput = int.tryParse(_amountController.text) ?? 0;
                         int resultingBalance = _currentBalance + currentInput;
 
@@ -204,11 +226,9 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
           onPressed: _isValid ? () async {
-            // 1. Parse Input
             int paymentAmount = int.tryParse(_amountController.text) ?? 0;
             int resultingBalance = _currentBalance + paymentAmount;
 
-            // 2. Exact Validation Rules
             if (!_isPrepaid && resultingBalance < 0) {
               _showErrorPopup(
                 "Resulting balance cannot be negative.\n\n"
@@ -226,7 +246,6 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
               return;
             }
 
-            // 3. Execution Phase (Math is Validated)
             final navigator = Navigator.of(context);
             final messenger = ScaffoldMessenger.of(context);
 
@@ -238,12 +257,10 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
             }
 
             try {
-              // Only log a payment if they actually handed over cash
               if (paymentAmount != 0) {
                 await api.addPayment(widget.player.playerId, paymentAmount, startEpoch);
               }
 
-              // Create the session. If prepaid, lock in the cost. If not, cost is 0 (billed dynamically).
               final session = Session(
                 sessionId: 0,
                 playerId: widget.player.playerId,
@@ -253,9 +270,11 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 startEpoch: startEpoch,
                 isPrepaid: _isPrepaid,
                 prepayAmount: _isPrepaid ? _targetPrepay : 0,
+                hourlyRate: widget.player.hourlyRate,
               );
 
               await api.addSession(session);
+              api.selectPlayer(widget.player.playerId);
               navigator.pop();
             } catch (e) {
               messenger.showSnackBar(
