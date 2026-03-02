@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS "Session" (
     PokerTable_Id INTEGER REFERENCES PokerTable(PokerTable_Id), 
     Seat_Number INTEGER CHECK(Seat_Number BETWEEN 1 AND 20), 
     Is_Prepaid INTEGER DEFAULT 0 CHECK(Is_Prepaid IN (0, 1)), 
-    Prepay_Amount INTEGER DEFAULT 0 CHECK(Prepay_Amount >= 0),
+    Prepay_Amount INTEGER DEFAULT 0 CHECK(Prepay_Amount >= 0), Hourly_Rate REAL DEFAULT 0.0,
     FOREIGN KEY(Player_Id) REFERENCES Player(Player_Id)
 );
 CREATE TABLE IF NOT EXISTS "Super_Bowl_Players" (
@@ -132,7 +132,17 @@ CREATE VIEW "Player_Balance" AS
 SELECT p.Player_Id, p.Total_Payment - IFNULL(sa.Total_Amount,0) as Balance 
 FROM Player_Total_Payment as p 
 LEFT JOIN Player_Total_Session_Amount as sa ON p.Player_Id == sa.Player_Id;
-CREATE VIEW "Player_Category_Rate_Interval_List" AS SELECT cat.Player_Category_Id, cat.Name, ri.Start, ri.Stop, ri.Rate, ri.Description FROM Player_Category as cat, Rate_Interval_List as ri WHERE cat.Rate_Interval_Id == ri.Rate_Interval_Id;
+CREATE VIEW "Player_Category_Rate_Interval_List" AS 
+SELECT 
+  cat.Player_Category_Id, 
+  cat.Name, 
+  ri.Start, 
+  ri.Stop, 
+  ri.Rate, 
+  ri.Description 
+FROM Player_Category as cat
+JOIN Rate_Interval_List as ri 
+WHERE cat.Rate_Interval_Id == ri.Rate_Interval_Id;
 CREATE VIEW "Player_Most_Recent_Session_Start_Epoch" AS
 SELECT
 s.Player_Id as Player_Id,
@@ -168,16 +178,20 @@ JOIN
     Player_Category_Rate_Interval_List ri ON p.Player_Category_Id = ri.Player_Category_Id
 LEFT JOIN 
     (
+        -- FIXED: Use MAX(Session_Id) to guarantee a unique 1:1 match
         SELECT 
             Player_Id,
-            MAX(Start_Epoch) AS Max_Start_Epoch
+            MAX(Session_Id) AS Max_Session_Id
         FROM 
             Session
         GROUP BY 
             Player_Id
     ) AS max_sessions ON p.Player_Id = max_sessions.Player_Id
 LEFT JOIN 
-    Session s ON p.Player_Id = s.Player_Id AND s.Start_Epoch = max_sessions.Max_Start_Epoch
+    -- FIXED: Join directly on the unique Primary Key
+    Session s ON max_sessions.Max_Session_Id = s.Session_Id
+GROUP BY 
+    p.Player_Id
 ORDER BY 
     CASE 
         WHEN s.Start_Epoch IS NULL THEN 4
@@ -192,8 +206,8 @@ CREATE VIEW "Purchased_Seconds" AS SELECT pid.Player_Id, pid.Player_Name, strfti
 CREATE VIEW "Rate_Interval_List" AS
 SELECT
     Rate_Interval.Rate_Interval_Id,
-	strftime('%Y-%m-%d %I:%M %P', datetime(Rate_Interval.Start_Epoch, 'unixepoch')) as Start,
-	strftime('%Y-%m-%d %I:%M %P', datetime(Rate_Interval.Stop_Epoch, 'unixepoch')) as Stop,
+	strftime('%Y-%m-%d %I:%M %P', datetime(Rate_Interval.Start_Epoch, 'unixepoch', 'localtime')) as Start,
+	strftime('%Y-%m-%d %I:%M %P', datetime(Rate_Interval.Stop_Epoch, 'unixepoch', 'localtime')) as Stop,
 	Rate.Rate as Rate,
 	Rate.Description
   FROM
@@ -206,7 +220,7 @@ CREATE VIEW "Session_Amount_List" AS
 SELECT
     sr.Session_Id, sr.Session_Start_Epoch, sr.Session_Stop_Epoch,
     CASE WHEN sr.Session_Stop_Epoch IS NULL THEN NULL ELSE sr.Session_Stop_Epoch - sr.Session_Start_Epoch END as Duration_In_Seconds,
-    sr.Player_Id, sr.Name, sr.Category, sr.Rate, sr.Rate_Description, sr.Is_Prepaid, sr.Prepay_Amount,
+    sr.Player_Id, sr.Name, sr.Category, sr.Category_Id, sr.Rate, sr.Rate_Description, sr.Is_Prepaid, sr.Prepay_Amount,
     CASE
         WHEN sr.Is_Prepaid = 1 THEN sr.Prepay_Amount
         WHEN sr.Session_Stop_Epoch IS NULL THEN NULL
@@ -224,16 +238,16 @@ ORDER BY CASE WHEN s.Stop_Epoch IS NULL THEN 0 ELSE 1 END, s.Start_Epoch ASC, c.
 CREATE VIEW "Session_Panel_List" AS
 SELECT
     sl.Session_Id, sl.Player_Id, sl.Name, sl.Start_Epoch, sl.Stop_Epoch, sl.PokerTable_Id, sl.Seat_Number, sl.Is_Prepaid, sl.Prepay_Amount,
-    sal.Duration_In_Seconds, sal.Amount, pb.Balance, sal.Rate
+    sal.Duration_In_Seconds, sal.Amount, pb.Balance, sal.Rate, sal.Category_Id
 FROM Session_List as sl
 JOIN Session_Amount_List as sal ON sl.Session_Id == sal.Session_Id
 JOIN Player_Balance as pb ON sl.Player_Id == pb.Player_Id
-ORDER BY CASE WHEN sl.Stop_Epoch IS NULL THEN 0 ELSE 1 END, sal.Rate, sl.Name;
+ORDER BY CASE WHEN sl.Stop_Epoch IS NULL THEN 0 ELSE 1 END, sal.Category_Id, sl.Name, sl.Stop_Epoch DESC;
 CREATE VIEW "Session_Rate_List" AS
 SELECT
     s.Session_Id, s.Player_Id, s.Start_Epoch as Session_Start_Epoch, s.Stop_Epoch as Session_Stop_Epoch,
     IFNULL(p.NickName,p.Name) as Name, pc.Name as Category, pc.Player_Category_Id as Category_Id,
-    pc.Start as Rate_Start_Epoch, pc.Stop as Rate_Stop_Epoch, pc.Rate as Rate, pc.Description as Rate_Description,
+    pc.Start as Rate_Start_Epoch, pc.Stop as Rate_Stop_Epoch, s.Hourly_Rate as Rate, pc.Description as Rate_Description,
     s.Is_Prepaid, s.Prepay_Amount
 FROM Session as s, Player as p, Player_Category_Rate_Interval_List as pc
 WHERE s.Player_Id == p.Player_Id AND p.Player_Category_Id == pc.Player_Category_Id;
