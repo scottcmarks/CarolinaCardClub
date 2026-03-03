@@ -273,7 +273,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 hourlyRate: widget.player.hourlyRate,
               );
 
-              await api.addSession(session);
+              await api.addSession(session, startEpoch); // <-- nowEpoch injected here
               api.selectPlayer(widget.player.playerId);
               navigator.pop();
             } catch (e) {

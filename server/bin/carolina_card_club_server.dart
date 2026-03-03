@@ -8,7 +8,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 
-// Import your shared constants
+import 'package:http/http.dart' as http;
 import 'package:shared/shared.dart';
 
 Database? _database;
@@ -254,20 +254,92 @@ Future<Response> _updateDefaultsHandler(Request request) async {
   }
 }
 
+
 Future<Response> _manualBackupHandler(Request request) async {
-  print('Backing up database...');
-  return Response.ok(json.encode({'success': true}));
+  try {
+    print('Initiating remote backup...');
+    final dbPath = p.join(Directory.current.path, Shared.dbFileName);
+    final file = File(dbPath);
+
+    if (!await file.exists()) {
+      return Response(Shared.httpNotFound, body: json.encode({'error': 'Local database file not found.'}));
+    }
+
+    final uri = Uri.parse('${Shared.remoteServerBaseUrl}/${Shared.remoteDbHandlerPath}');
+
+    // Create a multipart POST request as expected by PHP's $_FILES and $_POST
+    var req = http.MultipartRequest('POST', uri);
+    req.fields['apiKey'] = Shared.remoteApiKey;
+    req.files.add(await http.MultipartFile.fromPath('database', dbPath));
+
+    var streamedResponse = await req.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == Shared.httpOK) {
+      print('✓ Backup successful');
+      return Response.ok(json.encode({'success': true, 'message': response.body}));
+    } else {
+      print('🛑 Backup rejected by remote server: ${response.body}');
+      return Response(Shared.httpError, body: json.encode({'error': 'Remote server rejected backup: ${response.body}'}));
+    }
+  } catch (e) {
+    print('🛑 ERROR [_manualBackupHandler]: $e');
+    return Response.internalServerError(body: json.encode({'error': e.toString()}));
+  }
 }
 
 Future<Response> _manualRestoreHandler(Request request) async {
-  print('Restoring database...');
-  return Response.ok(json.encode({'success': true}));
+  try {
+    print('Initiating remote restore...');
+    final uri = Uri.parse('${Shared.remoteServerBaseUrl}/${Shared.remoteDbHandlerPath}?apiKey=${Shared.remoteApiKey}');
+
+    // Fetch the raw database bytes from the PHP server
+    final response = await http.get(uri);
+
+    if (response.statusCode == Shared.httpOK) {
+      // 1. Disconnect the local database so the file is unlocked
+      if (_database != null) {
+        await _database!.close();
+        _database = null;
+      }
+
+      // 2. Overwrite the local SQLite file
+      final dbPath = p.join(Directory.current.path, Shared.dbFileName);
+      final file = File(dbPath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      // 3. Re-initialize the connection
+      await _db;
+
+      print('✓ Restore successful. Database reloaded.');
+      return Response.ok(json.encode({'success': true}));
+    } else {
+      print('🛑 Restore failed: ${response.body}');
+      return Response(Shared.httpError, body: json.encode({'error': 'Remote server failed to provide backup: ${response.body}'}));
+    }
+  } catch (e) {
+    print('🛑 ERROR [_manualRestoreHandler]: $e');
+    return Response.internalServerError(body: json.encode({'error': e.toString()}));
+  }
 }
 
 Future<Response> _manualReloadHandler(Request request) async {
-  print('Reloading database...');
-  return Response.ok(json.encode({'success': true}));
+  try {
+    print('Reloading local database connection...');
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    // Accessing the getter re-opens the connection
+    await _db;
+    print('✓ Database connection reloaded.');
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_manualReloadHandler]: $e');
+    return Response.internalServerError(body: json.encode({'error': e.toString()}));
+  }
 }
+
 
 Middleware _authMiddleware = (innerHandler) {
   return (request) {

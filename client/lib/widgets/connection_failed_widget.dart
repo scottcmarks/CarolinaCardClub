@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/time_provider.dart';
 import 'server_settings_dialog.dart';
 import 'subnet_scan_dialog.dart';
 
@@ -71,7 +72,10 @@ class _ConnectionFailedWidgetState extends State<ConnectionFailedWidget> {
 
                 // 1. Retry Connection
                 FilledButton.icon(
-                  onPressed: apiProvider.reloadServerDatabase,
+                  onPressed: () {
+                    final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
+                    apiProvider.reloadServerDatabase(nowEpoch);
+                  },
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry Connection'),
                 ),

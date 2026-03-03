@@ -1,6 +1,7 @@
 // client/lib/providers/api_provider.dart
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart'; // <-- Required for debugPrint
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/app_settings.dart';
@@ -32,7 +33,7 @@ class ApiProvider with ChangeNotifier {
 
   void debugPrintFetchPlayers(String x) {
     if (debugFetchPlayers) {
-      print(x);
+      debugPrint(x); // Swapped print for debugPrint
     }
   }
 
@@ -135,7 +136,7 @@ class ApiProvider with ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print("🛑 ERROR [ApiProvider - fetchState]: $e");
+      debugPrint("🛑 ERROR [ApiProvider - fetchState]: $e");
     }
   }
 
@@ -180,7 +181,7 @@ class ApiProvider with ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print("🛑 ERROR [ApiProvider - fetchSessions]: $e");
+      debugPrint("🛑 ERROR [ApiProvider - fetchSessions]: $e");
     }
   }
 
@@ -266,7 +267,7 @@ class ApiProvider with ChangeNotifier {
         'Stop_Epoch': stopEpoch
       }));
       if (res.statusCode != Shared.httpOK) {
-        print("Warning: Failed to stop session ${s.sessionId} during club close.");
+        debugPrint("Warning: Failed to stop session ${s.sessionId} during club close.");
       }
     }
 

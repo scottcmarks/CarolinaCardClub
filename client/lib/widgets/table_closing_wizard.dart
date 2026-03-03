@@ -31,6 +31,7 @@ class _TableClosingWizardState extends State<TableClosingWizard> {
 
   Future<void> _advanceOrFinish() async {
     final api = Provider.of<ApiProvider>(context, listen: false);
+    final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
 
     if (_currentIndex < widget.strandedSessions.length - 1) {
       setState(() {
@@ -40,7 +41,7 @@ class _TableClosingWizardState extends State<TableClosingWizard> {
       });
     } else {
       // List exhausted. Safe to toggle the table off.
-      await api.toggleTableStatus(widget.closingTable.pokerTableId, false);
+      await api.toggleTableStatus(widget.closingTable.pokerTableId, false, nowEpoch);
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -143,7 +144,8 @@ class _TableClosingWizardState extends State<TableClosingWizard> {
             ),
             onPressed: _isValidMove ? () async {
               try {
-                await api.moveSession(currentSession.sessionId, _selectedTableId!, _selectedSeat!);
+                final nowEpoch = timeProvider.nowEpoch;
+                await api.moveSession(currentSession.sessionId, _selectedTableId!, _selectedSeat!, nowEpoch);
                 await _advanceOrFinish();
               } catch (e) {
                 if (context.mounted) {
