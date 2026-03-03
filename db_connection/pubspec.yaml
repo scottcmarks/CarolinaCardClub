@@ -10,7 +10,8 @@ dependencies:
     sdk: flutter
 
   # Core App Utilities
-  uuid: ^4.4.0 # For generating unique request IDs
+  provider: ^6.1.5+1
+  uuid: ^4.5.3 # For generating unique request IDs
 
   # WebSocket Communication
-  web_socket_channel: ^2.4.0 # For real-time communication with the server
+  web_socket_channel: ^3.0.3 # For real-time communication with the server
