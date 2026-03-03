@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/time_provider.dart';
 import '../services/subnet_scanner.dart';
 
 class SubnetScanDialog extends StatefulWidget {
@@ -52,7 +53,8 @@ class _SubnetScanDialogState extends State<SubnetScanDialog> {
     _scanSubscription?.cancel();
     final provider = Provider.of<AppSettingsProvider>(context, listen: false);
     provider.updateSettings(provider.currentSettings.copyWith(serverIp: ip));
-    Provider.of<ApiProvider>(context, listen: false).reloadServerDatabase();
+    final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
+    Provider.of<ApiProvider>(context, listen: false).reloadServerDatabase(nowEpoch);
     if (mounted) Navigator.pop(context);
   }
 

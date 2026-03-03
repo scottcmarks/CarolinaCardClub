@@ -48,7 +48,6 @@ class PlayerPanel extends StatelessWidget {
                   final player = players[i];
                   final isSelected = api.selectedPlayerId == player.playerId;
 
-                  // Using your custom PlayerCard
                   return PlayerCard(
                     player: player,
                     isSelected: isSelected,
@@ -56,7 +55,6 @@ class PlayerPanel extends StatelessWidget {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Dynamic Balance Display (matching your ApiProvider signature)
                         Padding(
                           padding: const EdgeInsets.only(right: 16.0),
                           child: Text(
@@ -116,9 +114,10 @@ class PlayerPanel extends StatelessWidget {
     AppSettings settings
   ) async {
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
-    int startEpoch = timeProvider.nowEpoch;
 
-    // Matching your ApiProvider signature
+    int nowEpoch = timeProvider.nowEpoch;
+    int startEpoch = nowEpoch;
+
     if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
       if (api.clubSessionStartEpoch! > startEpoch) {
         startEpoch = api.clubSessionStartEpoch!;
@@ -136,7 +135,7 @@ class PlayerPanel extends StatelessWidget {
     );
 
     try {
-      await api.addSession(fmSession);
+      await api.addSession(fmSession, nowEpoch); // <-- nowEpoch injected here
       api.selectPlayer(player.playerId);
     } catch (e) {
       if (context.mounted) {
