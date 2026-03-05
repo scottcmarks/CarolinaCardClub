@@ -1,7 +1,8 @@
 // client/lib/providers/api_provider.dart
 
+import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart'; // <-- Required for debugPrint
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/app_settings.dart';
@@ -9,9 +10,16 @@ import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
 import 'package:shared/shared.dart';
+import 'package:db_connection/db_connection.dart';
+import 'time_provider.dart';
+
 
 class ApiProvider with ChangeNotifier {
   final AppSettings settings;
+  final DbConnectionProvider connectionProvider;
+  final TimeProvider timeProvider;
+
+  StreamSubscription? _broadcastSubscription;
 
   List<PlayerSelectionItem> players = [];
   List<Session> sessions = [];
@@ -29,11 +37,25 @@ class ApiProvider with ChangeNotifier {
 
   bool debugFetchPlayers = false;
 
-  ApiProvider(this.settings);
+  ApiProvider(this.settings, this.connectionProvider, this.timeProvider) {
+    _subscribeToBroadcasts();
+  }
+
+  void _subscribeToBroadcasts() {
+    _broadcastSubscription = connectionProvider.broadcastStream.listen((message) {
+      final event = message['event'];
+      if (event == 'state_changed') {
+        reloadAll(timeProvider.nowEpoch);
+      } else if (event == 'clock_offset') {
+        final int offsetSeconds = message['offsetSeconds'] ?? 0;
+        timeProvider.setOffset(Duration(seconds: offsetSeconds));
+      }
+    });
+  }
 
   void debugPrintFetchPlayers(String x) {
     if (debugFetchPlayers) {
-      debugPrint(x); // Swapped print for debugPrint
+      debugPrint(x);
     }
   }
 
@@ -315,6 +337,21 @@ class ApiProvider with ChangeNotifier {
     await fetchState();
   }
 
+  /// Sets the clock offset on the server, which broadcasts it to all connected clients.
+  /// Only the admin client should call this.
+  Future<void> setClockOffset(int offsetSeconds) async {
+    final res = await http.post(
+      Uri.parse("$_baseUrl/state/clock-offset"),
+      headers: _headers,
+      body: jsonEncode({'offsetSeconds': offsetSeconds}),
+    );
+    if (res.statusCode != Shared.httpOK) {
+      throw Exception('Failed to set clock offset');
+    }
+    // The server will broadcast the new offset to all clients including us,
+    // so TimeProvider will be updated via the broadcast listener.
+  }
+
   Future<void> triggerRemoteBackup() async {
     final res = await http.post(
       Uri.parse("$_baseUrl/maintenance/backup"),
@@ -340,5 +377,11 @@ class ApiProvider with ChangeNotifier {
     await fetchTables();
     await fetchPlayers(nowEpoch);
     await fetchSessions();
+  }
+
+  @override
+  void dispose() {
+    _broadcastSubscription?.cancel();
+    super.dispose();
   }
 }

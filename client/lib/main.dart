@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:db_connection/db_connection.dart';
 
 import 'providers/api_provider.dart';
 import 'providers/app_settings_provider.dart';
@@ -21,15 +22,27 @@ class CarolinaCardClubApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
         ChangeNotifierProvider(create: (_) => TimeProvider()),
+        ChangeNotifierProvider(create: (_) => DbConnectionProvider()),
 
-        ChangeNotifierProxyProvider2<AppSettingsProvider, TimeProvider, ApiProvider>(
+        // When settings change, notify the connection provider of the new server URL.
+        ChangeNotifierProxyProvider<AppSettingsProvider, DbConnectionProvider>(
+          create: (context) => Provider.of<DbConnectionProvider>(context, listen: false),
+          update: (context, settingsProv, connectionProv) {
+            final serverUrl = 'http://${settingsProv.currentSettings.serverIp}:${settingsProv.currentSettings.serverPort}';
+            connectionProv!.setServerUrl(serverUrl);
+            return connectionProv;
+          },
+        ),
+
+        ChangeNotifierProxyProvider3<AppSettingsProvider, TimeProvider, DbConnectionProvider, ApiProvider>(
           create: (context) {
             final settingsProv = Provider.of<AppSettingsProvider>(context, listen: false);
-            return ApiProvider(settingsProv.currentSettings);
+            final timeProv = Provider.of<TimeProvider>(context, listen: false);
+            final connProv = Provider.of<DbConnectionProvider>(context, listen: false);
+            return ApiProvider(settingsProv.currentSettings, connProv, timeProv);
           },
-          update: (context, settingsProv, timeProv, previous) {
-            final api = previous ?? ApiProvider(settingsProv.currentSettings);
-            return api;
+          update: (context, settingsProv, timeProv, connProv, previous) {
+            return previous ?? ApiProvider(settingsProv.currentSettings, connProv, timeProv);
           },
         ),
       ],

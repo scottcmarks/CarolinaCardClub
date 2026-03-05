@@ -59,6 +59,12 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
       }
 
       _initialized = true;
+
+      debugPrint('DEBUG didChangeDependencies: '
+          'hourlyRate=${widget.player.hourlyRate}, '
+          'prepayHours=${widget.player.prepayHours}, '
+          'targetPrepay=$_targetPrepay, '
+          'currentBalance=$_currentBalance');
     }
   }
 
@@ -91,6 +97,13 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
 
     final activeTables = api.activeTables;
     final bool needsPaymentUI = _targetPrepay > 0 || _currentBalance < 0;
+
+    debugPrint('DEBUG build: '
+        'needsPaymentUI=$needsPaymentUI, '
+        'targetPrepay=$_targetPrepay, '
+        'currentBalance=$_currentBalance, '
+        'hourlyRate=${widget.player.hourlyRate}, '
+        'prepayHours=${widget.player.prepayHours}');
 
     return AlertDialog(
       title: Text("Seat ${widget.player.name}"),
@@ -138,7 +151,6 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                   ),
                 ),
 
-              // NEW: Grey-out dropdown mapping
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: "Select Table"),
                 initialValue: _selectedTableId,
@@ -273,7 +285,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 hourlyRate: widget.player.hourlyRate,
               );
 
-              await api.addSession(session, startEpoch); // <-- nowEpoch injected here
+              await api.addSession(session, startEpoch);
               api.selectPlayer(widget.player.playerId);
               navigator.pop();
             } catch (e) {
