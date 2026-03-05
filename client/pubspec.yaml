@@ -12,7 +12,7 @@ dependencies:
 
   # Core App Utilities
   provider: ^6.1.5+1 # For state management
-  http: ^1.6.0 # For network requests (kept for future use)
+  http: ^1.6.0 # For network requests
   shared_preferences: ^2.5.4 # For persisting app settings
   intl: ^0.20.2 # For date and time formatting
   uuid: ^4.5.2 # For generating unique request IDs
@@ -29,6 +29,8 @@ dependencies:
   # Local Shared Code
   shared:
     path: ../shared
+  db_connection:
+    path: ../db_connection
 
 dev_dependencies:
   flutter_test:

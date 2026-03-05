@@ -5,13 +5,18 @@ import 'dart:convert';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
+import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:shared/shared.dart';
 
 Database? _database;
+
+// Registry of all connected WebSocket clients
+final Set<WebSocketChannel> _connectedClients = {};
 
 void main() async {
   sqfliteFfiInit();
@@ -29,12 +34,16 @@ void main() async {
   router.post('/sessions/move', _moveSessionHandler);
   router.post('/payments', _addPaymentHandler);
   router.post('/state/toggle', _toggleStateHandler);
+  router.post('/state/clock-offset', _clockOffsetHandler);
   router.post('/tables/toggle', _toggleTableHandler);
   router.post('/state/defaults', _updateDefaultsHandler);
 
   router.post('/maintenance/backup', _manualBackupHandler);
   router.post('/maintenance/restore', _manualRestoreHandler);
   router.post('/system/reload', _manualReloadHandler);
+
+  // WebSocket handler — not subject to auth middleware, handles its own auth via handshake
+  router.get('/ws', webSocketHandler((WebSocketChannel channel, String? protocol) => _webSocketHandler(channel)));
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
@@ -51,6 +60,74 @@ void main() async {
     print('🛑 Failed to start server: $e');
   }
 }
+
+// --- WebSocket Handler ---
+
+void _webSocketHandler(WebSocketChannel channel) async {
+  try {
+    final db = await _db;
+
+    // Fetch current clock offset to include in the handshake ack
+    final stateRows = await db.query('System_State', where: 'Id = 1');
+    final int clockOffsetSeconds = stateRows.isNotEmpty
+        ? (stateRows.first['Clock_Offset_Seconds'] as int? ?? 0)
+        : 0;
+
+    // Send handshake ack with current clock offset
+    channel.sink.add(jsonEncode({
+      'type': 'ack',
+      'clockOffsetSeconds': clockOffsetSeconds,
+    }));
+
+    // Register client
+    _connectedClients.add(channel);
+    print('✓ WebSocket client connected. Total clients: ${_connectedClients.length}');
+
+    // Listen for disconnect
+    channel.stream.listen(
+      (_) {}, // Clients don't send anything — pager model is server-to-client only
+      onDone: () {
+        _connectedClients.remove(channel);
+        print('WebSocket client disconnected. Total clients: ${_connectedClients.length}');
+      },
+      onError: (_) {
+        _connectedClients.remove(channel);
+      },
+    );
+  } catch (e) {
+    print('🛑 ERROR [_webSocketHandler]: $e');
+    await channel.sink.close();
+  }
+}
+
+// --- Broadcast Helper ---
+
+void _broadcastAll(Map<String, dynamic> message) {
+  if (_connectedClients.isEmpty) return;
+  final encoded = jsonEncode(message);
+  final deadClients = <WebSocketChannel>[];
+
+  for (final client in _connectedClients) {
+    try {
+      client.sink.add(encoded);
+    } catch (_) {
+      deadClients.add(client);
+    }
+  }
+
+  for (final dead in deadClients) {
+    _connectedClients.remove(dead);
+  }
+}
+
+void _broadcastStateChanged() {
+  _broadcastAll({
+    'type': 'broadcast',
+    'event': 'state_changed',
+  });
+}
+
+// --- REST Handlers ---
 
 Future<Response> _addSessionHandler(Request request) async {
   try {
@@ -78,6 +155,7 @@ Future<Response> _addSessionHandler(Request request) async {
     };
 
     await db.insert('Session', insertData);
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     print('🛑 ERROR [_addSessionHandler]: $e');
@@ -99,6 +177,7 @@ Future<Response> _stopSessionHandler(Request request) async {
     }
 
     await db.update('Session', {'Stop_Epoch': stopEpoch}, where: 'Session_Id = ?', whereArgs: [sessionId]);
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     print('🛑 ERROR [_stopSessionHandler]: $e');
@@ -120,6 +199,7 @@ Future<Response> _moveSessionHandler(Request request) async {
       where: 'Session_Id = ?',
       whereArgs: [sessionId]
     );
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     return Response.internalServerError(body: '$e');
@@ -131,7 +211,6 @@ Future<Response> _addPaymentHandler(Request request) async {
     final data = json.decode(await request.readAsString());
     final db = await _db;
 
-    // STRICT GAME TIME ENFORCEMENT
     if (data['Epoch'] == null) {
       return Response(Shared.httpBadRequest, body: json.encode({'error': 'Missing required parameter: Epoch (must use synchronized game time)'}));
     }
@@ -143,6 +222,7 @@ Future<Response> _addPaymentHandler(Request request) async {
     };
 
     await db.insert('Payment', insertData);
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     print('🛑 ERROR [_addPaymentHandler]: $e');
@@ -154,14 +234,11 @@ Future<Response> _getPlayersHandler(Request request) async {
   try {
     final db = await _db;
 
-    // Grab the "Game Time" epoch from the Flutter client
     final epochStr = request.url.queryParameters['epoch'];
     final nowEpoch = epochStr != null ? int.parse(epochStr) : (DateTime.now().millisecondsSinceEpoch ~/ 1000);
 
-    // 1. Inject the Game Time directly into the SQLite state table
     await db.update('System_State', {'Current_Game_Epoch': nowEpoch}, where: 'Id = 1');
 
-    // 2. Query the time-aware view! SQLite handles the time-traveling logic automatically.
     final results = await db.query('Player_Selection_List');
 
     return Response.ok(json.encode(results), headers: {'Content-Type': 'application/json'});
@@ -215,9 +292,35 @@ Future<Response> _toggleStateHandler(Request request) async {
       'Club_Start_Epoch': data['Club_Start_Epoch']
     }, where: 'Id = 1');
 
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     print('🛑 ERROR [_toggleStateHandler]: $e');
+    return Response.internalServerError(body: '$e');
+  }
+}
+
+Future<Response> _clockOffsetHandler(Request request) async {
+  try {
+    final data = json.decode(await request.readAsString());
+    final db = await _db;
+
+    final int offsetSeconds = data['offsetSeconds'] ?? 0;
+
+    await db.update('System_State', {
+      'Clock_Offset_Seconds': offsetSeconds,
+    }, where: 'Id = 1');
+
+    // Broadcast the new offset to all connected clients
+    _broadcastAll({
+      'type': 'broadcast',
+      'event': 'clock_offset',
+      'offsetSeconds': offsetSeconds,
+    });
+
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_clockOffsetHandler]: $e');
     return Response.internalServerError(body: '$e');
   }
 }
@@ -231,6 +334,7 @@ Future<Response> _toggleTableHandler(Request request) async {
     final isActive = (data['IsActive'] == true || data['IsActive'] == 1) ? 1 : 0;
 
     await db.update('PokerTable', {'IsActive': isActive}, where: 'PokerTable_Id = ?', whereArgs: [tableId]);
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     print('🛑 ERROR [_toggleTableHandler]: $e');
@@ -254,7 +358,6 @@ Future<Response> _updateDefaultsHandler(Request request) async {
   }
 }
 
-
 Future<Response> _manualBackupHandler(Request request) async {
   try {
     print('Initiating remote backup...');
@@ -267,7 +370,6 @@ Future<Response> _manualBackupHandler(Request request) async {
 
     final uri = Uri.parse('${Shared.remoteServerBaseUrl}/${Shared.remoteDbHandlerPath}');
 
-    // Create a multipart POST request as expected by PHP's $_FILES and $_POST
     var req = http.MultipartRequest('POST', uri);
     req.fields['apiKey'] = Shared.remoteApiKey;
     req.files.add(await http.MultipartFile.fromPath('database', dbPath));
@@ -293,22 +395,18 @@ Future<Response> _manualRestoreHandler(Request request) async {
     print('Initiating remote restore...');
     final uri = Uri.parse('${Shared.remoteServerBaseUrl}/${Shared.remoteDbHandlerPath}?apiKey=${Shared.remoteApiKey}');
 
-    // Fetch the raw database bytes from the PHP server
     final response = await http.get(uri);
 
     if (response.statusCode == Shared.httpOK) {
-      // 1. Disconnect the local database so the file is unlocked
       if (_database != null) {
         await _database!.close();
         _database = null;
       }
 
-      // 2. Overwrite the local SQLite file
       final dbPath = p.join(Directory.current.path, Shared.dbFileName);
       final file = File(dbPath);
       await file.writeAsBytes(response.bodyBytes);
 
-      // 3. Re-initialize the connection
       await _db;
 
       print('✓ Restore successful. Database reloaded.');
@@ -330,7 +428,6 @@ Future<Response> _manualReloadHandler(Request request) async {
       await _database!.close();
       _database = null;
     }
-    // Accessing the getter re-opens the connection
     await _db;
     print('✓ Database connection reloaded.');
     return Response.ok(json.encode({'success': true}));
@@ -340,10 +437,13 @@ Future<Response> _manualReloadHandler(Request request) async {
   }
 }
 
+// --- Middleware ---
 
 Middleware _authMiddleware = (innerHandler) {
   return (request) {
+    // Skip auth for WebSocket upgrade requests and OPTIONS preflight
     if (request.method == 'OPTIONS') return innerHandler(request);
+    if (request.headers['upgrade'] == 'websocket') return innerHandler(request);
     if (request.headers['x-api-key'] != Shared.defaultLocalApiKey) {
       return Response(Shared.httpForbidden, body: 'Invalid or missing x-api-key');
     }
@@ -362,6 +462,8 @@ const _corsHeaders = {
   'Access-Control-Allow-Headers': 'Origin, Content-Type, x-api-key',
 };
 
+// --- Database ---
+
 Future<Database> get _db async {
   if (_database != null) return _database!;
   _database = await openDatabase(p.join(Directory.current.path, Shared.dbFileName));
@@ -376,13 +478,22 @@ Future<Database> get _db async {
         Floor_Manager_Player_Id INTEGER,
         Floor_Manager_Table_Id INTEGER,
         Floor_Manager_Seat_Number INTEGER,
-        Current_Game_Epoch INTEGER
+        Current_Game_Epoch INTEGER,
+        Clock_Offset_Seconds INTEGER DEFAULT 0
     )
   ''');
 
+  // Add Clock_Offset_Seconds column if upgrading an existing database — must run before INSERT
+  try {
+    await _database!.execute('ALTER TABLE System_State ADD COLUMN Clock_Offset_Seconds INTEGER DEFAULT 0');
+    print('✓ Migrated System_State: added Clock_Offset_Seconds column');
+  } catch (_) {
+    // Column already exists — expected on fresh start or after first migration
+  }
+
   await _database!.execute('''
-    INSERT OR IGNORE INTO System_State (Id, Is_Club_Open, Current_Game_Epoch)
-    VALUES (1, 0, strftime('%s', 'now'))
+    INSERT OR IGNORE INTO System_State (Id, Is_Club_Open, Current_Game_Epoch, Clock_Offset_Seconds)
+    VALUES (1, 0, strftime('%s', 'now'), 0)
   ''');
 
   return _database!;
