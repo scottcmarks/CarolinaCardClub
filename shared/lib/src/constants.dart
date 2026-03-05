@@ -17,12 +17,16 @@ class Shared {
 
   // --- Defaults ---
   static const String defaultServerIp = '127.0.0.1';
-  static const int defaultServerPort = 5109; // Updated to int
+  static const int defaultServerPort = 5109;
   static const String defaultTheme = 'system';
-  static const int defaultScanTimeout = 600; // migrated to constants
+  static const int defaultScanTimeout = 600;
   static const int defaultSessionHour = 19;
   static const int defaultSessionMinute = 30;
   static const int secondsPerHour = 3600;
+
+  // --- Session Warning / Away Thresholds ---
+  static const int defaultWarningPurchasedSecondsRemaining = 10 * 60; // 10 minutes
+  static const int defaultAwayTimeoutSeconds = 20 * 60; // 20 minutes
 
   // --- Floor Manager (Preserved) ---
   static const int defaultFloorManagerPlayerId = 1;

@@ -11,6 +11,8 @@ class Session {
   final bool isPrepaid;
   final int prepayAmount;
   final double hourlyRate;
+  final bool isAway;
+  final int? awaySinceEpoch;
 
   Session({
     required this.sessionId,
@@ -23,6 +25,8 @@ class Session {
     this.isPrepaid = false,
     this.prepayAmount = 0,
     this.hourlyRate = 0.0,
+    this.isAway = false,
+    this.awaySinceEpoch,
   });
 
   factory Session.fromJson(Map<String, dynamic> json) {
@@ -37,6 +41,8 @@ class Session {
       isPrepaid: json['isPrepaid'] ?? (json['Is_Prepaid'] == 1),
       prepayAmount: ((json['prepayAmount'] ?? json['Prepay_Amount'] ?? 0) as num).toInt(),
       hourlyRate: ((json['hourlyRate'] ?? json['Hourly_Rate'] ?? json['Rate'] ?? 0.0) as num).toDouble(),
+      isAway: json['isAway'] ?? (json['Is_Away'] == 1),
+      awaySinceEpoch: (json['awaySinceEpoch'] ?? json['Away_Since_Epoch']) as int?,
     );
   }
 
@@ -49,5 +55,7 @@ class Session {
     'isPrepaid': isPrepaid,
     'prepayAmount': prepayAmount,
     'hourlyRate': hourlyRate,
+    'isAway': isAway,
+    'awaySinceEpoch': awaySinceEpoch,
   };
 }

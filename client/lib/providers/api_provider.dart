@@ -228,6 +228,36 @@ class ApiProvider with ChangeNotifier {
     await reloadAll(stopEpoch);
   }
 
+
+  Future<void> markAway(int sessionId, int awayEpoch) async {
+    final res = await http.post(
+      Uri.parse("$_baseUrl/sessions/away"),
+      headers: _headers,
+      body: jsonEncode({
+        'Session_Id': sessionId,
+        'Away_Since_Epoch': awayEpoch,
+      }),
+    );
+    if (res.statusCode != Shared.httpOK) {
+      final error = jsonDecode(res.body)['error'] ?? 'Failed to mark player away';
+      throw Exception(error);
+    }
+    // No reloadAll — server will broadcast state_changed
+  }
+
+  Future<void> markReturn(int sessionId) async {
+    final res = await http.post(
+      Uri.parse("$_baseUrl/sessions/return"),
+      headers: _headers,
+      body: jsonEncode({'Session_Id': sessionId}),
+    );
+    if (res.statusCode != Shared.httpOK) {
+      final error = jsonDecode(res.body)['error'] ?? 'Failed to mark player returned';
+      throw Exception(error);
+    }
+    // No reloadAll — server will broadcast state_changed
+  }
+
   Future<void> moveSession(int sessionId, int newTableId, int newSeat, int nowEpoch) async {
     final res = await http.post(
       Uri.parse("$_baseUrl/sessions/move"),

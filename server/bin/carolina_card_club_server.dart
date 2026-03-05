@@ -32,6 +32,8 @@ void main() async {
   router.post('/sessions', _addSessionHandler);
   router.post('/sessions/stop', _stopSessionHandler);
   router.post('/sessions/move', _moveSessionHandler);
+  router.post('/sessions/away', _markAwayHandler);
+  router.post('/sessions/return', _markReturnHandler);
   router.post('/payments', _addPaymentHandler);
   router.post('/state/toggle', _toggleStateHandler);
   router.post('/state/clock-offset', _clockOffsetHandler);
@@ -152,6 +154,8 @@ Future<Response> _addSessionHandler(Request request) async {
       'Is_Prepaid': (data['isPrepaid'] == true || data['Is_Prepaid'] == 1) ? 1 : 0,
       'Prepay_Amount': data['prepayAmount'] ?? data['Prepay_Amount'] ?? 0,
       'Hourly_Rate': data['hourlyRate'] ?? data['Hourly_Rate'] ?? 0.0,
+      'Is_Away': 0,
+      'Away_Since_Epoch': null,
     };
 
     await db.insert('Session', insertData);
@@ -202,6 +206,61 @@ Future<Response> _moveSessionHandler(Request request) async {
     _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
+    return Response.internalServerError(body: '$e');
+  }
+}
+
+Future<Response> _markAwayHandler(Request request) async {
+  try {
+    final data = json.decode(await request.readAsString());
+    final db = await _db;
+
+    final sessionId = data['Session_Id'] ?? data['sessionId'];
+    final awayEpoch = data['Away_Since_Epoch'] ?? data['awaySinceEpoch'];
+
+    if (awayEpoch == null) {
+      return Response(Shared.httpBadRequest, body: json.encode({'error': 'Missing required parameter: Away_Since_Epoch'}));
+    }
+
+    final rows = await db.query('Session', where: 'Session_Id = ?', whereArgs: [sessionId]);
+    if (rows.isEmpty) {
+      return Response(Shared.httpNotFound, body: json.encode({'error': 'Session not found'}));
+    }
+
+    await db.update('Session',
+      {'Is_Away': 1, 'Away_Since_Epoch': awayEpoch},
+      where: 'Session_Id = ?',
+      whereArgs: [sessionId]
+    );
+    _broadcastStateChanged();
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_markAwayHandler]: $e');
+    return Response.internalServerError(body: '$e');
+  }
+}
+
+Future<Response> _markReturnHandler(Request request) async {
+  try {
+    final data = json.decode(await request.readAsString());
+    final db = await _db;
+
+    final sessionId = data['Session_Id'] ?? data['sessionId'];
+
+    final rows = await db.query('Session', where: 'Session_Id = ?', whereArgs: [sessionId]);
+    if (rows.isEmpty) {
+      return Response(Shared.httpNotFound, body: json.encode({'error': 'Session not found'}));
+    }
+
+    await db.update('Session',
+      {'Is_Away': 0, 'Away_Since_Epoch': null},
+      where: 'Session_Id = ?',
+      whereArgs: [sessionId]
+    );
+    _broadcastStateChanged();
+    return Response.ok(json.encode({'success': true}));
+  } catch (e) {
+    print('🛑 ERROR [_markReturnHandler]: $e');
     return Response.internalServerError(body: '$e');
   }
 }
@@ -483,18 +542,35 @@ Future<Database> get _db async {
     )
   ''');
 
-  // Add Clock_Offset_Seconds column if upgrading an existing database — must run before INSERT
-  try {
-    await _database!.execute('ALTER TABLE System_State ADD COLUMN Clock_Offset_Seconds INTEGER DEFAULT 0');
-    print('✓ Migrated System_State: added Clock_Offset_Seconds column');
-  } catch (_) {
-    // Column already exists — expected on fresh start or after first migration
+  // Migrate System_State columns if upgrading an existing database
+  for (final migration in [
+    'ALTER TABLE System_State ADD COLUMN Clock_Offset_Seconds INTEGER DEFAULT 0',
+    'ALTER TABLE System_State ADD COLUMN Current_Game_Epoch INTEGER',
+  ]) {
+    try {
+      await _database!.execute(migration);
+    } catch (_) {
+      // Column already exists — expected after first migration
+    }
   }
 
   await _database!.execute('''
     INSERT OR IGNORE INTO System_State (Id, Is_Club_Open, Current_Game_Epoch, Clock_Offset_Seconds)
     VALUES (1, 0, strftime('%s', 'now'), 0)
   ''');
+
+  // Migrate Session columns for away support
+  for (final migration in [
+    'ALTER TABLE Session ADD COLUMN Is_Away INTEGER DEFAULT 0',
+    'ALTER TABLE Session ADD COLUMN Away_Since_Epoch INTEGER',
+  ]) {
+    try {
+      await _database!.execute(migration);
+      print('✓ Migrated Session: ${migration.split('ADD COLUMN')[1].trim().split(' ')[0]}');
+    } catch (_) {
+      // Column already exists
+    }
+  }
 
   return _database!;
 }
