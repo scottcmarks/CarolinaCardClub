@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/session.dart';
+import '../models/poker_table.dart';
+import '../pages/tablet_table_page.dart';
 
 class SessionPanel extends StatelessWidget {
   const SessionPanel({super.key});
@@ -126,28 +128,43 @@ class SessionPanel extends StatelessWidget {
                 final occupiedCount = api.getOccupiedSeatsAndNamesForTable(t.pokerTableId).length;
                 final isFull = occupiedCount >= t.capacity;
 
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isFull ? Colors.red.shade50 : Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isFull ? Colors.red.shade200 : Colors.blue.shade200
-                    ),
-                  ),
-                  child: Text(
-                    isFull ? "${t.tableName} (Full)" : "${t.tableName} ($occupiedCount/${t.capacity})",
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isFull ? Colors.red.shade900 : Colors.blue.shade900,
-                    ),
-                  ),
-                );
+                return _buildTableChip(context, t, occupiedCount, isFull);
               }).toList(),
             ),
           ]
         ],
+      ),
+    );
+  }
+
+
+  Widget _buildTableChip(BuildContext context, PokerTable t, int occupiedCount, bool isFull) {
+    return Material(
+      color: isFull ? Colors.red.shade50 : Colors.blue.shade50,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => TabletTablePage(table: t)),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isFull ? Colors.red.shade200 : Colors.blue.shade200,
+            ),
+          ),
+          child: Text(
+            isFull ? "${t.tableName} (Full)" : "${t.tableName} ($occupiedCount/${t.capacity})",
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: isFull ? Colors.red.shade900 : Colors.blue.shade900,
+            ),
+          ),
+        ),
       ),
     );
   }
