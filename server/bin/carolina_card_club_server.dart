@@ -206,6 +206,7 @@ Future<Response> _moveSessionHandler(Request request) async {
     _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
+    print('🛑 ERROR [_moveSessionHandler]: $e');
     return Response.internalServerError(body: '$e');
   }
 }
@@ -413,6 +414,7 @@ Future<Response> _updateDefaultsHandler(Request request) async {
 
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
+    print('🛑 ERROR [_updateDefaultsHandler]: $e');
     return Response.internalServerError(body: '$e');
   }
 }
@@ -527,6 +529,8 @@ Future<Database> get _db async {
   if (_database != null) return _database!;
   _database = await openDatabase(p.join(Directory.current.path, Shared.dbFileName));
 
+  // --- Schema ---
+
   await _database!.execute('''
     CREATE TABLE IF NOT EXISTS System_State (
         Id INTEGER PRIMARY KEY CHECK (Id = 1),
@@ -542,33 +546,26 @@ Future<Database> get _db async {
     )
   ''');
 
-  // Migrate System_State columns if upgrading an existing database
-  for (final migration in [
-    'ALTER TABLE System_State ADD COLUMN Clock_Offset_Seconds INTEGER DEFAULT 0',
-    'ALTER TABLE System_State ADD COLUMN Current_Game_Epoch INTEGER',
-  ]) {
-    try {
-      await _database!.execute(migration);
-    } catch (_) {
-      // Column already exists — expected after first migration
-    }
-  }
-
   await _database!.execute('''
     INSERT OR IGNORE INTO System_State (Id, Is_Club_Open, Current_Game_Epoch, Clock_Offset_Seconds)
     VALUES (1, 0, strftime('%s', 'now'), 0)
   ''');
 
-  // Migrate Session columns for away support
+  // --- Migrations ---
+  // Each ALTER TABLE is attempted and silently ignored if the column already exists.
+  // Do not remove old entries — they remain as a record of schema history.
+
   for (final migration in [
+    'ALTER TABLE System_State ADD COLUMN Clock_Offset_Seconds INTEGER DEFAULT 0',
+    'ALTER TABLE System_State ADD COLUMN Current_Game_Epoch INTEGER',
     'ALTER TABLE Session ADD COLUMN Is_Away INTEGER DEFAULT 0',
     'ALTER TABLE Session ADD COLUMN Away_Since_Epoch INTEGER',
   ]) {
     try {
       await _database!.execute(migration);
-      print('✓ Migrated Session: ${migration.split('ADD COLUMN')[1].trim().split(' ')[0]}');
+      print('✓ Migrated: ${migration.split('ADD COLUMN')[1].trim().split(' ')[0]}');
     } catch (_) {
-      // Column already exists
+      // Column already exists — silent failure is expected on existing DBs
     }
   }
 
