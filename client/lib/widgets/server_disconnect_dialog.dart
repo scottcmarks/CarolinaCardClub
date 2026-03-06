@@ -3,6 +3,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../pages/settings_page.dart';
+import 'subnet_scan_dialog.dart';
 
 class ServerDisconnectDialog extends StatelessWidget {
   final String rawError;
@@ -68,6 +69,17 @@ class ServerDisconnectDialog extends StatelessWidget {
                 );
               },
               child: const Text("Server Settings"),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                showDialog(
+                  context: context,
+                  builder: (_) => const SubnetScanDialog(),
+                );
+              },
+              child: const Text("Find Server"),
             ),
             const SizedBox(width: 8),
             ElevatedButton(
