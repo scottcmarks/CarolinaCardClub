@@ -7,25 +7,88 @@ import '../providers/time_provider.dart';
 import '../models/poker_table.dart';
 import '../models/session.dart';
 import '../models/player_selection_item.dart';
-import '../widgets/location_selector_widget.dart';
+import '../widgets/table_oval_widget.dart';
 import '../widgets/real_time_clock.dart';
-import 'table_view_page.dart';
+import '../widgets/seat_selector_widget.dart';
+import 'package:shared/shared.dart';
 
 class TabletTablePage extends StatelessWidget {
   final PokerTable table;
 
   const TabletTablePage({super.key, required this.table});
 
+  // ── Seat state calculation ─────────────────────────────────────────────────
+
+  SeatState _getSeatState(int seatNum, ApiProvider api, TimeProvider time) {
+    final sessions = api.sessions.where((s) =>
+        s.pokerTableId == table.pokerTableId &&
+        s.seatNumber == seatNum &&
+        s.stopTime == null);
+    if (sessions.isEmpty) return SeatState.empty;
+    final session = sessions.first;
+
+    if (session.isAway) {
+      final awaySeconds =
+          time.nowEpoch - (session.awaySinceEpoch ?? time.nowEpoch);
+      return awaySeconds >= Shared.defaultAwayTimeoutSeconds
+          ? SeatState.awayOverdue
+          : SeatState.away;
+    }
+
+    if (session.isPrepaid) return SeatState.healthy;
+
+    final playerMatches =
+        api.players.where((p) => p.playerId == session.playerId);
+    if (playerMatches.isEmpty) return SeatState.healthy;
+
+    final balance = api.getDynamicBalance(playerMatches.first, time.nowEpoch);
+    if (balance <= 0) return SeatState.overdue;
+
+    final warningThreshold =
+        (Shared.defaultWarningPurchasedSecondsRemaining *
+                session.hourlyRate /
+                Shared.secondsPerHour)
+            .round();
+    if (balance <= warningThreshold) return SeatState.warning;
+
+    return SeatState.healthy;
+  }
+
+  // ── Build controller from current sessions ─────────────────────────────────
+
+  TableOvalController _buildController(ApiProvider api, TimeProvider time) {
+    final controller = TableOvalController();
+    for (final session in api.sessions.where((s) =>
+        s.pokerTableId == table.pokerTableId &&
+        s.stopTime == null &&
+        s.seatNumber != null)) {
+      final playerMatches =
+          api.players.where((p) => p.playerId == session.playerId);
+      final balance = (!session.isPrepaid && playerMatches.isNotEmpty)
+          ? api.getDynamicBalance(playerMatches.first, time.nowEpoch)
+          : null;
+
+      controller.seatWithData(
+        session.seatNumber!,
+        SeatData(
+          name: session.name,
+          sessionId: session.sessionId,
+          balance: balance,
+          isPrepaid: session.isPrepaid,
+          isAway: session.isAway,
+          awaySinceEpoch: session.awaySinceEpoch,
+          sessionStartEpoch: session.startEpoch,
+        ),
+      );
+    }
+    return controller;
+  }
+
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
     final time = Provider.of<TimeProvider>(context);
-
-    final occupancy = <int, String>{};
-    for (var s in api.sessions.where(
-        (s) => s.stopTime == null && s.pokerTableId == table.pokerTableId)) {
-      if (s.seatNumber != null) occupancy[s.seatNumber!] = s.name;
-    }
+    final controller = _buildController(api, time);
 
     return Scaffold(
       appBar: AppBar(
@@ -50,30 +113,101 @@ class TabletTablePage extends StatelessWidget {
           ),
         ],
       ),
-      body: LocationSelectorWidget(
-        table: table,
-        occupancy: occupancy,
-        onSeatSelected: (_) {}, // unused in tablet mode
-        isSubPageMode: false,
-        onStandUp: (session) => _confirmStandUp(context, session, time),
-        onMarkAway: (session) => _confirmMarkAway(context, session, time),
-        onMarkReturn: (session) => _markReturn(context, session),
-        onMoveSeat: (session) => _showMoveSeat(context, session, api, time),
-        onSeatPlayer: (seatNum) => _showSeatPlayer(context, seatNum, api, time),
+      body: TableOvalWidget(
+        tableName: table.tableName,
+        maxSeats: table.capacity,
+        controller: controller,
+        getSeatState: (seatNum) => _getSeatState(seatNum, api, time),
+        getNowEpoch: () => time.nowEpoch,
+        touched: (seatNum, occupantName) {
+          final state = _getSeatState(seatNum, api, time);
+          if (state == SeatState.empty) {
+            _showSeatPlayer(context, seatNum, api, time);
+          } else {
+            final session = api.sessions.firstWhere((s) =>
+                s.pokerTableId == table.pokerTableId &&
+                s.seatNumber == seatNum &&
+                s.stopTime == null);
+            _showSeatActions(context, session, state, api, time);
+          }
+        },
       ),
     );
   }
 
-  // --- Stand Up ---
+  // ── Seat actions bottom sheet ──────────────────────────────────────────────
 
-  void _confirmStandUp(BuildContext context, Session session, TimeProvider time) {
+  void _showSeatActions(BuildContext context, Session session, SeatState state,
+      ApiProvider api, TimeProvider time) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: Text(session.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
+            const Divider(height: 1),
+            if (state == SeatState.away || state == SeatState.awayOverdue)
+              ListTile(
+                leading: const Icon(Icons.login, color: Colors.green),
+                title: const Text('Mark Returned'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _markReturn(context, session);
+                },
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.airline_seat_recline_extra,
+                    color: Colors.grey),
+                title: const Text('Mark Away'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmMarkAway(context, session, time);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.open_with, color: Colors.blue),
+              title: const Text('Move Seat'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showMoveSeat(context, session, api, time);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Stand Up'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmStandUp(context, session, time);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Stand Up ──────────────────────────────────────────────────────────────
+
+  void _confirmStandUp(
+      BuildContext context, Session session, TimeProvider time) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Stand Up: ${session.name}?"),
-        content: const Text("This will end the session and update the player's balance."),
+        content: const Text(
+            "This will end the session and update the player's balance."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
@@ -84,7 +218,9 @@ class TabletTablePage extends StatelessWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                    SnackBar(
+                        content: Text("Error: $e"),
+                        backgroundColor: Colors.red),
                   );
                 }
               }
@@ -96,16 +232,20 @@ class TabletTablePage extends StatelessWidget {
     );
   }
 
-  // --- Mark Away ---
+  // ── Mark Away ─────────────────────────────────────────────────────────────
 
-  void _confirmMarkAway(BuildContext context, Session session, TimeProvider time) {
+  void _confirmMarkAway(
+      BuildContext context, Session session, TimeProvider time) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Mark Away: ${session.name}?"),
-        content: const Text("Player's session will continue running while away."),
+        content:
+            const Text("Player's session will continue running while away."),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -115,7 +255,9 @@ class TabletTablePage extends StatelessWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                    SnackBar(
+                        content: Text("Error: $e"),
+                        backgroundColor: Colors.red),
                   );
                 }
               }
@@ -127,7 +269,7 @@ class TabletTablePage extends StatelessWidget {
     );
   }
 
-  // --- Mark Return ---
+  // ── Mark Return ───────────────────────────────────────────────────────────
 
   void _markReturn(BuildContext context, Session session) async {
     final api = Provider.of<ApiProvider>(context, listen: false);
@@ -136,47 +278,73 @@ class TabletTablePage extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text("Error: $e"), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  // --- Move Seat (within same table) ---
+  // ── Move Seat ─────────────────────────────────────────────────────────────
 
-  void _showMoveSeat(BuildContext context, Session session, ApiProvider api, TimeProvider time) {
-    // Use existing TableViewPage in sub-page mode to pick a new seat
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TableViewPage(
-          table: table,
-          pendingPlayerId: session.playerId,
-          highlightedSeat: session.seatNumber,
-        ),
-      ),
+  void _showMoveSeat(BuildContext context, Session session, ApiProvider api,
+      TimeProvider time) {
+    final occupiedSeats = api.getOccupiedSeatsAndNamesForTable(
+        table.pokerTableId,
+        seatingPlayerId: session.playerId);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        int? newSeat = session.seatNumber;
+        return AlertDialog(
+          title: Text("Move ${session.name}"),
+          content: AspectRatio(
+            aspectRatio: 1.5,
+            child: SizedBox(
+              width: 600,
+              child: SeatSelectorWidget(
+                initialSeat: session.seatNumber,
+                maxSeats: table.capacity,
+                tableName: table.tableName,
+                occupiedSeats: occupiedSeats,
+                onSeatSelected: (seat) {
+                  newSeat = seat;
+                  Navigator.pop(ctx, seat);
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Cancel")),
+          ],
+        );
+      },
     ).then((newSeat) async {
       if (newSeat == null || newSeat == session.seatNumber) return;
       try {
-        await api.moveSession(session.sessionId, table.pokerTableId, newSeat, time.nowEpoch);
+        await api.moveSession(
+            session.sessionId, table.pokerTableId, newSeat, time.nowEpoch);
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text("Error: $e"), backgroundColor: Colors.red),
           );
         }
       }
     });
   }
 
-  // --- Seat a Player ---
+  // ── Seat a Player ─────────────────────────────────────────────────────────
 
-  void _showSeatPlayer(BuildContext context, int seatNum, ApiProvider api, TimeProvider time) {
-    // Filter to players with no open session and balance >= 0
+  void _showSeatPlayer(
+      BuildContext context, int seatNum, ApiProvider api, TimeProvider time) {
     final eligible = api.players.where((p) {
       if (p.isActive) return false;
-      final balance = api.getDynamicBalance(p, time.nowEpoch);
-      return balance >= 0;
+      return api.getDynamicBalance(p, time.nowEpoch) >= 0;
     }).toList();
 
     if (eligible.isEmpty) {
@@ -184,9 +352,12 @@ class TabletTablePage extends StatelessWidget {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text("No Eligible Players"),
-          content: const Text("All players either have an active session or a negative balance."),
+          content: const Text(
+              "All players either have an active session or a negative balance."),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK")),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("OK")),
           ],
         ),
       );
@@ -206,7 +377,7 @@ class TabletTablePage extends StatelessWidget {
   }
 }
 
-// --- Seat Player Dialog ---
+// ── Seat Player Dialog ────────────────────────────────────────────────────────
 
 class _SeatPlayerDialog extends StatefulWidget {
   final PokerTable table;
@@ -239,22 +410,26 @@ class _SeatPlayerDialogState extends State<_SeatPlayerDialog> {
       ? 0
       : (_selected!.prepayHours * _selected!.hourlyRate).round();
 
-  bool get _canPrepay => _selected != null && _balance >= _targetPrepay && _targetPrepay > 0;
+  bool get _canPrepay =>
+      _selected != null && _balance >= _targetPrepay && _targetPrepay > 0;
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text("Seat at ${widget.table.tableName} — Seat ${widget.seatNum}"),
+      title:
+          Text("Seat at ${widget.table.tableName} — Seat ${widget.seatNum}"),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<PlayerSelectionItem>(
-              decoration: const InputDecoration(labelText: "Select Player"),
+              decoration:
+                  const InputDecoration(labelText: "Select Player"),
               initialValue: _selected,
               items: widget.eligible.map((p) {
-                final bal = widget.api.getDynamicBalance(p, widget.time.nowEpoch);
+                final bal =
+                    widget.api.getDynamicBalance(p, widget.time.nowEpoch);
                 return DropdownMenuItem(
                   value: p,
                   child: Text("${p.name}  (\$$bal)"),
@@ -265,7 +440,6 @@ class _SeatPlayerDialogState extends State<_SeatPlayerDialog> {
                 _isPrepaid = false;
               }),
             ),
-
             if (_selected != null && _canPrepay) ...[
               const SizedBox(height: 16),
               SwitchListTile(
@@ -276,48 +450,53 @@ class _SeatPlayerDialogState extends State<_SeatPlayerDialog> {
                 onChanged: (val) => setState(() => _isPrepaid = val),
               ),
             ],
-
             if (_selected != null && !_canPrepay && _targetPrepay > 0) ...[
               const SizedBox(height: 12),
               Text(
                 "Prepay not available — balance \$$_balance < required \$$_targetPrepay",
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ],
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel")),
         ElevatedButton(
-          onPressed: _selected == null ? null : () async {
-            Navigator.pop(context);
-            final player = _selected!;
-            final nowEpoch = widget.time.nowEpoch;
-
-            try {
-              await widget.api.addSession(
-                Session(
-                  sessionId: 0,
-                  playerId: player.playerId,
-                  name: player.name,
-                  pokerTableId: widget.table.pokerTableId,
-                  seatNumber: widget.seatNum,
-                  startEpoch: nowEpoch,
-                  isPrepaid: _isPrepaid,
-                  prepayAmount: _isPrepaid ? _targetPrepay : 0,
-                  hourlyRate: player.hourlyRate,
-                ),
-                nowEpoch,
-              );
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-                );
-              }
-            }
-          },
+          onPressed: _selected == null
+              ? null
+              : () async {
+                  Navigator.pop(context);
+                  final player = _selected!;
+                  final nowEpoch = widget.time.nowEpoch;
+                  try {
+                    await widget.api.addSession(
+                      Session(
+                        sessionId: 0,
+                        playerId: player.playerId,
+                        name: player.name,
+                        pokerTableId: widget.table.pokerTableId,
+                        seatNumber: widget.seatNum,
+                        startEpoch: nowEpoch,
+                        isPrepaid: _isPrepaid,
+                        prepayAmount: _isPrepaid ? _targetPrepay : 0,
+                        hourlyRate: player.hourlyRate,
+                      ),
+                      nowEpoch,
+                    );
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text("Error: $e"),
+                            backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
           child: const Text("Seat Player"),
         ),
       ],
