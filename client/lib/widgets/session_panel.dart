@@ -8,6 +8,7 @@ import '../providers/time_provider.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
 import '../pages/tablet_table_page.dart';
+import '../pages/seating_flow_page.dart';
 
 class SessionPanel extends StatelessWidget {
   const SessionPanel({super.key});
@@ -161,7 +162,7 @@ class SessionPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => TabletTablePage(table: t)),
+          MaterialPageRoute(builder: (_) => SeatingFlowPage(initialTableId: t.pokerTableId)),
         ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

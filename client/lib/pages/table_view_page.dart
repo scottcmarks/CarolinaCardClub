@@ -10,8 +10,15 @@ class TableViewPage extends StatelessWidget {
   final PokerTable table;
   final int? pendingPlayerId;
   final int? highlightedSeat;
+  final void Function(int tableId, int seatNum)? onSeatChosen;
 
-  const TableViewPage({super.key, required this.table, this.pendingPlayerId, this.highlightedSeat});
+  const TableViewPage({
+    super.key,
+    required this.table,
+    this.pendingPlayerId,
+    this.highlightedSeat,
+    this.onSeatChosen,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +33,13 @@ class TableViewPage extends StatelessWidget {
       occupancy: occupancy,
       highlightedSeat: highlightedSeat,
       isSubPageMode: pendingPlayerId != null,
-      onSeatSelected: (seatNum) => Navigator.pop(context, seatNum),
+      onSeatSelected: (seatNum) {
+        if (onSeatChosen != null) {
+          onSeatChosen!(table.pokerTableId, seatNum);
+        } else {
+          Navigator.pop(context, seatNum);
+        }
+      },
     );
   }
 }
