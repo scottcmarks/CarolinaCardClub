@@ -266,16 +266,14 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
           children: [
             Text("$seatNum",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-            if (isOccupied)
+            if (isReserved)
+              Icon(Icons.verified_user, size: 20, color: Colors.blue.shade700)
+            else if (isOccupied)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   occupantName!,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: isReserved ? FontWeight.bold : FontWeight.normal,
-                    color: isReserved ? Colors.orange.shade900 : textColor,
-                  ),
+                  style: TextStyle(fontSize: 10, color: textColor),
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
