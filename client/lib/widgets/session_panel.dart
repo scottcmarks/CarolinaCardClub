@@ -49,8 +49,9 @@ class SessionPanel extends StatelessWidget {
     final bool isSessionOpen = api.isClubSessionOpen;
     final bool isPlayerSelected = api.selectedPlayerId != null;
 
-    String title = isSessionOpen ? "Active Sessions" : "Session History";
-    String subtitle = isSessionOpen ? "Active sessions only" : "All sessions";
+    final bool showAll = api.showAllSessions;
+    String title = isSessionOpen ? (showAll ? "All Sessions" : "Active Sessions") : "Session History";
+    String subtitle = isSessionOpen ? (showAll ? "All sessions" : "Active sessions only") : "All sessions";
 
     String playerInfo = "(All Players)";
     if (isPlayerSelected) {
@@ -91,14 +92,28 @@ class SessionPanel extends StatelessWidget {
 
           Row(
             children: [
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  fontStyle: isSessionOpen ? FontStyle.normal : FontStyle.italic
-                ),
-              ),
+              if (isSessionOpen)
+                GestureDetector(
+                  onTap: () => api.setShowAllSessions(!showAll),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        subtitle,
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(showAll ? Icons.toggle_on : Icons.toggle_off,
+                          size: 20, color: Colors.grey.shade500),
+                    ],
+                  ),
+                )
+              else
+                Text(subtitle,
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic)),
               const Spacer(),
               if (isSessionOpen && api.clubSessionStartEpoch != null)
                 Container(

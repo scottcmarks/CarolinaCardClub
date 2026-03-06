@@ -35,7 +35,13 @@ class ApiProvider with ChangeNotifier {
   late int defaultSessionHour = settings.defaultSessionHour;
   late int defaultSessionMinute = settings.defaultSessionMinute;
 
+  bool showAllSessions = false;
   bool debugFetchPlayers = false;
+
+  void setShowAllSessions(bool value) {
+    showAllSessions = value;
+    notifyListeners();
+  }
 
   ApiProvider(this.settings, this.connectionProvider, this.timeProvider) {
     _subscribeToBroadcasts();
@@ -86,7 +92,7 @@ class ApiProvider with ChangeNotifier {
   List<Session> get displayedSessions {
     Iterable<Session> filtered = sessions;
 
-    if (isClubSessionOpen) {
+    if (isClubSessionOpen && !showAllSessions) {
       filtered = filtered.where((s) => s.stopTime == null);
     }
 
