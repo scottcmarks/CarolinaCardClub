@@ -9,7 +9,8 @@ import '../models/session.dart';
 import '../models/player_selection_item.dart';
 import '../widgets/table_oval_widget.dart';
 import '../widgets/real_time_clock.dart';
-import '../widgets/seat_selector_widget.dart';
+import '../widgets/player_picker_dialog.dart';
+import '../widgets/start_session_dialog.dart';
 import 'package:shared/shared.dart';
 
 class TabletTablePage extends StatelessWidget {
@@ -122,7 +123,7 @@ class TabletTablePage extends StatelessWidget {
         touched: (seatNum, occupantName) {
           final state = _getSeatState(seatNum, api, time);
           if (state == SeatState.empty) {
-            _showSeatPlayer(context, seatNum, api, time);
+            _showSeatPlayer(context, seatNum);
           } else {
             final session = api.sessions.firstWhere((s) =>
                 s.pokerTableId == table.pokerTableId &&
@@ -293,35 +294,32 @@ class TabletTablePage extends StatelessWidget {
         table.pokerTableId,
         seatingPlayerId: session.playerId);
 
-    showDialog(
+    showDialog<int>(
       context: context,
-      builder: (ctx) {
-        int? newSeat = session.seatNumber;
-        return AlertDialog(
-          title: Text("Move ${session.name}"),
-          content: AspectRatio(
-            aspectRatio: 1.5,
-            child: SizedBox(
-              width: 600,
-              child: SeatSelectorWidget(
-                initialSeat: session.seatNumber,
-                maxSeats: table.capacity,
-                tableName: table.tableName,
-                occupiedSeats: occupiedSeats,
-                onSeatSelected: (seat) {
-                  newSeat = seat;
-                  Navigator.pop(ctx, seat);
-                },
-              ),
+      builder: (ctx) => AlertDialog(
+        title: Text("Move ${session.name}"),
+        content: AspectRatio(
+          aspectRatio: 1.5,
+          child: SizedBox(
+            width: 600,
+            child: TableOvalWidget(
+              tableName: table.tableName,
+              maxSeats: table.capacity,
+              controller: TableOvalController(initialSeats: occupiedSeats),
+              selectedSeat: session.seatNumber,
+              touched: (seatNum, occupantName) {
+                if (occupantName != null) return;
+                Navigator.pop(ctx, seatNum);
+              },
             ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Cancel")),
-          ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel")),
+        ],
+      ),
     ).then((newSeat) async {
       if (newSeat == null || newSeat == session.seatNumber) return;
       try {
@@ -340,166 +338,20 @@ class TabletTablePage extends StatelessWidget {
 
   // ── Seat a Player ─────────────────────────────────────────────────────────
 
-  void _showSeatPlayer(
-      BuildContext context, int seatNum, ApiProvider api, TimeProvider time) {
-    final eligible = api.players.where((p) {
-      if (p.isActive) return false;
-      return api.getDynamicBalance(p, time.nowEpoch) >= 0;
-    }).toList();
-
-    if (eligible.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text("No Eligible Players"),
-          content: const Text(
-              "All players either have an active session or a negative balance."),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("OK")),
-          ],
-        ),
-      );
-      return;
-    }
-
-    showDialog(
+  void _showSeatPlayer(BuildContext context, int seatNum) async {
+    final player = await showDialog<PlayerSelectionItem>(
       context: context,
-      builder: (ctx) => _SeatPlayerDialog(
-        table: table,
-        seatNum: seatNum,
-        eligible: eligible,
-        api: api,
-        time: time,
-      ),
+      builder: (_) => const PlayerPickerDialog(),
     );
-  }
-}
+    if (player == null || !context.mounted) return;
 
-// ── Seat Player Dialog ────────────────────────────────────────────────────────
-
-class _SeatPlayerDialog extends StatefulWidget {
-  final PokerTable table;
-  final int seatNum;
-  final List<PlayerSelectionItem> eligible;
-  final ApiProvider api;
-  final TimeProvider time;
-
-  const _SeatPlayerDialog({
-    required this.table,
-    required this.seatNum,
-    required this.eligible,
-    required this.api,
-    required this.time,
-  });
-
-  @override
-  State<_SeatPlayerDialog> createState() => _SeatPlayerDialogState();
-}
-
-class _SeatPlayerDialogState extends State<_SeatPlayerDialog> {
-  PlayerSelectionItem? _selected;
-  bool _isPrepaid = false;
-
-  int get _balance => _selected == null
-      ? 0
-      : widget.api.getDynamicBalance(_selected!, widget.time.nowEpoch);
-
-  int get _targetPrepay => _selected == null
-      ? 0
-      : (_selected!.prepayHours * _selected!.hourlyRate).round();
-
-  bool get _canPrepay =>
-      _selected != null && _balance >= _targetPrepay && _targetPrepay > 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title:
-          Text("Seat at ${widget.table.tableName} — Seat ${widget.seatNum}"),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<PlayerSelectionItem>(
-              decoration:
-                  const InputDecoration(labelText: "Select Player"),
-              initialValue: _selected,
-              items: widget.eligible.map((p) {
-                final bal =
-                    widget.api.getDynamicBalance(p, widget.time.nowEpoch);
-                return DropdownMenuItem(
-                  value: p,
-                  child: Text("${p.name}  (\$$bal)"),
-                );
-              }).toList(),
-              onChanged: (val) => setState(() {
-                _selected = val;
-                _isPrepaid = false;
-              }),
-            ),
-            if (_selected != null && _canPrepay) ...[
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text("Prepaid Session"),
-                subtitle: Text("Cost: \$$_targetPrepay (balance covers it)"),
-                value: _isPrepaid,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) => setState(() => _isPrepaid = val),
-              ),
-            ],
-            if (_selected != null && !_canPrepay && _targetPrepay > 0) ...[
-              const SizedBox(height: 12),
-              Text(
-                "Prepay not available — balance \$$_balance < required \$$_targetPrepay",
-                style:
-                    TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-          ],
-        ),
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => StartSessionDialog(
+        player: player,
+        initialTableId: table.pokerTableId,
+        initialSeat: seatNum,
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel")),
-        ElevatedButton(
-          onPressed: _selected == null
-              ? null
-              : () async {
-                  Navigator.pop(context);
-                  final player = _selected!;
-                  final nowEpoch = widget.time.nowEpoch;
-                  try {
-                    await widget.api.addSession(
-                      Session(
-                        sessionId: 0,
-                        playerId: player.playerId,
-                        name: player.name,
-                        pokerTableId: widget.table.pokerTableId,
-                        seatNumber: widget.seatNum,
-                        startEpoch: nowEpoch,
-                        isPrepaid: _isPrepaid,
-                        prepayAmount: _isPrepaid ? _targetPrepay : 0,
-                        hourlyRate: player.hourlyRate,
-                      ),
-                      nowEpoch,
-                    );
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text("Error: $e"),
-                            backgroundColor: Colors.red),
-                      );
-                    }
-                  }
-                },
-          child: const Text("Seat Player"),
-        ),
-      ],
     );
   }
 }
