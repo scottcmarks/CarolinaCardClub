@@ -112,15 +112,11 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // In tablet mode, shrink the usable area by the seat radius on each side
-        // so 80x80 seats are never clipped by the widget boundary
-        const double tabletSeatRadius = 40.0;
-        final double w = widget.isTabletMode
-            ? constraints.maxWidth - tabletSeatRadius * 2
-            : constraints.maxWidth;
-        final double h = widget.isTabletMode
-            ? constraints.maxHeight - tabletSeatRadius * 2
-            : constraints.maxHeight;
+        // Shrink the usable area by the seat radius on each side so seats are
+        // never clipped at the edges (40px radius in tablet mode, 20px otherwise).
+        final double seatRadius = widget.isTabletMode ? 40.0 : 20.0;
+        final double w = constraints.maxWidth - seatRadius * 2;
+        final double h = constraints.maxHeight - seatRadius * 2;
         return Stack(
           alignment: Alignment.center,
           children: [
