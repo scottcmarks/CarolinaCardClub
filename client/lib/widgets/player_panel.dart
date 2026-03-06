@@ -8,9 +8,9 @@ import '../providers/time_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/app_settings.dart';
-import 'start_session_dialog.dart';
 import 'settle_payment_dialog.dart';
 import 'player_card.dart';
+import '../pages/seating_flow_page.dart';
 
 class PlayerPanel extends StatelessWidget {
   const PlayerPanel({super.key});
@@ -90,9 +90,11 @@ class PlayerPanel extends StatelessWidget {
                             if (player.playerId == settings.floorManagerPlayerId) {
                               _autoSeatFloorManager(context, player, api, settings);
                             } else {
-                              showDialog(
-                                context: context,
-                                builder: (_) => StartSessionDialog(player: player),
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SeatingFlowPage(player: player),
+                                ),
                               );
                             }
                           },

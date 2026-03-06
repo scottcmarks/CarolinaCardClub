@@ -10,7 +10,15 @@ import 'seat_selector_widget.dart';
 
 class StartSessionDialog extends StatefulWidget {
   final PlayerSelectionItem player;
-  const StartSessionDialog({super.key, required this.player});
+  final int? initialTableId;
+  final int? initialSeat;
+
+  const StartSessionDialog({
+    super.key,
+    required this.player,
+    this.initialTableId,
+    this.initialSeat,
+  });
 
   @override
   State<StartSessionDialog> createState() => _StartSessionDialogState();
@@ -57,6 +65,9 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
       if (_currentBalance < 0) {
         _amountController.text = (_currentBalance * -1).toString();
       }
+
+      if (widget.initialTableId != null) _selectedTableId = widget.initialTableId;
+      if (widget.initialSeat != null) _selectedSeat = widget.initialSeat;
 
       _initialized = true;
 
@@ -122,6 +133,22 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 ),
               )
             else ...[
+              if (widget.initialTableId != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.table_restaurant, color: Colors.grey.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        "${activeTables.firstWhere((t) => t.pokerTableId == widget.initialTableId).tableName} — Seat ${widget.initialSeat}",
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               if (_currentBalance < 0)
                 Container(
                   width: double.infinity,
@@ -151,6 +178,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                   ),
                 ),
 
+              if (widget.initialTableId == null) ...[
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: "Select Table"),
                 initialValue: _selectedTableId,
@@ -190,6 +218,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                   occupiedSeats: api.getOccupiedSeatsAndNamesForTable(_selectedTableId!, seatingPlayerId: widget.player.playerId),
                   onSeatSelected: (seat) => setState(() => _selectedSeat = seat),
                 ),
+              ], // end if (widget.initialTableId == null)
 
               if (needsPaymentUI) ...[
                 const SizedBox(height: 16),
@@ -287,7 +316,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
 
               await api.addSession(session, startEpoch);
               api.selectPlayer(widget.player.playerId);
-              navigator.pop();
+              navigator.pop(true);
             } catch (e) {
               messenger.showSnackBar(
                 SnackBar(
