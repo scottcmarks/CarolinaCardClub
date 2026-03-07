@@ -141,31 +141,34 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: Stack(
+          alignment: Alignment.center,
           children: [
+            Text(title, textAlign: TextAlign.center),
             if (hasPrev)
-              ActionChip(
-                label: Text('← ${tables[_currentPage - 1].tableName}',
-                    style: const TextStyle(fontSize: 12)),
-                padding: EdgeInsets.zero,
-                onPressed: () => _pageController.animateToPage(_currentPage - 1,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut),
-              )
-            else
-              const SizedBox(width: 80),
-            Expanded(child: Text(title, textAlign: TextAlign.center)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ActionChip(
+                  label: Text('← ${tables[_currentPage - 1].tableName}',
+                      style: const TextStyle(fontSize: 12)),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _pageController.animateToPage(_currentPage - 1,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut),
+                ),
+              ),
             if (hasNext)
-              ActionChip(
-                label: Text('${tables[_currentPage + 1].tableName} →',
-                    style: const TextStyle(fontSize: 12)),
-                padding: EdgeInsets.zero,
-                onPressed: () => _pageController.animateToPage(_currentPage + 1,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut),
-              )
-            else
-              const SizedBox(width: 80),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ActionChip(
+                  label: Text('${tables[_currentPage + 1].tableName} →',
+                      style: const TextStyle(fontSize: 12)),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _pageController.animateToPage(_currentPage + 1,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut),
+                ),
+              ),
           ],
         ),
       ),
