@@ -7,6 +7,7 @@ import '../providers/time_provider.dart';
 import '../models/poker_table.dart';
 import '../models/session.dart';
 import '../models/player_selection_item.dart';
+import '../providers/app_settings_provider.dart';
 import '../widgets/table_oval_widget.dart';
 import '../widgets/real_time_clock.dart';
 import '../widgets/player_picker_dialog.dart';
@@ -339,9 +340,18 @@ class TabletTablePage extends StatelessWidget {
   // ── Seat a Player ─────────────────────────────────────────────────────────
 
   void _showSeatPlayer(BuildContext context, int seatNum) async {
+    final settings =
+        Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
+    final isReservedSeat = settings.floorManagerPlayerId != null &&
+        seatNum == settings.floorManagerReservedSeat &&
+        table.pokerTableId == settings.floorManagerReservedTable;
+
     final player = await showDialog<PlayerSelectionItem>(
       context: context,
-      builder: (_) => const PlayerPickerDialog(),
+      builder: (_) => PlayerPickerDialog(
+        floorManagerPlayerId: settings.floorManagerPlayerId,
+        floorManagerOnly: isReservedSeat,
+      ),
     );
     if (player == null || !context.mounted) return;
 
