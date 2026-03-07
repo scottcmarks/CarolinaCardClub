@@ -7,7 +7,6 @@ import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
-import '../pages/tablet_table_page.dart';
 import '../pages/seating_flow_page.dart';
 
 class SessionPanel extends StatelessWidget {
