@@ -115,33 +115,34 @@ class _TabletTablePageState extends State<TabletTablePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: Stack(
+          alignment: Alignment.center,
           children: [
+            Text(widget.tables[idx].tableName, textAlign: TextAlign.center),
             if (hasPrev)
-              ActionChip(
-                label: Text('← ${widget.tables[idx - 1].tableName}',
-                    style: const TextStyle(fontSize: 12)),
-                padding: EdgeInsets.zero,
-                onPressed: () => _pageController.animateToPage(idx - 1,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut),
-              )
-            else
-              const SizedBox(width: 80),
-            Expanded(
-              child: Text(widget.tables[idx].tableName, textAlign: TextAlign.center),
-            ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ActionChip(
+                  label: Text('← ${widget.tables[idx - 1].tableName}',
+                      style: const TextStyle(fontSize: 12)),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _pageController.animateToPage(idx - 1,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut),
+                ),
+              ),
             if (hasNext)
-              ActionChip(
-                label: Text('${widget.tables[idx + 1].tableName} →',
-                    style: const TextStyle(fontSize: 12)),
-                padding: EdgeInsets.zero,
-                onPressed: () => _pageController.animateToPage(idx + 1,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut),
-              )
-            else
-              const SizedBox(width: 80),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ActionChip(
+                  label: Text('${widget.tables[idx + 1].tableName} →',
+                      style: const TextStyle(fontSize: 12)),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _pageController.animateToPage(idx + 1,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut),
+                ),
+              ),
           ],
         ),
         actions: [
