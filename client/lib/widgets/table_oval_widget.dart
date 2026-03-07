@@ -169,28 +169,26 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
 
           List<Widget> children = [];
 
-          // Table oval
+          // Full felt-green background
+          children.add(Positioned.fill(child: ColoredBox(color: Colors.green.shade800)));
+
+          // Table superellipse (Lamé curve, n=3)
           children.add(
-            Positioned(
-              left: 70, right: 70, top: 70, bottom: 70,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.green.shade800,
-                  borderRadius: BorderRadius.all(Radius.elliptical(radiusX, radiusY)),
-                  border: Border.all(color: Colors.brown.shade900, width: 6),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    widget.tableName,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(color: Colors.black45, blurRadius: 2, offset: Offset(1, 1))],
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(70),
+                child: CustomPaint(
+                  painter: const _SuperellipsePainter(),
+                  child: Center(
+                    child: Text(
+                      widget.tableName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        shadows: [Shadow(color: Colors.black45, blurRadius: 2, offset: Offset(1, 1))],
+                      ),
                     ),
                   ),
                 ),
@@ -201,14 +199,12 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
           // Seats
           for (int i = 0; i < widget.maxSeats; i++) {
             final seatNum = i + 1;
-            final angle = -pi / 2 + (2 * pi * i / widget.maxSeats);
-            const seatSize = 90.0;
-            const tabletSeatSize = 95.0;
-            final size = widget.isTabletMode ? tabletSeatSize : seatSize;
-            final half = size / 2;
-            final orbitScale = widget.isTabletMode ? 0.85 : 1.0;
-            final x = centerX + radiusX * orbitScale * cos(angle) - half;
-            final y = centerY + radiusY * orbitScale * sin(angle) - half;
+            final angle = pi + 2 * pi * (i - 6) / widget.maxSeats;
+            const seatW = 120.0;
+            const seatH = 75.0;
+            const orbitScale = 0.78;
+            final x = centerX + radiusX * orbitScale * cos(angle) - seatW / 2;
+            final y = centerY + radiusY * orbitScale * sin(angle) - seatH / 2;
 
             final occupantName = widget.controller.name(seatNum);
             final seatData = widget.controller.data(seatNum);
@@ -219,8 +215,8 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
                 left: x,
                 top: y,
                 child: widget.isTabletMode
-                    ? _buildTabletSeat(seatNum, size, seatData)
-                    : _buildSelectorSeat(seatNum, size, occupantName, isOccupied),
+                    ? _buildTabletSeat(seatNum, seatW, seatH, seatData)
+                    : _buildSelectorSeat(seatNum, seatW, seatH, occupantName, isOccupied),
               ),
             );
           }
@@ -236,7 +232,7 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
 
   // ── Selector mode seat (original style) ──────────────────────────────────
 
-  Widget _buildSelectorSeat(int seatNum, double size, String? occupantName, bool isOccupied) {
+  Widget _buildSelectorSeat(int seatNum, double w, double h, String? occupantName, bool isOccupied) {
     final isReserved = occupantName == "Reserved";
     final isSelected = widget.selectedSeat == seatNum;
 
@@ -250,7 +246,7 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
     return GestureDetector(
       onTap: () => widget.touched(seatNum, occupantName),
       child: Container(
-        width: size, height: size,
+        width: w, height: h,
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(8),
@@ -287,7 +283,7 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
 
   // ── Tablet mode seat ──────────────────────────────────────────────────────
 
-  Widget _buildTabletSeat(int seatNum, double size, SeatData? data) {
+  Widget _buildTabletSeat(int seatNum, double w, double h, SeatData? data) {
     final state = widget.getSeatState!(seatNum);
     final color = _seatColor(state, _flashController.value);
     final textColor = state == SeatState.away ? Colors.black54 : Colors.white;
@@ -297,7 +293,7 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
     return GestureDetector(
       onTap: () => widget.touched(seatNum, data?.name),
       child: Container(
-        width: size, height: size,
+        width: w, height: h,
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(12),
@@ -345,4 +341,52 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
       ),
     );
   }
+}
+
+// ── Superellipse (Lamé curve, n=3) table painter ──────────────────────────────
+
+class _SuperellipsePainter extends CustomPainter {
+  const _SuperellipsePainter();
+
+  // Parametric superellipse: x(t) = a·sign(cos t)·|cos t|^(2/n), n=3 → exp=2/3
+  static Path _buildPath(Size size) {
+    const exp = 2.0 / 3.0;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final a = size.width / 2;
+    final b = size.height / 2;
+    const steps = 360;
+    final path = Path();
+    for (int i = 0; i <= steps; i++) {
+      final t = 2 * pi * i / steps;
+      final cosT = cos(t);
+      final sinT = sin(t);
+      final x = cx + a * cosT.sign * pow(cosT.abs(), exp).toDouble();
+      final y = cy + b * sinT.sign * pow(sinT.abs(), exp).toDouble();
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _buildPath(size);
+    canvas.drawShadow(path.shift(const Offset(0, 5)), Colors.black26, 10, false);
+    canvas.drawPath(path, Paint()..color = Colors.green.shade800);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SuperellipsePainter oldDelegate) => false;
 }
