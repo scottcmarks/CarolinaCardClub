@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 
 class SetClockDialog extends StatefulWidget {
@@ -38,6 +39,7 @@ class _SetClockDialogState extends State<SetClockDialog> {
   @override
   Widget build(BuildContext context) {
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    final api = Provider.of<ApiProvider>(context, listen: false);
 
     return AlertDialog(
       title: const Text('Set Clock'),
@@ -54,24 +56,30 @@ class _SetClockDialogState extends State<SetClockDialog> {
         ),
         FilledButton(
           child: const Text('Set'),
-          onPressed: () {
+          onPressed: () async {
             try {
               final newTime = _dateTimeFormat.parse(_timeController.text);
-
-              final difference = newTime.difference(_initialTime);
-              final currentOffset = timeProvider.offset;
-              final newTotalOffset = currentOffset + difference;
-              timeProvider.setOffset(newTotalOffset);
-
-              Navigator.of(context).pop();
+              final newTotalOffset =
+                  timeProvider.offset + newTime.difference(_initialTime);
+              await api.setClockOffset(newTotalOffset.inSeconds);
+              if (context.mounted) Navigator.of(context).pop();
+            } on FormatException {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Colors.red,
+                    content: Text('Invalid format. Please use yyyy-MM-dd HH:mm:ss.'),
+                  ),
+                );
+              }
             } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  backgroundColor: Colors.red,
-                  content:
-                      Text('Invalid format. Please use yyyy-MM-dd HH:mm:ss.'),
-                ),
-              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      backgroundColor: Colors.red,
+                      content: Text('Failed to set clock: $e')),
+                );
+              }
             }
           },
         ),

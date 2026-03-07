@@ -54,7 +54,7 @@ class _SubnetScanDialogState extends State<SubnetScanDialog> {
     final provider = Provider.of<AppSettingsProvider>(context, listen: false);
     provider.updateSettings(provider.currentSettings.copyWith(serverIp: ip));
     final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
-    Provider.of<ApiProvider>(context, listen: false).reloadServerDatabase(nowEpoch);
+    Provider.of<ApiProvider>(context, listen: false).reloadAll(nowEpoch);
     if (mounted) Navigator.pop(context);
   }
 
