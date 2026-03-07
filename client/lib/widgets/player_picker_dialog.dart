@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/player_selection_item.dart';
 import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 
