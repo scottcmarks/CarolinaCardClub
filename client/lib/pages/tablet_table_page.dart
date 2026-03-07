@@ -22,12 +22,8 @@ class TabletTablePage extends StatelessWidget {
   // ── Seat state calculation ─────────────────────────────────────────────────
 
   SeatState _getSeatState(int seatNum, ApiProvider api, TimeProvider time) {
-    final sessions = api.sessions.where((s) =>
-        s.pokerTableId == table.pokerTableId &&
-        s.seatNumber == seatNum &&
-        s.stopTime == null);
-    if (sessions.isEmpty) return SeatState.empty;
-    final session = sessions.first;
+    final session = api.activeSessionAt(table.pokerTableId, seatNum);
+    if (session == null) return SeatState.empty;
 
     if (session.isAway) {
       final awaySeconds =
@@ -126,10 +122,7 @@ class TabletTablePage extends StatelessWidget {
           if (state == SeatState.empty) {
             _showSeatPlayer(context, seatNum);
           } else {
-            final session = api.sessions.firstWhere((s) =>
-                s.pokerTableId == table.pokerTableId &&
-                s.seatNumber == seatNum &&
-                s.stopTime == null);
+            final session = api.activeSessionAt(table.pokerTableId, seatNum)!;
             _showSeatActions(context, session, state, api, time);
           }
         },
@@ -342,9 +335,7 @@ class TabletTablePage extends StatelessWidget {
   void _showSeatPlayer(BuildContext context, int seatNum) async {
     final settings =
         Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
-    final isReservedSeat = settings.floorManagerPlayerId != null &&
-        seatNum == settings.floorManagerReservedSeat &&
-        table.pokerTableId == settings.floorManagerReservedTable;
+    final isReservedSeat = settings.isFloorManagerReservedSeat(table.pokerTableId, seatNum);
 
     final player = await showDialog<PlayerSelectionItem>(
       context: context,

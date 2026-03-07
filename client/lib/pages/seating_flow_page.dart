@@ -39,9 +39,7 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
           widget.player!.playerId == settings.floorManagerPlayerId;
       for (int s = 1; s <= t.capacity; s++) {
         if (occupied.contains(s)) continue;
-        final isReserved = t.pokerTableId == settings.floorManagerReservedTable &&
-            s == settings.floorManagerReservedSeat;
-        if (isReserved && !isFloorManager) continue;
+        if (settings.isFloorManagerReservedSeat(t.pokerTableId, s) && !isFloorManager) continue;
         return true;
       }
       return false;
@@ -73,9 +71,7 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
             .toSet();
         for (int s = 1; s <= table.capacity; s++) {
           if (occupied.contains(s)) continue;
-          final isReserved = table.pokerTableId == settings.floorManagerReservedTable &&
-              s == settings.floorManagerReservedSeat;
-          if (isReserved && !isFloorManager) continue;
+          if (settings.isFloorManagerReservedSeat(table.pokerTableId, s) && !isFloorManager) continue;
           _initialPage = i;
           _highlightedSeat = s;
           break outer;
