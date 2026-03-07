@@ -96,9 +96,13 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
     PlayerSelectionItem? player = widget.player;
 
     if (player == null) {
+      final settings =
+          Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
       player = await showDialog<PlayerSelectionItem>(
         context: context,
-        builder: (_) => const PlayerPickerDialog(),
+        builder: (_) => PlayerPickerDialog(
+          floorManagerPlayerId: settings.floorManagerPlayerId,
+        ),
       );
       if (player == null || !mounted) return;
     }

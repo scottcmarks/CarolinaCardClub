@@ -6,7 +6,14 @@ import '../providers/api_provider.dart';
 import '../providers/time_provider.dart';
 
 class PlayerPickerDialog extends StatelessWidget {
-  const PlayerPickerDialog({super.key});
+  final int? floorManagerPlayerId;
+  final bool floorManagerOnly;
+
+  const PlayerPickerDialog({
+    super.key,
+    this.floorManagerPlayerId,
+    this.floorManagerOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,9 +25,22 @@ class PlayerPickerDialog extends StatelessWidget {
         .map((s) => s.playerId)
         .toSet();
 
-    final available = api.players
+    var available = api.players
         .where((p) => !activePlayerIds.contains(p.playerId))
         .toList();
+
+    if (floorManagerOnly) {
+      available = available
+          .where((p) => p.playerId == floorManagerPlayerId)
+          .toList();
+    } else if (floorManagerPlayerId != null) {
+      final fmIndex =
+          available.indexWhere((p) => p.playerId == floorManagerPlayerId);
+      if (fmIndex > 0) {
+        final fm = available.removeAt(fmIndex);
+        available.add(fm);
+      }
+    }
 
     return AlertDialog(
       title: const Text("Select Player"),
