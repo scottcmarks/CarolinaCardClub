@@ -55,7 +55,7 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset('assets/CCCBanner.png', fit: BoxFit.contain),
+        title: Image.asset('assets/CCCBanner.png', height: 40, fit: BoxFit.contain),
         elevation: 2,
         actions: [
           Container(

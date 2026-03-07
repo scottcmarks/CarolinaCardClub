@@ -8,12 +8,21 @@ import '../providers/time_provider.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/app_settings.dart';
+import 'name_filter_keyboard.dart';
 import 'settle_payment_dialog.dart';
 import 'player_card.dart';
 import '../pages/seating_flow_page.dart';
 
-class PlayerPanel extends StatelessWidget {
+class PlayerPanel extends StatefulWidget {
   const PlayerPanel({super.key});
+
+  @override
+  State<PlayerPanel> createState() => _PlayerPanelState();
+}
+
+class _PlayerPanelState extends State<PlayerPanel> {
+  bool _showKeyboard = false;
+  String _nameFilter = '';
 
   @override
   Widget build(BuildContext context) {
@@ -21,14 +30,37 @@ class PlayerPanel extends StatelessWidget {
     final timeProvider = Provider.of<TimeProvider>(context);
 
     final nowEpoch = timeProvider.nowEpoch;
-    final players = api.players;
+    final allPlayers = api.players;
+    final players = _nameFilter.isEmpty
+        ? allPlayers
+        : allPlayers.where((p) => p.name.toLowerCase().startsWith(_nameFilter)).toList();
 
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text("Players", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            children: [
+              const Text("Players", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(
+                icon: _showKeyboard
+                    ? const Icon(Icons.close)
+                    : const Text('?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                tooltip: 'Filter by name',
+                onPressed: () => setState(() {
+                  _showKeyboard = !_showKeyboard;
+                  if (!_showKeyboard) _nameFilter = '';
+                }),
+              ),
+            ],
+          ),
         ),
+        if (_showKeyboard)
+          NameFilterKeyboard(
+            filter: _nameFilter,
+            onFilterChanged: (f) => setState(() => _nameFilter = f),
+          ),
         const Divider(height: 1),
         Expanded(
           child: players.isEmpty
@@ -113,7 +145,7 @@ class PlayerPanel extends StatelessWidget {
     BuildContext context,
     PlayerSelectionItem player,
     ApiProvider api,
-    AppSettings settings
+    AppSettings settings,
   ) async {
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
@@ -131,7 +163,7 @@ class PlayerPanel extends StatelessWidget {
     );
 
     try {
-      await api.addSession(fmSession, nowEpoch); // <-- nowEpoch injected here
+      await api.addSession(fmSession, nowEpoch);
       api.selectPlayer(player.playerId);
     } catch (e) {
       if (context.mounted) {
