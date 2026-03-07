@@ -84,6 +84,26 @@ class ApiProvider with ChangeNotifier {
     return currentBalance;
   }
 
+  /// Returns the epoch to use as session start, clamped to the club session
+  /// open time when that is later than now (e.g. backdated session start).
+  int effectiveStartEpoch(int nowEpoch) {
+    if (isClubSessionOpen &&
+        clubSessionStartEpoch != null &&
+        clubSessionStartEpoch! > nowEpoch) {
+      return clubSessionStartEpoch!;
+    }
+    return nowEpoch;
+  }
+
+  /// Returns the active session occupying [tableId]/[seatNum], or null.
+  Session? activeSessionAt(int tableId, int seatNum) {
+    final matches = sessions.where((s) =>
+        s.pokerTableId == tableId &&
+        s.seatNumber == seatNum &&
+        s.stopTime == null);
+    return matches.isEmpty ? null : matches.first;
+  }
+
   void selectPlayer(int? playerId) {
     selectedPlayerId = playerId;
     notifyListeners();

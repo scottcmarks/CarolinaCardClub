@@ -117,14 +117,8 @@ class PlayerPanel extends StatelessWidget {
   ) async {
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
-    int nowEpoch = timeProvider.nowEpoch;
-    int startEpoch = nowEpoch;
-
-    if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
-      if (api.clubSessionStartEpoch! > startEpoch) {
-        startEpoch = api.clubSessionStartEpoch!;
-      }
-    }
+    final int nowEpoch = timeProvider.nowEpoch;
+    final int startEpoch = api.effectiveStartEpoch(nowEpoch);
 
     final fmSession = Session(
       sessionId: 0,

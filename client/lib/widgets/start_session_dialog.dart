@@ -277,12 +277,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
             final navigator = Navigator.of(context);
             final messenger = ScaffoldMessenger.of(context);
 
-            int startEpoch = timeProvider.nowEpoch;
-            if (api.isClubSessionOpen && api.clubSessionStartEpoch != null) {
-              if (api.clubSessionStartEpoch! > startEpoch) {
-                startEpoch = api.clubSessionStartEpoch!;
-              }
-            }
+            final int startEpoch = api.effectiveStartEpoch(timeProvider.nowEpoch);
 
             try {
               if (paymentAmount != 0) {

@@ -68,6 +68,11 @@ class AppSettings {
     };
   }
 
+  bool isFloorManagerReservedSeat(int tableId, int seatNum) =>
+      floorManagerPlayerId != null &&
+      tableId == floorManagerReservedTable &&
+      seatNum == floorManagerReservedSeat;
+
   factory AppSettings.fromMap(Map<String, dynamic> map) {
     return AppSettings(
       serverIp: map['serverIp'] ?? Shared.defaultServerIp,
