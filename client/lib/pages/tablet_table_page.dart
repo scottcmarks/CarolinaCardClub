@@ -14,14 +14,36 @@ import '../widgets/player_picker_dialog.dart';
 import '../widgets/start_session_dialog.dart';
 import 'package:shared/shared.dart';
 
-class TabletTablePage extends StatelessWidget {
-  final PokerTable table;
+class TabletTablePage extends StatefulWidget {
+  final List<PokerTable> tables;
+  final int initialIndex;
 
-  const TabletTablePage({super.key, required this.table});
+  const TabletTablePage({super.key, required this.tables, this.initialIndex = 0});
+
+  @override
+  State<TabletTablePage> createState() => _TabletTablePageState();
+}
+
+class _TabletTablePageState extends State<TabletTablePage> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   // ── Seat state calculation ─────────────────────────────────────────────────
 
-  SeatState _getSeatState(int seatNum, ApiProvider api, TimeProvider time) {
+  SeatState _getSeatState(int seatNum, PokerTable table, ApiProvider api, TimeProvider time) {
     final session = api.activeSessionAt(table.pokerTableId, seatNum);
     if (session == null) return SeatState.empty;
 
@@ -54,7 +76,7 @@ class TabletTablePage extends StatelessWidget {
 
   // ── Build controller from current sessions ─────────────────────────────────
 
-  TableOvalController _buildController(ApiProvider api, TimeProvider time) {
+  TableOvalController _buildController(PokerTable table, ApiProvider api, TimeProvider time) {
     final controller = TableOvalController();
     for (final session in api.sessions.where((s) =>
         s.pokerTableId == table.pokerTableId &&
@@ -86,11 +108,42 @@ class TabletTablePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
     final time = Provider.of<TimeProvider>(context);
-    final controller = _buildController(api, time);
+
+    final idx = _currentIndex.clamp(0, widget.tables.length - 1);
+    final hasPrev = idx > 0;
+    final hasNext = idx < widget.tables.length - 1;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(table.tableName),
+        title: Row(
+          children: [
+            if (hasPrev)
+              ActionChip(
+                label: Text('← ${widget.tables[idx - 1].tableName}',
+                    style: const TextStyle(fontSize: 12)),
+                padding: EdgeInsets.zero,
+                onPressed: () => _pageController.animateToPage(idx - 1,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut),
+              )
+            else
+              const SizedBox(width: 80),
+            Expanded(
+              child: Text(widget.tables[idx].tableName, textAlign: TextAlign.center),
+            ),
+            if (hasNext)
+              ActionChip(
+                label: Text('${widget.tables[idx + 1].tableName} →',
+                    style: const TextStyle(fontSize: 12)),
+                padding: EdgeInsets.zero,
+                onPressed: () => _pageController.animateToPage(idx + 1,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut),
+              )
+            else
+              const SizedBox(width: 80),
+          ],
+        ),
         actions: [
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -111,20 +164,29 @@ class TabletTablePage extends StatelessWidget {
           ),
         ],
       ),
-      body: TableOvalWidget(
-        tableName: table.tableName,
-        maxSeats: table.capacity,
-        controller: controller,
-        getSeatState: (seatNum) => _getSeatState(seatNum, api, time),
-        getNowEpoch: () => time.nowEpoch,
-        touched: (seatNum, occupantName) {
-          final state = _getSeatState(seatNum, api, time);
-          if (state == SeatState.empty) {
-            _showSeatPlayer(context, seatNum);
-          } else {
-            final session = api.activeSessionAt(table.pokerTableId, seatNum)!;
-            _showSeatActions(context, session, state, api, time);
-          }
+      body: PageView.builder(
+        controller: _pageController,
+        onPageChanged: (i) => setState(() => _currentIndex = i),
+        itemCount: widget.tables.length,
+        itemBuilder: (ctx, pageIdx) {
+          final table = widget.tables[pageIdx];
+          final controller = _buildController(table, api, time);
+          return TableOvalWidget(
+            tableName: table.tableName,
+            maxSeats: table.capacity,
+            controller: controller,
+            getSeatState: (seatNum) => _getSeatState(seatNum, table, api, time),
+            getNowEpoch: () => time.nowEpoch,
+            touched: (seatNum, occupantName) {
+              final state = _getSeatState(seatNum, table, api, time);
+              if (state == SeatState.empty) {
+                _showSeatPlayer(context, seatNum, table);
+              } else {
+                final session = api.activeSessionAt(table.pokerTableId, seatNum)!;
+                _showSeatActions(context, session, state, api, time, table);
+              }
+            },
+          );
         },
       ),
     );
@@ -133,7 +195,7 @@ class TabletTablePage extends StatelessWidget {
   // ── Seat actions bottom sheet ──────────────────────────────────────────────
 
   void _showSeatActions(BuildContext context, Session session, SeatState state,
-      ApiProvider api, TimeProvider time) {
+      ApiProvider api, TimeProvider time, PokerTable table) {
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
@@ -171,7 +233,7 @@ class TabletTablePage extends StatelessWidget {
               title: const Text('Move Seat'),
               onTap: () {
                 Navigator.pop(ctx);
-                _showMoveSeat(context, session, api, time);
+                _showMoveSeat(context, session, api, time, table);
               },
             ),
             ListTile(
@@ -283,7 +345,7 @@ class TabletTablePage extends StatelessWidget {
   // ── Move Seat ─────────────────────────────────────────────────────────────
 
   void _showMoveSeat(BuildContext context, Session session, ApiProvider api,
-      TimeProvider time) {
+      TimeProvider time, PokerTable table) {
     final occupiedSeats = api.getOccupiedSeatsAndNamesForTable(
         table.pokerTableId,
         seatingPlayerId: session.playerId);
@@ -332,7 +394,7 @@ class TabletTablePage extends StatelessWidget {
 
   // ── Seat a Player ─────────────────────────────────────────────────────────
 
-  void _showSeatPlayer(BuildContext context, int seatNum) async {
+  void _showSeatPlayer(BuildContext context, int seatNum, PokerTable table) async {
     final settings =
         Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
     final isReservedSeat = settings.isFloorManagerReservedSeat(table.pokerTableId, seatNum);
