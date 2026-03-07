@@ -25,6 +25,7 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
   late PageController _pageController;
   int? _highlightedSeat;
   int _initialPage = 0;
+  int _currentPage = 0;
 
   // Returns only active tables that have at least one seat available.
   List<PokerTable> _availableTables(ApiProvider api, AppSettings settings) {
@@ -79,6 +80,7 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
       }
     }
 
+    _currentPage = _initialPage;
     _pageController = PageController(initialPage: _initialPage);
   }
 
@@ -134,10 +136,42 @@ class _SeatingFlowPageState extends State<SeatingFlowPage> {
       );
     }
 
+    final hasPrev = _currentPage > 0;
+    final hasNext = _currentPage < tables.length - 1;
+
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            if (hasPrev)
+              ActionChip(
+                label: Text('← ${tables[_currentPage - 1].tableName}',
+                    style: const TextStyle(fontSize: 12)),
+                padding: EdgeInsets.zero,
+                onPressed: () => _pageController.animateToPage(_currentPage - 1,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut),
+              )
+            else
+              const SizedBox(width: 80),
+            Expanded(child: Text(title, textAlign: TextAlign.center)),
+            if (hasNext)
+              ActionChip(
+                label: Text('${tables[_currentPage + 1].tableName} →',
+                    style: const TextStyle(fontSize: 12)),
+                padding: EdgeInsets.zero,
+                onPressed: () => _pageController.animateToPage(_currentPage + 1,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut),
+              )
+            else
+              const SizedBox(width: 80),
+          ],
+        ),
+      ),
       body: PageView.builder(
         controller: _pageController,
+        onPageChanged: (idx) => setState(() => _currentPage = idx),
         itemCount: tables.length,
         itemBuilder: (ctx, idx) => TableViewPage(
           table: tables[idx],
