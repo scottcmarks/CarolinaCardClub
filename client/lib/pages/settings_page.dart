@@ -6,10 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:shared/shared.dart';
 import '../providers/api_provider.dart';
 import '../providers/app_settings_provider.dart';
-import '../providers/time_provider.dart';
 import '../widgets/subnet_scan_dialog.dart';
-import '../widgets/set_clock_dialog.dart';
-import '../widgets/table_closing_wizard.dart';
+import 'maintenance_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -36,7 +34,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _apiKeyController = TextEditingController(text: s.localApiKey);
     _timeoutController = TextEditingController(text: s.scanTimeoutMs.toString());
     _fmIdController = TextEditingController(text: s.floorManagerPlayerId?.toString() ?? '');
-
     _hourController = TextEditingController(text: Shared.defaultSessionHour.toString());
     _minuteController = TextEditingController(text: Shared.defaultSessionMinute.toString());
   }
@@ -65,21 +62,24 @@ class _SettingsPageState extends State<SettingsPage> {
       floorManagerPlayerId: int.tryParse(_fmIdController.text),
     ));
 
-    int hour = int.tryParse(_hourController.text) ?? Shared.defaultSessionHour;
-    int minute = int.tryParse(_minuteController.text) ?? Shared.defaultSessionMinute;
+    final hour = int.tryParse(_hourController.text) ?? Shared.defaultSessionHour;
+    final minute = int.tryParse(_minuteController.text) ?? Shared.defaultSessionMinute;
 
     try {
       await api.updateDefaultSessionTime(hour, minute);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("All Configuration & Defaults Saved"), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('All Configuration & Defaults Saved'),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text("Failed to save defaults to server: $e"), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Failed to save defaults to server: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -87,20 +87,19 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final api = Provider.of<ApiProvider>(context);
-
     return Scaffold(
-      appBar: AppBar(title: const Text("System Settings")),
+      appBar: AppBar(title: const Text('System Settings')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text("Network Configuration", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Network Configuration',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
-          _buildTextField("Server IP", _ipController, Shared.defaultServerIp),
-          _buildIntField("Server Port", _portController, Shared.defaultServerPort.toString()),
-          _buildTextField("Local API Key", _apiKeyController, "Secret Key"),
-          _buildIntField("Scan Timeout (ms)", _timeoutController, Shared.defaultScanTimeout.toString()),
-
+          _buildTextField('Server IP', _ipController, Shared.defaultServerIp),
+          _buildIntField('Server Port', _portController, Shared.defaultServerPort.toString()),
+          _buildTextField('Local API Key', _apiKeyController, 'Secret Key'),
+          _buildIntField(
+              'Scan Timeout (ms)', _timeoutController, Shared.defaultScanTimeout.toString()),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () => showDialog(
@@ -108,129 +107,46 @@ class _SettingsPageState extends State<SettingsPage> {
               builder: (context) => const SubnetScanDialog(),
             ),
             icon: const Icon(Icons.radar),
-            label: const Text("Auto-Discover Server"),
+            label: const Text('Auto-Discover Server'),
           ),
 
           const SizedBox(height: 24),
-          const Text("Club Session Start Time", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Club Session Start Time',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _buildIntField("Hour (24h)", _hourController, Shared.defaultSessionHour.toString())),
+              Expanded(
+                  child: _buildIntField(
+                      'Hour (24h)', _hourController, Shared.defaultSessionHour.toString())),
               const SizedBox(width: 16),
-              Expanded(child: _buildIntField("Minute", _minuteController, Shared.defaultSessionMinute.toString())),
+              Expanded(
+                  child: _buildIntField(
+                      'Minute', _minuteController, Shared.defaultSessionMinute.toString())),
             ],
           ),
 
           const SizedBox(height: 24),
-          const Text("Floor Manager Configuration", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Floor Manager Configuration',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
-          _buildIntField("Manager Player ID", _fmIdController, "Default: ${Shared.defaultFloorManagerPlayerId}"),
+          _buildIntField('Manager Player ID', _fmIdController,
+              'Default: ${Shared.defaultFloorManagerPlayerId}'),
 
           const Divider(height: 48),
-          const Text("Database Maintenance", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.blue.shade800,
-              padding: const EdgeInsets.symmetric(vertical: 12)
-            ),
-            icon: const Icon(Icons.cloud_upload),
-            label: const Text("Backup Database to Remote Vault"),
-            onPressed: () async {
-              try {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Initiating backup..."))
-                );
-                await api.triggerRemoteBackup();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Backup Successful!"), backgroundColor: Colors.green)
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Backup Failed: $e"), backgroundColor: Colors.red)
-                  );
-                }
-              }
-            },
-          ),
-
-          const Divider(height: 48),
-          const Text("System Debugging", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 8),
-          Consumer<TimeProvider>(
-            builder: (context, time, _) => Card(
-              color: Colors.orange.shade50,
-              child: ListTile(
-                leading: const Icon(Icons.history_toggle_off, color: Colors.orange),
-                title: const Text("Game Clock Offset"),
-                subtitle: Text("${time.offset.inMinutes} minutes from system time"),
-                trailing: ElevatedButton(
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (_) => const SetClockDialog(),
-                  ),
-                  child: const Text("Set Clock"),
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 32),
-
-          const Text("Table Management", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 8),
-          Card(
-            elevation: 1,
-            child: Column(
-              children: api.tables.map((table) {
-                return Column(
-                  children: [
-                    SwitchListTile(
-                      title: Text(table.tableName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text("Capacity: ${table.capacity} seats"),
-                      value: table.isActive,
-                      activeThumbColor: Colors.green,
-                      onChanged: (val) {
-                        final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
-
-                        if (val) {
-                          api.toggleTableStatus(table.pokerTableId, true, nowEpoch);
-                        } else {
-                          final activeSessions = api.sessions.where(
-                            (s) => s.pokerTableId == table.pokerTableId && s.stopTime == null
-                          ).toList();
-
-                          if (activeSessions.isEmpty) {
-                            api.toggleTableStatus(table.pokerTableId, false, nowEpoch);
-                          } else {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (_) => TableClosingWizard(
-                                closingTable: table,
-                                strandedSessions: activeSessions,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                    const Divider(height: 0),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-
-          const SizedBox(height: 32),
           ElevatedButton(
             onPressed: _save,
             style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-            child: const Text("Save All Configuration"),
+            child: const Text('Save All Configuration'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MaintenancePage()),
+            ),
+            icon: const Icon(Icons.build_rounded),
+            label: const Text('Maintenance & Debugging'),
           ),
           const SizedBox(height: 32),
         ],
