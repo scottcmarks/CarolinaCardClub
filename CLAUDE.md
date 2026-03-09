@@ -86,3 +86,42 @@ The server can push/pull the DB file to `carolinacardclub.com/db_handler.php` vi
 - Right (expanded): `SessionPanel` — active/historical sessions
 
 Additional pages: `SettingsPage`, `SeatingFlowPage`, `TableViewPage`, `TabletTablePage`
+
+## Planned App Modes
+
+The client is being extended into three distinct operating modes, sharing a
+single codebase. A startup flag or config value selects the mode:
+
+| Mode | Flag | Responsibility |
+|---|---|---|
+| **admin** | `--admin` | Current app. Full club view, all sessions, settings, payments. |
+| **floor** | `--floor` | Table change requests, waiting list management, seating decisions. |
+| **tablet** | `--table <N>` | Runs at a specific table. Seat changes within the table, break/return, session start at empty seat, session transfer under floor direction. |
+
+Architecture: a shared `core/` layer (data models, API, WebSocket, shared
+widgets) composed by thin `AdminShell`, `FloorShell`, and `TabletShell`
+entry points. Avoid `if (mode == 'admin')` conditionals inside shared
+components — mode-specific behaviour belongs in the shells.
+
+See `CARD_ROOM_EVENTS.md` for the full broadcast event taxonomy.
+
+## Architecture Decision Records
+
+Significant design decisions are recorded in `adr/`. Read these before
+making structural changes.
+
+| # | Title | Status |
+|---|---|---|
+| [001](adr/001-app-modes-and-entry-points.md) | App modes and entry points | Decided |
+
+## Known Gaps
+
+- `POST /system/reload` and `POST /maintenance/restore` do **not** call
+  `_broadcastStateChanged()`. Clients connected at the time of a restore or
+  reload silently hold stale state. Fix: add `_broadcastStateChanged()` to
+  both handlers.
+
+- On WebSocket reconnect the server sends only `ack`. The client must
+  explicitly re-poll all REST endpoints (`/state`, `/sessions/panel`,
+  `/players/selection`, `/tables`) after receiving `ack`. Verify that
+  `DbConnectionProvider` does this on reconnect.

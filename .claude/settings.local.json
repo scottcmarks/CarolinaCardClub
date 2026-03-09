@@ -3,7 +3,8 @@
     "allow": [
       "Bash(flutter run:*)",
       "Bash(pgrep:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(flutter analyze:*)"
     ]
   }
 }

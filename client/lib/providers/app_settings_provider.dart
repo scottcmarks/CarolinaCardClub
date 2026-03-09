@@ -3,18 +3,23 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/app_config.dart';
 import '../models/app_settings.dart';
 
 class AppSettingsProvider with ChangeNotifier {
-  // This line caused the error "Required named parameter serverIp...".
-  // With the defaults added to AppSettings() above, this is now valid.
-  AppSettings _currentSettings = AppSettings();
+  AppSettings _currentSettings;
+  final AppConfig config;
 
   static const String _storageKey = 'ccc_app_settings';
 
   AppSettings get currentSettings => _currentSettings;
 
-  AppSettingsProvider() {
+  AppSettingsProvider(this.config)
+      : _currentSettings = AppSettings(
+          serverIp: config.serverIp,
+          serverPort: config.serverPort,
+          localApiKey: config.localApiKey,
+        ) {
     _loadSettings();
   }
 

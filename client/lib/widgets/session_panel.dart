@@ -51,7 +51,6 @@ class SessionPanel extends StatelessWidget {
 
     final bool showAll = api.showAllSessions;
     String title = isSessionOpen ? (showAll ? "All Sessions" : "Active Sessions") : "Session History";
-    String subtitle = isSessionOpen ? (showAll ? "All sessions" : "Active sessions only") : "All sessions";
 
     String playerInfo = "(All Players)";
     if (isPlayerSelected) {

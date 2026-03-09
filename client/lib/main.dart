@@ -5,23 +5,28 @@ import 'package:provider/provider.dart';
 import 'package:db_connection/db_connection.dart';
 import 'package:shared/shared.dart';
 
+import 'core/app_config.dart';
 import 'providers/api_provider.dart';
 import 'providers/app_settings_provider.dart';
 import 'providers/time_provider.dart';
 import 'pages/home_page.dart';
 
-void main() {
-  runApp(const CarolinaCardClubApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final config = await AppConfig.load();
+  runApp(CarolinaCardClubApp(config: config));
 }
 
 class CarolinaCardClubApp extends StatelessWidget {
-  const CarolinaCardClubApp({super.key});
+  final AppConfig config;
+
+  const CarolinaCardClubApp({super.key, required this.config});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
+        ChangeNotifierProvider(create: (_) => AppSettingsProvider(config)),
         ChangeNotifierProvider(create: (_) => TimeProvider()),
         ChangeNotifierProvider(create: (_) => DbConnectionProvider()),
 
