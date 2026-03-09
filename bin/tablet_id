@@ -1,1 +1,16 @@
-adb devices | sed -n s'/\(K7[0-9A-Z]*\).*device$/\1/p'
+#!/bin/bash 
+#set -xv
+case "${1}" in
+  k|K|k70|K70|"")
+    device='K70[0-9A-Z]*'
+    ;;
+  j|J|jxd|JXD)
+    device='JXD[0-9A-Z]*'
+    ;;
+  *)
+    echo usage: tablet_id {K70|JXD} >2
+    exit 1
+    ;;
+esac
+
+adb devices | sed -n s"/\(${device}\).*device$/\1/p"

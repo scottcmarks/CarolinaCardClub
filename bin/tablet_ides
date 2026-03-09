@@ -1,0 +1,7 @@
+K70='K70[0-9A-Z]*'
+
+JXD='JXD[0-9A-Z]*'
+
+adb devices | sed -n s"/\\(K70[0-9A-Z]*\\).*device$/\1/p"
+# adb devices | sed -n s"/\\(${K70}\\).*device$/\1\/p"
+# adb devices | sed -n s"/\\(${JXD}\\).*device$/\1\/p"
