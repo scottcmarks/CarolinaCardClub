@@ -26,6 +26,49 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Future<void> _toggleClubSession() async {
+    final api = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    final nowEpoch = timeProvider.nowEpoch;
+
+    try {
+      if (!api.isClubSessionOpen) {
+        await api.startClubSession(nowEpoch);
+      } else {
+        final bool? confirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext ctx) {
+            return AlertDialog(
+              title: const Text("Close Club Session?"),
+              content: const Text(
+                  "Are you sure you want to close the club session and end all table sessions?"),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text("OK"),
+                ),
+              ],
+            );
+          },
+        );
+        if (confirmed == true) {
+          await api.closeClubAndEndSessions(nowEpoch);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Session Toggle Error: $e")),
+        );
+      }
+    }
+  }
+
   Future<void> _refreshData() async {
     final api = Provider.of<ApiProvider>(context, listen: false);
     final timeProvider = Provider.of<TimeProvider>(context, listen: false);
@@ -51,112 +94,62 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
-    final timeProvider = Provider.of<TimeProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset('assets/CCCBanner.png', height: 40, fit: BoxFit.contain),
+        leadingWidth: 220,
+        leading: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Image.asset('assets/CCCBannerA.png', fit: BoxFit.contain, alignment: Alignment.centerLeft),
+        ),
+        flexibleSpace: const Center(child: RealTimeClock()),
         elevation: 2,
         actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: timeProvider.offset != Duration.zero
-                  ? Colors.orange.shade100
-                  : Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: timeProvider.offset != Duration.zero
-                    ? Colors.orange
-                    : Colors.blue.shade200,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.access_time,
-                  size: 16,
-                  color: timeProvider.offset != Duration.zero
-                      ? Colors.orange.shade900
-                      : Colors.blue.shade900
-                ),
-                const SizedBox(width: 8),
-                const RealTimeClock(),
-              ],
-            ),
-          ),
-
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshData,
-            tooltip: "Refresh Server Data",
-          ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Row(
-              children: [
-                const Text("Club Session", style: TextStyle(fontSize: 13)),
-                const SizedBox(width: 8),
-                Switch(
-                  value: api.isClubSessionOpen,
-                  activeThumbColor: Colors.green,
-                  onChanged: (val) async {
-                    final nowEpoch = timeProvider.nowEpoch;
-
-                    try {
-                      if (val) {
-                        await api.startClubSession(nowEpoch);
-                      } else {
-                        final bool? confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (BuildContext ctx) {
-                            return AlertDialog(
-                              title: const Text("Close Club Session?"),
-                              content: const Text(
-                                  "Are you sure you want to close the club session and end all table sessions?"),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                  child: const Text("Cancel"),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                  child: const Text("OK"),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-
-                        if (confirmed == true) {
-                          await api.closeClubAndEndSessions(nowEpoch);
-                        }
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Session Toggle Error: $e")),
-                        );
-                      }
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          IconButton(
+          PopupMenuButton<String>(
             icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsPage()),
-              );
+            tooltip: 'Settings',
+            onSelected: (value) async {
+              switch (value) {
+                case 'session':
+                  await _toggleClubSession();
+                case 'reload':
+                  await _refreshData();
+                case 'settings':
+                  if (mounted) {
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const SettingsPage()));
+                  }
+              }
             },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'session',
+                child: Row(children: [
+                  Icon(
+                    api.isClubSessionOpen ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+                    color: api.isClubSessionOpen ? Colors.red : Colors.green,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(api.isClubSessionOpen ? 'Close Club Session' : 'Open Club Session'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'reload',
+                child: const Row(children: [
+                  Icon(Icons.refresh),
+                  SizedBox(width: 8),
+                  Text('Reload'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'settings',
+                child: const Row(children: [
+                  Icon(Icons.tune),
+                  SizedBox(width: 8),
+                  Text('More Settings'),
+                ]),
+              ),
+            ],
           ),
           const SizedBox(width: 8),
         ],

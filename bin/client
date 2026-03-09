@@ -1,0 +1,3 @@
+#!/bin/bash
+cd ${HOME}/carolina_card_club/client
+open ./build/macos/Build/Products/Debug/carolina_card_club.app

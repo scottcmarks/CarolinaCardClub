@@ -80,20 +80,16 @@ class _PlayerPanelState extends State<PlayerPanel> {
                   final player = players[i];
                   final isSelected = api.selectedPlayerId == player.playerId;
 
-                  return PlayerCard(
+                  final dynamicBalance = api.getDynamicBalance(player, nowEpoch);
+                  final isFence = !player.isActive && (i == 0 || players[i - 1].isActive);
+                  final card = PlayerCard(
                     player: player,
+                    dynamicBalance: dynamicBalance,
                     isSelected: isSelected,
                     onTap: () => api.selectPlayer(isSelected ? null : player.playerId),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 16.0),
-                          child: Text(
-                            "\$${api.getDynamicBalance(player, nowEpoch)}",
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
                         IconButton(
                           icon: Icon(Icons.currency_exchange_outlined, color: Colors.blue.shade700),
                           tooltip: "Settle Balance",
@@ -118,6 +114,14 @@ class _PlayerPanelState extends State<PlayerPanel> {
                               return;
                             }
 
+                            final hasRunningSession = api.sessions.any(
+                              (s) => s.playerId == player.playerId && s.stopTime == null,
+                            );
+                            if (hasRunningSession) {
+                              api.selectPlayer(player.playerId);
+                              return;
+                            }
+
                             final settings = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
                             if (player.playerId == settings.floorManagerPlayerId) {
                               _autoSeatFloorManager(context, player, api, settings);
@@ -134,6 +138,19 @@ class _PlayerPanelState extends State<PlayerPanel> {
                       ],
                     ),
                   );
+                  if (isFence) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+                          child: Container(height: 5, color: Colors.grey.shade400),
+                        ),
+                        card,
+                      ],
+                    );
+                  }
+                  return card;
                 },
               ),
         ),

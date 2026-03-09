@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/api_provider.dart';
-import '../providers/time_provider.dart';
 import 'name_filter_keyboard.dart';
 
 class PlayerPickerDialog extends StatefulWidget {
@@ -27,7 +26,6 @@ class _PlayerPickerDialogState extends State<PlayerPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context, listen: false);
-    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
 
     final activePlayerIds = api.sessions
         .where((s) => s.stopTime == null)
@@ -74,9 +72,7 @@ class _PlayerPickerDialogState extends State<PlayerPickerDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
+      content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_showKeyboard)
@@ -93,30 +89,33 @@ class _PlayerPickerDialogState extends State<PlayerPickerDialog> {
                 ),
               )
             else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: available.length,
-                  itemBuilder: (ctx, i) {
-                    final player = available[i];
-                    final balance = api.getDynamicBalance(player, timeProvider.nowEpoch);
-                    return ListTile(
-                      title: Text(player.name),
-                      trailing: Text(
-                        '\$$balance',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: balance < 0 ? Colors.red : Colors.green,
+              Flexible(child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int i = 0; i < available.length; i++) ...[
+                      if (!available[i].isActive && (i == 0 || available[i - 1].isActive))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                          child: Container(height: 5, color: Colors.grey.shade400),
                         ),
+                      ListTile(
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        title: Text(
+                          available[i].name,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => Navigator.pop(context, available[i]),
                       ),
-                      onTap: () => Navigator.pop(context, player),
-                    );
-                  },
+                    ],
+                  ],
                 ),
-              ),
+              )),
           ],
         ),
-      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

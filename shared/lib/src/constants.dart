@@ -33,6 +33,14 @@ class Shared {
   static const int defaultFloorManagerReservedTable = 1;
   static const int defaultFloorManagerReservedSeat = 7;
 
+  // --- Brand Colors (UNC) ---
+  /// Carolina Blue, Pantone 542 — the primary/darker UNC blue
+  static const int carolinaBluePrimary = 0xFF4B9CD3;
+  /// UNC Light Blue, Pantone 278 — the softer digital variant
+  static const int carolinaBlueDigital = 0xFF7BAFD4;
+  // We use the digital one
+  static const int carolinaBlue = carolinaBlueDigital;
+
   // --- UI Layout (Preserved) ---
   static const double seatSizeMultiplier = 0.13;
   static const double tableWidthMultiplier = 0.75;

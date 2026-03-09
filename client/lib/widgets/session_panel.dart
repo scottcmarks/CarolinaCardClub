@@ -70,8 +70,21 @@ class SessionPanel extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("$title: $count",
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              GestureDetector(
+                onTap: isSessionOpen ? () => api.setShowAllSessions(!showAll) : null,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("$title: $count",
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    if (isSessionOpen) ...[
+                      const SizedBox(width: 8),
+                      Icon(showAll ? Icons.toggle_on : Icons.toggle_off,
+                          size: 24, color: Colors.grey.shade500),
+                    ],
+                  ],
+                ),
+              ),
 
               if (isPlayerSelected)
                 TextButton.icon(
@@ -88,51 +101,23 @@ class SessionPanel extends StatelessWidget {
                 Text(playerInfo, style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
             ],
           ),
-          const SizedBox(height: 8),
 
-          Row(
-            children: [
-              if (isSessionOpen)
-                GestureDetector(
-                  onTap: () => api.setShowAllSessions(!showAll),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        subtitle,
-                        style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(showAll ? Icons.toggle_on : Icons.toggle_off,
-                          size: 20, color: Colors.grey.shade500),
-                    ],
-                  ),
-                )
-              else
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic)),
-              const Spacer(),
-              if (isSessionOpen && api.clubSessionStartEpoch != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(4)
-                  ),
-                  child: Text(
-                    "Started: ${DateFormat("HH:mm").format(DateTime.fromMillisecondsSinceEpoch(api.clubSessionStartEpoch! * 1000))}",
-                    style: TextStyle(
-                      color: Colors.green.shade900,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12
-                    ),
-                  ),
+          if (isSessionOpen && api.clubSessionStartEpoch != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                borderRadius: BorderRadius.circular(4)
+              ),
+              child: Text(
+                "Started: ${DateFormat("HH:mm").format(DateTime.fromMillisecondsSinceEpoch(api.clubSessionStartEpoch! * 1000))}",
+                style: TextStyle(
+                  color: Colors.green.shade900,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12
                 ),
-            ],
-          ),
+              ),
+            ),
 
           if (isSessionOpen && api.activeTables.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -204,19 +189,24 @@ class SessionPanel extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isActive ? "$tableName (Running)" : tableName,
+            Text(tableName,
                  style: TextStyle(
                    color: isActive ? Colors.green.shade700 : Colors.black87,
                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal
                  )),
-
-            if (!isActive) ...[
-              const SizedBox(height: 4),
+            const SizedBox(height: 4),
+            if (isActive)
+              Consumer<TimeProvider>(
+                builder: (ctx, time, _) => Text(
+                  "${_formatDateTime(session.startEpoch)} • ${_formatDuration(session.startEpoch, time.nowEpoch)}",
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              )
+            else
               Text(
                 "${_formatDateTime(session.startEpoch)} • ${_formatDuration(session.startEpoch, session.stopTime!)}",
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
-            ],
           ],
         ),
         trailing: Consumer2<ApiProvider, TimeProvider>(

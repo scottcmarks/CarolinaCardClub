@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:db_connection/db_connection.dart';
+import 'package:shared/shared.dart';
 
 import 'providers/api_provider.dart';
 import 'providers/app_settings_provider.dart';
@@ -58,6 +59,10 @@ class CarolinaCardClubApp extends StatelessWidget {
               primarySwatch: Colors.blue,
               useMaterial3: true,
               scaffoldBackgroundColor: Colors.white,
+              appBarTheme: const AppBarTheme(
+                backgroundColor: Color(Shared.carolinaBlue),
+                foregroundColor: Colors.white,
+              ),
             ),
             home: const HomePage(),
           );
