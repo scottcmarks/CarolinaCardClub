@@ -13,6 +13,7 @@ class AppSettings {
   final int floorManagerReservedSeat;
   final int defaultSessionHour;
   final int defaultSessionMinute;
+  final int? tableNumber; // tablet mode: which table this device is assigned to
 
   AppSettings({
     this.serverIp = Shared.defaultServerIp,
@@ -25,7 +26,11 @@ class AppSettings {
     this.floorManagerReservedSeat = Shared.defaultFloorManagerReservedSeat,
     this.defaultSessionHour = Shared.defaultSessionHour,
     this.defaultSessionMinute = Shared.defaultSessionMinute,
+    this.tableNumber,
   });
+
+  // Sentinel for nullable fields that need to be explicitly clearable.
+  static const _absent = Object();
 
   AppSettings copyWith({
     String? serverIp,
@@ -38,6 +43,7 @@ class AppSettings {
     int? floorManagerReservedSeat,
     int? defaultSessionHour,
     int? defaultSessionMinute,
+    Object? tableNumber = _absent, // use copyWith(tableNumber: 3) or copyWith(tableNumber: null)
   }) {
     return AppSettings(
       serverIp: serverIp ?? this.serverIp,
@@ -50,6 +56,7 @@ class AppSettings {
       floorManagerReservedSeat: floorManagerReservedSeat ?? this.floorManagerReservedSeat,
       defaultSessionHour: defaultSessionHour ?? this.defaultSessionHour,
       defaultSessionMinute: defaultSessionMinute ?? this.defaultSessionMinute,
+      tableNumber: identical(tableNumber, _absent) ? this.tableNumber : tableNumber as int?,
     );
   }
 
@@ -65,6 +72,7 @@ class AppSettings {
       'floorManagerReservedSeat': floorManagerReservedSeat,
       'defaultSessionHour': defaultSessionHour,
       'defaultSessionMinute': defaultSessionMinute,
+      'tableNumber': tableNumber,
     };
   }
 
@@ -85,6 +93,7 @@ class AppSettings {
       floorManagerReservedSeat: map['floorManagerReservedSeat'] ?? Shared.defaultFloorManagerReservedSeat,
       defaultSessionHour: map['defaultSessionHour'] ?? Shared.defaultSessionHour,
       defaultSessionMinute: map['defaultSessionMinute'] ?? Shared.defaultSessionMinute,
+      tableNumber: map['tableNumber'] as int?,
     );
   }
 }

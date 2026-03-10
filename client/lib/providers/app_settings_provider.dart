@@ -35,6 +35,7 @@ class AppSettingsProvider with ChangeNotifier {
       serverIp: config.serverIp,
       serverPort: config.serverPort,
       localApiKey: config.localApiKey,
+      tableNumber: config.tableNumber, // seeded from config.json if present
     );
   }
 
@@ -44,4 +45,7 @@ class AppSettingsProvider with ChangeNotifier {
     await prefs.setString(_storageKey, json.encode(newSettings.toMap()));
     notifyListeners();
   }
+
+  Future<void> setTableNumber(int? tableNumber) =>
+      updateSettings(_currentSettings.copyWith(tableNumber: tableNumber));
 }

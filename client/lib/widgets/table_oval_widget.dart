@@ -71,7 +71,7 @@ class TableOvalController extends ChangeNotifier {
 
 // ── Seat state ────────────────────────────────────────────────────────────────
 
-enum SeatState { empty, healthy, warning, overdue, away, awayOverdue }
+enum SeatState { empty, reserved, healthy, warning, overdue, away, awayOverdue }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +142,8 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
     switch (state) {
       case SeatState.empty:
         return Colors.white;
+      case SeatState.reserved:
+        return Colors.orange.shade300;
       case SeatState.healthy:
         return Colors.green.shade600;
       case SeatState.warning:
@@ -286,7 +288,8 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
   Widget _buildTabletSeat(int seatNum, double w, double h, SeatData? data) {
     final state = widget.getSeatState!(seatNum);
     final color = _seatColor(state, _flashController.value);
-    final textColor = state == SeatState.away ? Colors.black54 : Colors.white;
+    final isReserved = state == SeatState.reserved;
+    final textColor = (state == SeatState.away || isReserved) ? Colors.black54 : Colors.white;
     final isAway = state == SeatState.away || state == SeatState.awayOverdue;
     final nowEpoch = widget.getNowEpoch!();
 
@@ -300,7 +303,17 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
           border: Border.all(color: Colors.black26, width: 1),
           boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(2, 2))],
         ),
-        child: data == null
+        child: isReserved
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text("$seatNum",
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54)),
+                  const Icon(Icons.verified_user, size: 18, color: Colors.black45),
+                ],
+              )
+            : data == null
             ? Center(
                 child: Text("$seatNum",
                     style: const TextStyle(

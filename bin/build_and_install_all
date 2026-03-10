@@ -6,15 +6,15 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 echo "=== Building macOS (release) ==="
 (cd "$REPO/client" && flutter build macos --release)
 
-echo "=== Building Android APK (release) ==="
-(cd "$REPO/client" && flutter build apk --release)
+echo "=== Building Android tablet APK (release) ==="
+(cd "$REPO/client" && flutter build apk --release -t lib/main_tablet.dart)
 
-APK="$REPO/client/build/app/outputs/flutter-apk/app-release.apk"
+TABLET_APK="$REPO/client/build/app/outputs/flutter-apk/app-release.apk"
 
 echo "=== Installing to tablet k ==="
-adb -s "$(tablet_id k)" install -r "$APK"
+adb -s "$(tablet_id k)" install -r "$TABLET_APK"
 
 echo "=== Installing to tablet j ==="
-adb -s "$(tablet_id j)" install -r "$APK"
+adb -s "$(tablet_id j)" install -r "$TABLET_APK"
 
 echo "=== Done ==="

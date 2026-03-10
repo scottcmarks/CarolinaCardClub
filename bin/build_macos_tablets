@@ -1,0 +1,79 @@
+#!/bin/bash
+# build_macos_tablets — build macOS tablet app and create one copy per table.
+#
+# Builds once, then copies the .app bundle and patches config.json inside each
+# copy to set tableNumber. Since tableNumber lives in the bundled asset (not
+# NSUserDefaults), two side-by-side copies are fully independent — no shared-
+# preferences collision even though they have the same bundle ID.
+#
+# Usage:
+#   build_macos_tablets            # builds all tables
+#   build_macos_tablets 1 2        # builds only tables 1 and 2
+#
+# To deploy to errol after building:
+#   scp -r dist/macos_tablets/ errol:~/Applications/CCC_Tablets/
+
+set -e
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+CLIENT="$REPO/client"
+OUT="$REPO/dist/macos_tablets"
+APP_SRC="$CLIENT/build/macos/Build/Products/Release/carolina_card_club.app"
+CONFIG_TEMPLATE="$CLIENT/assets/config.json"
+
+# Table IDs to build for — pass as args or defaults to all known tables.
+if [ $# -gt 0 ]; then
+  TABLE_IDS=("$@")
+else
+  # Query the live DB for active table IDs.
+  DB="$REPO/server/CarolinaCardClub.db"
+  IFS=$'\n' read -r -d '' -a TABLE_IDS < <(sqlite3 "$DB" 'SELECT PokerTable_Id FROM PokerTable WHERE IsActive = 1' 2>/dev/null && printf '\0') || true
+  if [ ${#TABLE_IDS[@]} -eq 0 ]; then
+    echo "WARNING: No active tables found in DB; defaulting to tables 1 and 2."
+    TABLE_IDS=(1 2)
+  fi
+fi
+
+echo "=== Building macOS tablet app (release) for tables: ${TABLE_IDS[*]} ==="
+(cd "$CLIENT" && flutter build macos --release -t lib/main_tablet.dart)
+
+if [ ! -d "$APP_SRC" ]; then
+  echo "ERROR: Expected build output not found at $APP_SRC"
+  exit 1
+fi
+
+mkdir -p "$OUT"
+
+for TABLE_ID in "${TABLE_IDS[@]}"; do
+  # Look up the table name for a nicer .app filename.
+  TABLE_NAME="$(sqlite3 "$REPO/server/CarolinaCardClub.db" \
+    "SELECT Name FROM PokerTable WHERE PokerTable_Id = $TABLE_ID" 2>/dev/null || echo "Table $TABLE_ID")"
+  DEST="$OUT/CCC Tablet – ${TABLE_NAME}.app"
+
+  echo "=== Creating: $DEST ==="
+  rm -rf "$DEST"
+  cp -r "$APP_SRC" "$DEST"
+
+  CONFIG_IN_BUNDLE="$DEST/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/config.json"
+  python3 - "$CONFIG_IN_BUNDLE" "$TABLE_ID" <<'PYEOF'
+import json, sys
+path, table_id = sys.argv[1], int(sys.argv[2])
+with open(path) as f:
+    d = json.load(f)
+d['tableNumber'] = table_id
+with open(path, 'w') as f:
+    json.dump(d, f, indent=2)
+print(f"  Patched config.json: tableNumber = {table_id}")
+PYEOF
+
+done
+
+echo ""
+echo "=== Built apps in $OUT: ==="
+ls -1 "$OUT/"
+echo ""
+echo "Deploy to errol:"
+echo "  scp -r \"$OUT/\" errol.local:~/Desktop/"
+echo ""
+echo "On errol, start the server first:"
+echo "  cd ~/path/to/server && dart run bin/carolina_card_club_server.dart"

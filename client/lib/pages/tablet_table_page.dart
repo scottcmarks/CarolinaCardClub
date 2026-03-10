@@ -8,6 +8,7 @@ import '../models/poker_table.dart';
 import '../models/session.dart';
 import '../models/player_selection_item.dart';
 import '../providers/app_settings_provider.dart';
+import '../models/app_settings.dart';
 import '../widgets/table_oval_widget.dart';
 import '../widgets/real_time_clock.dart';
 import '../widgets/player_picker_dialog.dart';
@@ -17,8 +18,9 @@ import 'package:shared/shared.dart';
 class TabletTablePage extends StatefulWidget {
   final List<PokerTable> tables;
   final int initialIndex;
+  final VoidCallback? onReassign; // if set, shows a reassign icon in the AppBar
 
-  const TabletTablePage({super.key, required this.tables, this.initialIndex = 0});
+  const TabletTablePage({super.key, required this.tables, this.initialIndex = 0, this.onReassign});
 
   @override
   State<TabletTablePage> createState() => _TabletTablePageState();
@@ -43,9 +45,15 @@ class _TabletTablePageState extends State<TabletTablePage> {
 
   // ── Seat state calculation ─────────────────────────────────────────────────
 
-  SeatState _getSeatState(int seatNum, PokerTable table, ApiProvider api, TimeProvider time) {
+  SeatState _getSeatState(int seatNum, PokerTable table, ApiProvider api, TimeProvider time,
+      AppSettings settings) {
     final session = api.activeSessionAt(table.pokerTableId, seatNum);
-    if (session == null) return SeatState.empty;
+    if (session == null) {
+      // Check if this is the floor manager's reserved seat
+      final occupiedMap = api.getOccupiedSeatsAndNamesForTable(table.pokerTableId);
+      if (occupiedMap[seatNum] == 'Reserved') return SeatState.reserved;
+      return SeatState.empty;
+    }
 
     if (session.isAway) {
       final awaySeconds =
@@ -78,6 +86,16 @@ class _TabletTablePageState extends State<TabletTablePage> {
 
   TableOvalController _buildController(PokerTable table, ApiProvider api, TimeProvider time) {
     final controller = TableOvalController();
+
+    // Add the reserved seat marker if applicable (reuses existing reserved logic)
+    final occupiedMap = api.getOccupiedSeatsAndNamesForTable(table.pokerTableId);
+    for (final entry in occupiedMap.entries) {
+      if (entry.value == 'Reserved') {
+        controller.seatWithData(entry.key, SeatData(name: 'Reserved'));
+      }
+    }
+
+    // Add rich session data for occupied seats
     for (final session in api.sessions.where((s) =>
         s.pokerTableId == table.pokerTableId &&
         s.stopTime == null &&
@@ -108,6 +126,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
   Widget build(BuildContext context) {
     final api = Provider.of<ApiProvider>(context);
     final time = Provider.of<TimeProvider>(context);
+    final settings = Provider.of<AppSettingsProvider>(context).currentSettings;
 
     final idx = _currentIndex.clamp(0, widget.tables.length - 1);
     final hasPrev = idx > 0;
@@ -146,23 +165,16 @@ class _TabletTablePageState extends State<TabletTablePage> {
           ],
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.blue.shade200),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.access_time, size: 16, color: Colors.blue.shade900),
-                const SizedBox(width: 8),
-                const RealTimeClock(),
-              ],
-            ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Center(child: RealTimeClock()),
           ),
+          if (widget.onReassign != null)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Change Table',
+              onPressed: widget.onReassign,
+            ),
         ],
       ),
       body: PageView.builder(
@@ -176,11 +188,11 @@ class _TabletTablePageState extends State<TabletTablePage> {
             tableName: table.tableName,
             maxSeats: table.capacity,
             controller: controller,
-            getSeatState: (seatNum) => _getSeatState(seatNum, table, api, time),
+            getSeatState: (seatNum) => _getSeatState(seatNum, table, api, time, settings),
             getNowEpoch: () => time.nowEpoch,
             touched: (seatNum, occupantName) {
-              final state = _getSeatState(seatNum, table, api, time);
-              if (state == SeatState.empty) {
+              final state = _getSeatState(seatNum, table, api, time, settings);
+              if (state == SeatState.empty || state == SeatState.reserved) {
                 _showSeatPlayer(context, seatNum, table);
               } else {
                 final session = api.activeSessionAt(table.pokerTableId, seatNum)!;
@@ -223,7 +235,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
               ListTile(
                 leading: const Icon(Icons.airline_seat_recline_extra,
                     color: Colors.grey),
-                title: const Text('Mark Away'),
+                title: const Text('Stand Up'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _confirmMarkAway(context, session, time);
@@ -239,7 +251,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
             ),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Stand Up'),
+              title: const Text('Leave'),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmStandUp(context, session, time);
@@ -259,7 +271,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("Stand Up: ${session.name}?"),
+        title: Text("Leave: ${session.name}?"),
         content: const Text(
             "This will end the session and update the player's balance."),
         actions: [
@@ -283,7 +295,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
                 }
               }
             },
-            child: const Text("Stand Up"),
+            child: const Text("Leave"),
           ),
         ],
       ),
@@ -297,7 +309,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("Mark Away: ${session.name}?"),
+        title: Text("Stand Up: ${session.name}?"),
         content:
             const Text("Player's session will continue running while away."),
         actions: [
@@ -320,7 +332,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
                 }
               }
             },
-            child: const Text("Mark Away"),
+            child: const Text("Stand Up"),
           ),
         ],
       ),

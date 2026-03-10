@@ -8,6 +8,7 @@ import '../providers/time_provider.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
 import '../pages/seating_flow_page.dart';
+import 'table_oval_widget.dart';
 
 class SessionPanel extends StatelessWidget {
   const SessionPanel({super.key});
@@ -264,7 +265,7 @@ class SessionPanel extends StatelessWidget {
             }
           },
         ),
-        onTap: isActive ? () => _showStopDialog(context, session, api) : null,
+        onTap: isActive ? () => _showSessionActions(context, session, api) : null,
       ),
     );
   }
@@ -281,6 +282,128 @@ class SessionPanel extends StatelessWidget {
     final minutes = (diff % 3600) ~/ 60;
 
     return "${hours.toString().padLeft(2, '0')}h${minutes.toString().padLeft(2, '0')}m";
+  }
+
+  void _showSessionActions(BuildContext context, Session session, ApiProvider api) {
+    final tableName = api.tables
+        .where((t) => t.pokerTableId == session.pokerTableId)
+        .map((t) => t.tableName)
+        .firstOrNull ?? 'Table ${session.pokerTableId}';
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: Text(session.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              subtitle: session.seatNumber != null
+                  ? Text('$tableName · Seat ${session.seatNumber}')
+                  : Text(tableName),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz, color: Colors.blue),
+              title: const Text('Re-seat'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showReseatDialog(context, session, api);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.stop_circle, color: Colors.red),
+              title: const Text('End Session'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showStopDialog(context, session, api);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReseatDialog(BuildContext context, Session session, ApiProvider api) {
+    final time = Provider.of<TimeProvider>(context, listen: false);
+    final activeTables = api.activeTables;
+    if (activeTables.isEmpty) return;
+
+    int selectedTableId = session.pokerTableId ?? activeTables.first.pokerTableId;
+
+    showDialog<(int, int)>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final selectedTable = activeTables.firstWhere(
+            (t) => t.pokerTableId == selectedTableId,
+            orElse: () => activeTables.first,
+          );
+          final occupied = api.getOccupiedSeatsAndNamesForTable(selectedTableId);
+          final controller = TableOvalController(initialSeats: occupied);
+
+          return AlertDialog(
+            title: Text('Re-seat: ${session.name}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (activeTables.length > 1) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: activeTables.map((t) => FilterChip(
+                      label: Text(t.tableName),
+                      selected: t.pokerTableId == selectedTableId,
+                      onSelected: (_) => setLocal(() => selectedTableId = t.pokerTableId),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                SizedBox(
+                  width: 500,
+                  height: 333,
+                  child: TableOvalWidget(
+                    tableName: selectedTable.tableName,
+                    maxSeats: selectedTable.capacity,
+                    controller: controller,
+                    selectedSeat: session.pokerTableId == selectedTableId
+                        ? session.seatNumber
+                        : null,
+                    touched: (seatNum, occupantName) {
+                      if (occupantName != null) return;
+                      Navigator.pop(ctx, (selectedTableId, seatNum));
+                    },
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((result) async {
+      if (result == null) return;
+      final (newTableId, newSeat) = result;
+      if (newTableId == session.pokerTableId && newSeat == session.seatNumber) return;
+      try {
+        await api.moveSession(session.sessionId, newTableId, newSeat, time.nowEpoch);
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    });
   }
 
   void _showStopDialog(BuildContext context, Session session, ApiProvider api) {

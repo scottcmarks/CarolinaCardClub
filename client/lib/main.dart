@@ -22,8 +22,9 @@ void main() async {
 class CarolinaCardClubApp extends StatelessWidget {
   final AppConfig config;
   final AppSettings initialSettings;
+  final Widget? home;
 
-  const CarolinaCardClubApp({super.key, required this.config, required this.initialSettings});
+  const CarolinaCardClubApp({super.key, required this.config, required this.initialSettings, this.home});
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +77,7 @@ class CarolinaCardClubApp extends StatelessWidget {
                 foregroundColor: Colors.white,
               ),
             ),
-            home: const HomePage(),
+            home: home ?? const HomePage(),
           );
         },
       ),
