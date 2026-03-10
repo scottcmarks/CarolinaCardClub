@@ -30,7 +30,7 @@ class _SubnetScanDialogState extends State<SubnetScanDialog> {
   Future<void> _startDiscovery() async {
     final s = Provider.of<AppSettingsProvider>(context, listen: false).currentSettings;
 
-    setState(() => _status = 'Verifying saved IP: ${s.serverIp}...');
+    setState(() => _status = 'Trying ${s.serverIp}...');
     if (await _scanner.isServerAt(s.serverIp, s.serverPort, s.localApiKey, s.scanTimeoutMs)) {
       _onFound(s.serverIp);
       return;
@@ -38,7 +38,14 @@ class _SubnetScanDialogState extends State<SubnetScanDialog> {
 
     setState(() => _status = 'Scanning network...');
     _scanSubscription = _scanner
-        .findServerOnLocalNetwork(s.serverPort, s.localApiKey, s.scanTimeoutMs)
+        .findServerOnLocalNetwork(
+          s.serverPort,
+          s.localApiKey,
+          s.scanTimeoutMs,
+          onTrying: (ip) {
+            if (mounted) setState(() => _status = 'Trying $ip...');
+          },
+        )
         .listen((ip) => _onFound(ip), onDone: () {
           if (mounted && _isScanning) {
             setState(() {
@@ -51,10 +58,12 @@ class _SubnetScanDialogState extends State<SubnetScanDialog> {
 
   void _onFound(String ip) {
     _scanSubscription?.cancel();
-    final provider = Provider.of<AppSettingsProvider>(context, listen: false);
-    provider.updateSettings(provider.currentSettings.copyWith(serverIp: ip));
-    final nowEpoch = Provider.of<TimeProvider>(context, listen: false).nowEpoch;
-    Provider.of<ApiProvider>(context, listen: false).reloadAll(nowEpoch);
+    final settingsProv = Provider.of<AppSettingsProvider>(context, listen: false);
+    final newSettings = settingsProv.currentSettings.copyWith(serverIp: ip);
+    settingsProv.updateSettings(newSettings);
+    final apiProvider = Provider.of<ApiProvider>(context, listen: false);
+    apiProvider.applySettings(newSettings);  // apply before reloadAll
+    apiProvider.reloadAll(Provider.of<TimeProvider>(context, listen: false).nowEpoch);
     if (mounted) Navigator.pop(context);
   }
 

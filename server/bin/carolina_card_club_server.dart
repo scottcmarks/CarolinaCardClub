@@ -45,7 +45,12 @@ void main() async {
   router.post('/system/reload', _manualReloadHandler);
 
   // WebSocket handler — not subject to auth middleware, handles its own auth via handshake
-  router.get('/ws', webSocketHandler((WebSocketChannel channel, String? protocol) => _webSocketHandler(channel)));
+  router.get('/ws', (Request request) {
+    final connInfo = request.context['shelf.io.connection_info'] as HttpConnectionInfo?;
+    final remoteAddr = connInfo?.remoteAddress.address ?? 'unknown';
+    return webSocketHandler((WebSocketChannel channel, String? protocol) =>
+        _webSocketHandler(channel, remoteAddr))(request);
+  });
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
@@ -65,7 +70,7 @@ void main() async {
 
 // --- WebSocket Handler ---
 
-void _webSocketHandler(WebSocketChannel channel) async {
+void _webSocketHandler(WebSocketChannel channel, String remoteAddr) async {
   try {
     final db = await _db;
 
@@ -83,14 +88,14 @@ void _webSocketHandler(WebSocketChannel channel) async {
 
     // Register client
     _connectedClients.add(channel);
-    print('✓ WebSocket client connected. Total clients: ${_connectedClients.length}');
+    print('✓ WebSocket client connected from $remoteAddr. Total clients: ${_connectedClients.length}');
 
     // Listen for disconnect
     channel.stream.listen(
       (_) {}, // Clients don't send anything — pager model is server-to-client only
       onDone: () {
         _connectedClients.remove(channel);
-        print('WebSocket client disconnected. Total clients: ${_connectedClients.length}');
+        print('WebSocket client disconnected from $remoteAddr. Total clients: ${_connectedClients.length}');
       },
       onError: (_) {
         _connectedClients.remove(channel);

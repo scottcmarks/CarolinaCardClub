@@ -1,3 +1,21 @@
+# Carolina Card Club — Session Changes (2026-03-09, continued)
+
+## macOS Sequoia Local Network Connectivity Fix
+- Root cause: dart:io BSD sockets blocked by macOS Sequoia Local Network Privacy for remote LAN hosts
+- **Fix**: Added `cupertino_http: ^2.0.0` to `client/pubspec.yaml` and `db_connection/pubspec.yaml`
+- `client/lib/services/api_service.dart`: switched from global `http.get/post` to a `_client` instance; uses `CupertinoClient.defaultSessionConfiguration()` on macOS/iOS (NSURLSession), `http.Client()` elsewhere
+- `db_connection/lib/providers/db_connection_provider.dart`: uses `CupertinoWebSocket.connect()` + `AdapterWebSocketChannel` on macOS/iOS; `IOWebSocketChannel` on other platforms
+- `macos/Runner/Info.plist`: added `NSLocalNetworkUsageDescription`
+- `macos/Runner/AppDelegate.swift`: added NWConnection probe on startup to prime network path / trigger permission dialog
+
+## Build & Deployment
+- Added `bin/build_and_install_all`: builds macOS + Android release APK, installs APK to tablets k and j via adb
+
+## Infrastructure
+- Populated `CarolinaCardClub.db` on errol (.67) via `scp` — server had empty DB on first run
+
+---
+
 # Carolina Card Club — Session Changes (2026-03-08/09)
 
 ## AppBar Redesign

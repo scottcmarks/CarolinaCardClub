@@ -6,16 +6,27 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:cupertino_http/cupertino_http.dart';
 import 'package:shared/shared.dart';
 import '../models/app_settings.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
 import '../models/poker_table.dart';
 
+http.Client _platformHttpClient() {
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.macOS ||
+       defaultTargetPlatform == TargetPlatform.iOS)) {
+    return CupertinoClient.defaultSessionConfiguration();
+  }
+  return http.Client();
+}
+
 class ApiService {
   final AppSettings settings;
+  final http.Client _client;
 
-  ApiService(this.settings);
+  ApiService(this.settings) : _client = _platformHttpClient();
 
   String get _baseUrl => 'http://${settings.serverIp}:${settings.serverPort}';
   Map<String, String> get _headers => {
@@ -26,13 +37,13 @@ class ApiService {
   // ── Fetches ───────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getState() async {
-    final res = await http.get(Uri.parse('$_baseUrl/state'), headers: _headers);
+    final res = await _client.get(Uri.parse('$_baseUrl/state'), headers: _headers);
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to get state');
     return jsonDecode(res.body);
   }
 
   Future<List<PlayerSelectionItem>> getPlayers(int nowEpoch) async {
-    final res = await http.get(
+    final res = await _client.get(
         Uri.parse('$_baseUrl/players/selection?epoch=$nowEpoch'),
         headers: _headers);
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to get players');
@@ -51,14 +62,14 @@ class ApiService {
   }
 
   Future<List<PokerTable>> getTables() async {
-    final res = await http.get(Uri.parse('$_baseUrl/tables'), headers: _headers);
+    final res = await _client.get(Uri.parse('$_baseUrl/tables'), headers: _headers);
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to get tables');
     final List data = jsonDecode(res.body);
     return data.map((json) => PokerTable.fromJson(json)).toList();
   }
 
   Future<List<Session>> getSessions() async {
-    final res = await http.get(Uri.parse('$_baseUrl/sessions/panel'), headers: _headers);
+    final res = await _client.get(Uri.parse('$_baseUrl/sessions/panel'), headers: _headers);
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to get sessions');
     final List data = jsonDecode(res.body);
     return data.map((json) => Session.fromJson(json)).toList();
@@ -67,7 +78,7 @@ class ApiService {
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   Future<void> addSession(Session session) async {
-    final res = await http.post(Uri.parse('$_baseUrl/sessions'),
+    final res = await _client.post(Uri.parse('$_baseUrl/sessions'),
         headers: _headers, body: jsonEncode(session.toJson()));
     if (res.statusCode != Shared.httpOK) {
       throw Exception(jsonDecode(res.body)['error'] ?? 'Failed to add session');
@@ -75,7 +86,7 @@ class ApiService {
   }
 
   Future<void> stopSession(int sessionId, int stopEpoch) async {
-    final res = await http.post(Uri.parse('$_baseUrl/sessions/stop'),
+    final res = await _client.post(Uri.parse('$_baseUrl/sessions/stop'),
         headers: _headers,
         body: jsonEncode({'Session_Id': sessionId, 'Stop_Epoch': stopEpoch}));
     if (res.statusCode != Shared.httpOK) {
@@ -84,7 +95,7 @@ class ApiService {
   }
 
   Future<void> markAway(int sessionId, int awayEpoch) async {
-    final res = await http.post(Uri.parse('$_baseUrl/sessions/away'),
+    final res = await _client.post(Uri.parse('$_baseUrl/sessions/away'),
         headers: _headers,
         body: jsonEncode({'Session_Id': sessionId, 'Away_Since_Epoch': awayEpoch}));
     if (res.statusCode != Shared.httpOK) {
@@ -93,7 +104,7 @@ class ApiService {
   }
 
   Future<void> markReturn(int sessionId) async {
-    final res = await http.post(Uri.parse('$_baseUrl/sessions/return'),
+    final res = await _client.post(Uri.parse('$_baseUrl/sessions/return'),
         headers: _headers, body: jsonEncode({'Session_Id': sessionId}));
     if (res.statusCode != Shared.httpOK) {
       throw Exception(jsonDecode(res.body)['error'] ?? 'Failed to mark return');
@@ -101,7 +112,7 @@ class ApiService {
   }
 
   Future<void> moveSession(int sessionId, int newTableId, int newSeat) async {
-    final res = await http.post(Uri.parse('$_baseUrl/sessions/move'),
+    final res = await _client.post(Uri.parse('$_baseUrl/sessions/move'),
         headers: _headers,
         body: jsonEncode({
           'Session_Id': sessionId,
@@ -114,7 +125,7 @@ class ApiService {
   }
 
   Future<void> addPayment(int playerId, int amount, int epoch) async {
-    final res = await http.post(Uri.parse('$_baseUrl/payments'),
+    final res = await _client.post(Uri.parse('$_baseUrl/payments'),
         headers: _headers,
         body: jsonEncode({'Player_Id': playerId, 'Amount': amount, 'Epoch': epoch}));
     if (res.statusCode != Shared.httpOK) {
@@ -123,33 +134,33 @@ class ApiService {
   }
 
   Future<void> toggleClubState(bool isOpen, int? startEpoch) async {
-    final res = await http.post(Uri.parse('$_baseUrl/state/toggle'),
+    final res = await _client.post(Uri.parse('$_baseUrl/state/toggle'),
         headers: _headers,
         body: jsonEncode({'Is_Club_Open': isOpen, 'Club_Start_Epoch': startEpoch}));
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to toggle club state');
   }
 
   Future<void> toggleTableStatus(int tableId, bool isActive) async {
-    final res = await http.post(Uri.parse('$_baseUrl/tables/toggle'),
+    final res = await _client.post(Uri.parse('$_baseUrl/tables/toggle'),
         headers: _headers,
         body: jsonEncode({'PokerTable_Id': tableId, 'IsActive': isActive}));
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to toggle table status');
   }
 
   Future<void> updateDefaultSessionTime(int hour, int minute) async {
-    final res = await http.post(Uri.parse('$_baseUrl/state/defaults'),
+    final res = await _client.post(Uri.parse('$_baseUrl/state/defaults'),
         headers: _headers, body: jsonEncode({'hour': hour, 'minute': minute}));
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to update default session time');
   }
 
   Future<void> setClockOffset(int offsetSeconds) async {
-    final res = await http.post(Uri.parse('$_baseUrl/state/clock-offset'),
+    final res = await _client.post(Uri.parse('$_baseUrl/state/clock-offset'),
         headers: _headers, body: jsonEncode({'offsetSeconds': offsetSeconds}));
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to set clock offset');
   }
 
   Future<void> triggerRemoteBackup() async {
-    final res = await http.post(Uri.parse('$_baseUrl/maintenance/backup'),
+    final res = await _client.post(Uri.parse('$_baseUrl/maintenance/backup'),
         headers: _headers, body: jsonEncode({'apiKey': settings.localApiKey}));
     if (res.statusCode != Shared.httpOK) {
       throw Exception('Server rejected backup. Check API Key. Status: ${res.statusCode}');
@@ -157,7 +168,7 @@ class ApiService {
   }
 
   Future<void> reloadDatabase() async {
-    final res = await http.post(Uri.parse('$_baseUrl/system/reload'), headers: _headers);
+    final res = await _client.post(Uri.parse('$_baseUrl/system/reload'), headers: _headers);
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to reload server database');
   }
 }

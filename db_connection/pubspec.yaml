@@ -15,3 +15,4 @@ dependencies:
 
   # WebSocket Communication
   web_socket_channel: ^3.0.3 # For real-time communication with the server
+  cupertino_http: ^2.0.0 # NSURLSession-backed WebSocket on macOS/iOS (bypasses Local Network Privacy)

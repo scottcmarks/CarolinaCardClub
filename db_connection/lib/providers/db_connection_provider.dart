@@ -2,16 +2,20 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart'; // OPTIMIZED: Depends on foundation, not material.
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cupertino_http/cupertino_http.dart';
+import 'package:web_socket_channel/adapter_web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum ConnectionStatus { disconnected, connecting, connected, failed }
 
-/// A provider that manages the raw WebSocket connection and the command/response protocol.
-/// Its sole responsibility is to maintain the connection and handle the message-passing
-/// mechanism, without knowing the specific content of the commands.
+const _reconnectDelay = Duration(seconds: 5);
+
+/// Manages the WebSocket connection. Automatically reconnects after drops or
+/// failures as long as a target URL is set. Call [setServerUrl] to point at
+/// a server; call [disconnect] (or pass an empty URL) to stop reconnecting.
 class DbConnectionProvider with ChangeNotifier {
   // --- Private State ---
   WebSocketChannel? _channel;
@@ -20,14 +24,14 @@ class DbConnectionProvider with ChangeNotifier {
   String? _lastError;
   String? _connectingUrl;
   String? _connectedUrl;
+  String? _targetUrl;          // URL we want to stay connected to
+  Timer? _reconnectTimer;
   int _connectionAttempt = 0;
   bool _isClosing = false;
 
   final Map<String, Completer> _requests = {};
   final Uuid _uuid = const Uuid();
 
-  // A stream controller to broadcast non-response events (like 'update' broadcasts)
-  // to the ApiProvider or other listeners.
   final _broadcastController = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get broadcastStream => _broadcastController.stream;
 
@@ -36,26 +40,34 @@ class DbConnectionProvider with ChangeNotifier {
   String? get lastError => _lastError;
   String? get connectingUrl => _connectingUrl;
   String? get connectedUrl => _connectedUrl;
+  bool get isRetryPending => _reconnectTimer?.isActive == true;
 
-  /// Centralized logic to react to server URL changes from settings.
+  /// Point the provider at a server URL. Triggers an immediate connect attempt
+  /// and will keep reconnecting if the connection drops.
   void setServerUrl(String newUrl) {
-    if (newUrl == _connectedUrl && _connectionStatus == ConnectionStatus.connected) { // CORRECTED
+    if (newUrl.isEmpty) {
+      _targetUrl = null;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      disconnect();
       return;
     }
-    if (newUrl.isEmpty) {
-      if (_connectionStatus != ConnectionStatus.disconnected) {
-        disconnect();
-      }
-    } else {
-      connect(newUrl);
+    if (newUrl == _targetUrl &&
+        (_connectionStatus == ConnectionStatus.connected ||
+         _connectionStatus == ConnectionStatus.connecting)) {
+      return;
     }
+    _targetUrl = newUrl;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    connect(newUrl);
   }
 
   /// Establishes a connection to the WebSocket server.
   Future<void> connect(String url) async {
     final int attemptId = ++_connectionAttempt;
-    await disconnect(); // Ensure any old connection is closed first
-    if (attemptId != _connectionAttempt) return; // A new attempt has been started
+    await _cleanupConnection();
+    if (attemptId != _connectionAttempt) return;
 
     _connectionStatus = ConnectionStatus.connecting;
     _connectingUrl = url;
@@ -64,10 +76,20 @@ class DbConnectionProvider with ChangeNotifier {
 
     try {
       final wsUrl = Uri.parse(url.replaceFirst('http', 'ws') + '/ws');
-      _channel = IOWebSocketChannel.connect(
-        wsUrl,
-        connectTimeout: const Duration(seconds: 5),
-      );
+
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.macOS ||
+           defaultTargetPlatform == TargetPlatform.iOS)) {
+        debugPrint('WS: using CupertinoWebSocket for $wsUrl');
+        final ws = await CupertinoWebSocket.connect(wsUrl)
+            .timeout(const Duration(seconds: 5));
+        _channel = AdapterWebSocketChannel(ws);
+      } else {
+        _channel = IOWebSocketChannel.connect(
+          wsUrl,
+          connectTimeout: const Duration(seconds: 5),
+        );
+      }
 
       await _channel!.ready;
 
@@ -83,14 +105,16 @@ class DbConnectionProvider with ChangeNotifier {
         onError: (error) {
           if (!handshakeCompleter.isCompleted) {
             handshakeCompleter.completeError(error);
+          } else {
+            _connectionDropped();
           }
-          disconnect();
         },
         onDone: () {
           if (!handshakeCompleter.isCompleted) {
             handshakeCompleter.completeError(Exception('Connection closed during handshake'));
+          } else {
+            _connectionDropped();
           }
-          disconnect();
         },
       );
 
@@ -98,10 +122,12 @@ class DbConnectionProvider with ChangeNotifier {
 
       _connectionStatus = ConnectionStatus.connected;
       _connectedUrl = url;
+      _broadcastController.add({'event': 'connected'});
     } catch (e) {
       _connectionStatus = ConnectionStatus.failed;
       _lastError = e.toString();
       await _cleanupConnection();
+      _scheduleReconnect();
     } finally {
       if (attemptId == _connectionAttempt) {
         _connectingUrl = null;
@@ -110,8 +136,11 @@ class DbConnectionProvider with ChangeNotifier {
     }
   }
 
-  /// Closes the active WebSocket connection.
+  /// Intentional disconnect — clears the target URL and stops reconnecting.
   Future<void> disconnect() async {
+    _targetUrl = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     await _cleanupConnection();
     if (_connectionStatus != ConnectionStatus.disconnected) {
       _connectionStatus = ConnectionStatus.disconnected;
@@ -144,13 +173,31 @@ class DbConnectionProvider with ChangeNotifier {
 
   // --- Internal Helper Methods ---
 
+  /// Called when a live connection drops unexpectedly (onDone/onError after handshake).
+  void _connectionDropped() {
+    _cleanupConnection().then((_) {
+      _connectionStatus = ConnectionStatus.failed;
+      notifyListeners();
+      _scheduleReconnect();
+    });
+  }
+
+  void _scheduleReconnect() {
+    if (_targetUrl == null) return;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(_reconnectDelay, () {
+      if (_targetUrl != null) connect(_targetUrl!);
+    });
+    notifyListeners(); // let UI know retry is now pending
+  }
+
   void _handleHandshake(dynamic message, Completer<void> completer) {
     try {
       final decoded = jsonDecode(message as String);
       if (decoded['type'] == 'ack') {
         completer.complete();
       } else {
-         completer.completeError(Exception('Invalid handshake message'));
+        completer.completeError(Exception('Invalid handshake message'));
       }
     } catch (e) {
       completer.completeError(Exception('Invalid handshake JSON: $e'));
@@ -173,11 +220,10 @@ class DbConnectionProvider with ChangeNotifier {
           }
         }
       } else if (type == 'broadcast') {
-        // Pass broadcast events to the ApiProvider via the stream.
         _broadcastController.add(decoded);
       }
     } catch (e) {
-      print('Error handling server message: $e');
+      debugPrint('Error handling server message: $e');
     }
   }
 
@@ -185,9 +231,8 @@ class DbConnectionProvider with ChangeNotifier {
     if (_isClosing) return;
     _isClosing = true;
 
-    // Reject all pending requests
     for (var completer in _requests.values) {
-        completer.completeError(Exception("Connection is closing."));
+      completer.completeError(Exception('Connection is closing.'));
     }
     _requests.clear();
 
@@ -195,9 +240,7 @@ class DbConnectionProvider with ChangeNotifier {
     _streamSubscription = null;
     try {
       await _channel?.sink.close().timeout(const Duration(seconds: 1));
-    } catch (_) {
-      // Ignore errors on close.
-    }
+    } catch (_) {}
     _channel = null;
     _connectedUrl = null;
     _isClosing = false;
@@ -205,8 +248,9 @@ class DbConnectionProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
     _broadcastController.close();
-    disconnect();
+    _cleanupConnection();
     super.dispose();
   }
 }

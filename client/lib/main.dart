@@ -6,6 +6,7 @@ import 'package:db_connection/db_connection.dart';
 import 'package:shared/shared.dart';
 
 import 'core/app_config.dart';
+import 'models/app_settings.dart';
 import 'providers/api_provider.dart';
 import 'providers/app_settings_provider.dart';
 import 'providers/time_provider.dart';
@@ -14,19 +15,21 @@ import 'pages/home_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
-  runApp(CarolinaCardClubApp(config: config));
+  final initialSettings = await AppSettingsProvider.loadInitialSettings(config);
+  runApp(CarolinaCardClubApp(config: config, initialSettings: initialSettings));
 }
 
 class CarolinaCardClubApp extends StatelessWidget {
   final AppConfig config;
+  final AppSettings initialSettings;
 
-  const CarolinaCardClubApp({super.key, required this.config});
+  const CarolinaCardClubApp({super.key, required this.config, required this.initialSettings});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppSettingsProvider(config)),
+        ChangeNotifierProvider(create: (_) => AppSettingsProvider(config, initialSettings)),
         ChangeNotifierProvider(create: (_) => TimeProvider()),
         ChangeNotifierProvider(create: (_) => DbConnectionProvider()),
 
@@ -48,7 +51,11 @@ class CarolinaCardClubApp extends StatelessWidget {
             return ApiProvider(settingsProv.currentSettings, connProv, timeProv);
           },
           update: (context, settingsProv, timeProv, connProv, previous) {
-            return previous ?? ApiProvider(settingsProv.currentSettings, connProv, timeProv);
+            if (previous != null) {
+              previous.applySettings(settingsProv.currentSettings);
+              return previous;
+            }
+            return ApiProvider(settingsProv.currentSettings, connProv, timeProv);
           },
         ),
       ],

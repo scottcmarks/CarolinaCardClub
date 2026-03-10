@@ -11,11 +11,11 @@ import 'package:db_connection/db_connection.dart';
 import 'time_provider.dart';
 
 class ApiProvider with ChangeNotifier {
-  final AppSettings settings;
+  AppSettings settings;
   final DbConnectionProvider connectionProvider;
   final TimeProvider timeProvider;
 
-  late final ApiService _service = ApiService(settings);
+  late ApiService _service = ApiService(settings);
   StreamSubscription? _broadcastSubscription;
 
   List<PlayerSelectionItem> players = [];
@@ -43,10 +43,20 @@ class ApiProvider with ChangeNotifier {
     _subscribeToBroadcasts();
   }
 
+  void applySettings(AppSettings newSettings) {
+    if (newSettings.serverIp == settings.serverIp &&
+        newSettings.serverPort == settings.serverPort &&
+        newSettings.localApiKey == settings.localApiKey) { return; }
+    settings = newSettings;
+    _service = ApiService(newSettings);
+  }
+
   void _subscribeToBroadcasts() {
     _broadcastSubscription = connectionProvider.broadcastStream.listen((message) {
       final event = message['event'];
-      if (event == 'state_changed') {
+      if (event == 'connected') {
+        reloadAll(timeProvider.nowEpoch);
+      } else if (event == 'state_changed') {
         reloadAll(timeProvider.nowEpoch);
       } else if (event == 'clock_offset') {
         final int offsetSeconds = message['offsetSeconds'] ?? 0;

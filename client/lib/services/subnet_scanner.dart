@@ -24,7 +24,12 @@ class SubnetScanner {
     }
   }
 
-  Stream<String> findServerOnLocalNetwork(int port, String apiKey, int timeoutMs) async* {
+  Stream<String> findServerOnLocalNetwork(
+    int port,
+    String apiKey,
+    int timeoutMs, {
+    void Function(String ip)? onTrying,
+  }) async* {
     final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
 
     for (var interface in interfaces) {
@@ -34,12 +39,10 @@ class SubnetScanner {
         if (addr.isLoopback) continue;
 
         final prefix = addr.address.substring(0, addr.address.lastIndexOf('.') + 1);
-        final mySuffix = int.parse(addr.address.split('.').last);
 
         for (int i = 2; i <= 254; i++) {
-          if (i == mySuffix) continue;
-
           final target = '$prefix$i';
+          onTrying?.call(target);
           if (await isServerAt(target, port, apiKey, timeoutMs)) {
             yield target;
           }

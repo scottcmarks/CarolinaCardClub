@@ -14,26 +14,28 @@ class AppSettingsProvider with ChangeNotifier {
 
   AppSettings get currentSettings => _currentSettings;
 
-  AppSettingsProvider(this.config)
-      : _currentSettings = AppSettings(
-          serverIp: config.serverIp,
-          serverPort: config.serverPort,
-          localApiKey: config.localApiKey,
-        ) {
-    _loadSettings();
-  }
+  /// Construct with already-loaded settings so there is no async update
+  /// after the provider is created (which would cause a redundant reconnect).
+  AppSettingsProvider(this.config, AppSettings initialSettings)
+      : _currentSettings = initialSettings;
 
-  Future<void> _loadSettings() async {
+  /// Call this in main() before runApp() so the provider starts with the
+  /// correct settings immediately.
+  static Future<AppSettings> loadInitialSettings(AppConfig config) async {
     final prefs = await SharedPreferences.getInstance();
     final String? encoded = prefs.getString(_storageKey);
     if (encoded != null) {
       try {
-        _currentSettings = AppSettings.fromMap(json.decode(encoded));
-        notifyListeners();
+        return AppSettings.fromMap(json.decode(encoded));
       } catch (e) {
-        debugPrint("Error decoding settings: $e");
+        debugPrint('Error decoding saved settings: $e');
       }
     }
+    return AppSettings(
+      serverIp: config.serverIp,
+      serverPort: config.serverPort,
+      localApiKey: config.localApiKey,
+    );
   }
 
   Future<void> updateSettings(AppSettings newSettings) async {
