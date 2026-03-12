@@ -1,3 +1,36 @@
+# Carolina Card Club — Session Changes (2026-03-12)
+
+## Tablet UI — Full-Screen Immersive Mode
+- `client/lib/main_tablet.dart`: added `SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky)` to hide Android status/nav bars on launch
+
+## Tablet UI — Transparent AppBar
+- `tablet_table_page.dart`: AppBar made fully transparent (`backgroundColor: transparent`, `elevation: 0`, `surfaceTintColor: transparent`)
+- `extendBodyBehindAppBar: true` — table oval fills full screen height
+- Title: replaced `Text(tableName)` with `CCCBannerA.png` logo (height 72, upper-left)
+- Logo shifted down via `Transform.translate(Offset(0, 21))` so its top aligns with the clock pill top
+- `toolbarHeight: 96` to accommodate logo + offset
+- Prev/next table navigation chips remain flanking the logo
+
+## Table Oval — Seat Sizing (Proportional to Screen)
+- `table_oval_widget.dart`: seat dimensions are now computed from orbit geometry rather than hardcoded
+- `seatH = (min(radiusX, radiusY) × orbitScale × 2 × sin(π/seats) × 0.70).clamp(60, 180)`
+- `seatW = seatH × 1.612` — both tablets now get appropriately sized seats
+- Selector mode (move-seat dialog) stays fixed at 120×75
+
+## Table Oval — Font Sizing (Proportional to Seat)
+- All tablet seat font sizes are now ratios of `seatH` — scale automatically with screen size
+- Player name: `seatH × 0.150`; detail line (elapsed/balance): `seatH × 0.107`; empty seat number: `seatH × 0.296`
+
+## Table Oval — Seat Content Layout
+- Prepaid seats: show name + "prepaid" label; elapsed time omitted
+- Non-prepaid seats: name on line 1; `"Xh00m  Bal: $X"` combined on line 2
+
+## Table Oval — Table Name Label
+- Color: carolina blue (`0xFF7BAFD4`), opacity 0.50 (up from 0.25), no shadow
+- Font size: 40 (doubled from 20)
+
+---
+
 # Carolina Card Club — Session Changes (2026-03-09, continued)
 
 ## macOS Sequoia Local Network Connectivity Fix

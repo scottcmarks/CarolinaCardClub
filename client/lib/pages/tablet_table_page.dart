@@ -133,11 +133,23 @@ class _TabletTablePageState extends State<TabletTablePage> {
     final hasNext = idx < widget.tables.length - 1;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        toolbarHeight: 96,
         title: Stack(
           alignment: Alignment.center,
           children: [
-            Text(widget.tables[idx].tableName, textAlign: TextAlign.center),
+            // Shift logo down so its top aligns with the top of the clock pill.
+            // Clock pill height ≈ 30dp; in a 96dp toolbar it centers at y=33.
+            // Logo (72dp) centered would start at y=12; shift down 21dp → y=33.
+            Transform.translate(
+              offset: const Offset(0, 21),
+              child: Image.asset('assets/CCCBannerA.png', height: 72, fit: BoxFit.contain),
+            ),
             if (hasPrev)
               Align(
                 alignment: Alignment.centerLeft,

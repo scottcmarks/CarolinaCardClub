@@ -8,6 +8,7 @@
 // address and API key (shared across all devices).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'core/app_config.dart';
 import 'providers/app_settings_provider.dart';
 import 'main.dart' show CarolinaCardClubApp;
@@ -15,6 +16,7 @@ import 'shells/tablet_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   final config = await AppConfig.load();
   final initialSettings = await AppSettingsProvider.loadInitialSettings(config);
   runApp(CarolinaCardClubApp(
