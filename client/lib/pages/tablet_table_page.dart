@@ -1,5 +1,6 @@
 // client/lib/pages/tablet_table_page.dart
 
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/api_provider.dart';
@@ -30,6 +31,11 @@ class _TabletTablePageState extends State<TabletTablePage> {
   late PageController _pageController;
   late int _currentIndex;
 
+  /// Per-table effective seat count. Starts at min(8, table.capacity).
+  /// Displayed capacity = max(stored, highestOccupiedSeat) so occupied seats
+  /// above the stored value are always visible.
+  final Map<int, int> _effectiveCapacities = {};
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +47,42 @@ class _TabletTablePageState extends State<TabletTablePage> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  // ── Effective capacity helpers ─────────────────────────────────────────────
+
+  int _getEffectiveCapacity(PokerTable table, ApiProvider api) {
+    final stored = _effectiveCapacities[table.pokerTableId] ?? min(8, table.capacity);
+    final highestOccupied = api.sessions
+        .where((s) =>
+            s.pokerTableId == table.pokerTableId &&
+            s.stopTime == null &&
+            s.seatNumber != null)
+        .map((s) => s.seatNumber!)
+        .fold(0, max);
+    return max(stored, highestOccupied);
+  }
+
+  bool _canAddSeat(PokerTable table, int effectiveCap) =>
+      effectiveCap < table.capacity;
+
+  bool _canRemoveSeat(PokerTable table, int effectiveCap, ApiProvider api) {
+    if (effectiveCap < 9) return false;
+    if (api.activeSessionAt(table.pokerTableId, effectiveCap) != null) return false;
+    return !api.getOccupiedSeatsAndNamesForTable(table.pokerTableId)
+        .containsKey(effectiveCap);
+  }
+
+  void _addSeat(PokerTable table, ApiProvider api) {
+    final current = _getEffectiveCapacity(table, api);
+    setState(() =>
+        _effectiveCapacities[table.pokerTableId] = min(current + 1, table.capacity));
+  }
+
+  void _removeSeat(PokerTable table, ApiProvider api) {
+    final current = _getEffectiveCapacity(table, api);
+    setState(() =>
+        _effectiveCapacities[table.pokerTableId] = max(current - 1, 8));
   }
 
   // ── Seat state calculation ─────────────────────────────────────────────────
@@ -182,12 +224,54 @@ class _TabletTablePageState extends State<TabletTablePage> {
             padding: EdgeInsets.symmetric(horizontal: 12),
             child: Center(child: RealTimeClock()),
           ),
-          if (widget.onReassign != null)
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: 'Change Table',
-              onPressed: widget.onReassign,
-            ),
+          Builder(builder: (context) {
+            final currentTable = widget.tables[idx];
+            final effectiveCap = _getEffectiveCapacity(currentTable, api);
+            final canAdd = _canAddSeat(currentTable, effectiveCap);
+            final canRemove = _canRemoveSeat(currentTable, effectiveCap, api);
+            final hasSeatItems = canAdd || canRemove;
+            final hasReassign = widget.onReassign != null;
+            if (!hasSeatItems && !hasReassign) return const SizedBox.shrink();
+            return PopupMenuButton<String>(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              tooltip: 'Table options',
+              onSelected: (value) {
+                if (value == 'add') _addSeat(currentTable, api);
+                if (value == 'remove') _removeSeat(currentTable, api);
+                if (value == 'reassign') widget.onReassign?.call();
+              },
+              itemBuilder: (_) => [
+                if (canAdd)
+                  const PopupMenuItem(
+                    value: 'add',
+                    child: ListTile(
+                      leading: Icon(Icons.add_circle_outline),
+                      title: Text('Add seat'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                if (canRemove)
+                  const PopupMenuItem(
+                    value: 'remove',
+                    child: ListTile(
+                      leading: Icon(Icons.remove_circle_outline),
+                      title: Text('Remove seat'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                if (hasSeatItems && hasReassign) const PopupMenuDivider(),
+                if (hasReassign)
+                  const PopupMenuItem(
+                    value: 'reassign',
+                    child: ListTile(
+                      leading: Icon(Icons.swap_horiz),
+                      title: Text('Change Table'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+              ],
+            );
+          }),
         ],
       ),
       body: PageView.builder(
@@ -196,10 +280,11 @@ class _TabletTablePageState extends State<TabletTablePage> {
         itemCount: widget.tables.length,
         itemBuilder: (ctx, pageIdx) {
           final table = widget.tables[pageIdx];
+          final effectiveCap = _getEffectiveCapacity(table, api);
           final controller = _buildController(table, api, time);
           return TableOvalWidget(
             tableName: table.tableName,
-            maxSeats: table.capacity,
+            maxSeats: effectiveCap,
             controller: controller,
             getSeatState: (seatNum) => _getSeatState(seatNum, table, api, time, settings),
             getNowEpoch: () => time.nowEpoch,
@@ -375,6 +460,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
     final occupiedSeats = api.getOccupiedSeatsAndNamesForTable(
         table.pokerTableId,
         seatingPlayerId: session.playerId);
+    final effectiveCap = _getEffectiveCapacity(table, api);
 
     showDialog<int>(
       context: context,
@@ -386,7 +472,7 @@ class _TabletTablePageState extends State<TabletTablePage> {
             width: 600,
             child: TableOvalWidget(
               tableName: table.tableName,
-              maxSeats: table.capacity,
+              maxSeats: effectiveCap,
               controller: TableOvalController(initialSeats: occupiedSeats),
               selectedSeat: session.seatNumber,
               touched: (seatNum, occupantName) {
