@@ -1,3 +1,24 @@
+# Carolina Card Club — Session Changes (2026-03-17, continued)
+
+## Build
+- `flutter clean` + full rebuild after Flutter/Dart upgrade; all targets rebuilt cleanly
+
+## Tablet — Dynamic Seat Capacity
+- `client/lib/pages/tablet_table_page.dart`: tablets now default to 8 seats regardless of server capacity
+- `_effectiveCapacities: Map<int,int>` in state tracks per-table overrides
+- `_getEffectiveCapacity` = `max(stored, highestOccupiedSeat)` — never hides occupied seats
+- Settings gear (PopupMenuButton, replaces old reassign IconButton) shows Add/Remove seat and Change Table
+- Add seat: available when `effectiveCap < table.capacity`; Remove seat: when `effectiveCap >= 9` and highest seat empty
+- Effective capacity used for main oval and move-seat dialog
+
+## Maintenance
+- `server/delete_after_mar1.sh`: bash/sqlite3 script to delete Session and Payment rows with epoch ≥ 2026-03-01; shows counts and prompts for confirmation before deleting
+
+## Diagnosis
+- "no such table PokerTable" errors caused by server being run from wrong directory; server must be launched from `server/` so `Directory.current` resolves `CarolinaCardClub.db` correctly
+
+---
+
 # Carolina Card Club — Session Changes (2026-03-17)
 
 ## Minimum Seating Balance — New Setting
