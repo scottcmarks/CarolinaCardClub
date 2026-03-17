@@ -71,7 +71,7 @@ class TableOvalController extends ChangeNotifier {
 
 // ── Seat state ────────────────────────────────────────────────────────────────
 
-enum SeatState { empty, reserved, healthy, warning, overdue, away, awayOverdue }
+enum SeatState { empty, reserved, healthy, warning, lowBalance, overdue, away, awayOverdue }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
 
@@ -148,6 +148,8 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
         return Colors.green.shade600;
       case SeatState.warning:
         return Colors.amber.shade600;
+      case SeatState.lowBalance:
+        return Color.lerp(Colors.yellow.shade700, Colors.yellow.shade300, flashValue)!;
       case SeatState.overdue:
       case SeatState.awayOverdue:
         return Color.lerp(Colors.red.shade700, Colors.red.shade300, flashValue)!;
@@ -292,7 +294,9 @@ class _TableOvalWidgetState extends State<TableOvalWidget>
     final state = widget.getSeatState!(seatNum);
     final color = _seatColor(state, _flashController.value);
     final isReserved = state == SeatState.reserved;
-    final textColor = (state == SeatState.away || isReserved) ? Colors.black54 : Colors.white;
+    final textColor = (state == SeatState.away || isReserved || state == SeatState.lowBalance)
+        ? Colors.black54
+        : Colors.white;
     final isAway = state == SeatState.away || state == SeatState.awayOverdue;
     final nowEpoch = widget.getNowEpoch!();
 

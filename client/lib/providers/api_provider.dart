@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:shared/shared.dart';
 import '../models/app_settings.dart';
 import '../models/player_selection_item.dart';
 import '../models/session.dart';
@@ -30,6 +31,8 @@ class ApiProvider with ChangeNotifier {
   int? clubSessionStartEpoch;
   late int defaultSessionHour = settings.defaultSessionHour;
   late int defaultSessionMinute = settings.defaultSessionMinute;
+
+  int minSeatingBalance = Shared.defaultMinSeatingBalance;
 
   bool showAllSessions = false;
   bool debugFetchPlayers = false;
@@ -140,6 +143,7 @@ class ApiProvider with ChangeNotifier {
       clubSessionStartEpoch = data['Club_Start_Epoch'];
       defaultSessionHour = data['Default_Session_Hour'] ?? settings.defaultSessionHour;
       defaultSessionMinute = data['Default_Session_Minute'] ?? settings.defaultSessionMinute;
+      minSeatingBalance = data['Min_Seating_Balance'] ?? Shared.defaultMinSeatingBalance;
       notifyListeners();
     } catch (e) {
       debugPrint('🛑 ERROR [fetchState]: $e');
@@ -237,8 +241,8 @@ class ApiProvider with ChangeNotifier {
     await reloadAll(nowEpoch);
   }
 
-  Future<void> updateDefaultSessionTime(int hour, int minute) async {
-    await _service.updateDefaultSessionTime(hour, minute);
+  Future<void> updateDefaultSessionTime(int hour, int minute, int minSeatBalance) async {
+    await _service.updateDefaultSessionTime(hour, minute, minSeatBalance);
     await fetchState();
   }
 

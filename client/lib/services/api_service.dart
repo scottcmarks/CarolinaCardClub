@@ -147,9 +147,9 @@ class ApiService {
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to toggle table status');
   }
 
-  Future<void> updateDefaultSessionTime(int hour, int minute) async {
+  Future<void> updateDefaultSessionTime(int hour, int minute, int minSeatBalance) async {
     final res = await _client.post(Uri.parse('$_baseUrl/state/defaults'),
-        headers: _headers, body: jsonEncode({'hour': hour, 'minute': minute}));
+        headers: _headers, body: jsonEncode({'hour': hour, 'minute': minute, 'minSeatBalance': minSeatBalance}));
     if (res.statusCode != Shared.httpOK) throw Exception('Failed to update default session time');
   }
 

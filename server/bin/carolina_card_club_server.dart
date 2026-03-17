@@ -412,10 +412,14 @@ Future<Response> _updateDefaultsHandler(Request request) async {
     final data = json.decode(await request.readAsString());
     final db = await _db;
 
-    await db.update('System_State', {
+    final updates = <String, dynamic>{
       'Default_Session_Hour': data['hour'],
-      'Default_Session_Minute': data['minute']
-    }, where: 'Id = 1');
+      'Default_Session_Minute': data['minute'],
+    };
+    if (data['minSeatBalance'] != null) {
+      updates['Min_Seating_Balance'] = data['minSeatBalance'];
+    }
+    await db.update('System_State', updates, where: 'Id = 1');
 
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
@@ -547,7 +551,8 @@ Future<Database> get _db async {
         Floor_Manager_Table_Id INTEGER,
         Floor_Manager_Seat_Number INTEGER,
         Current_Game_Epoch INTEGER,
-        Clock_Offset_Seconds INTEGER DEFAULT 0
+        Clock_Offset_Seconds INTEGER DEFAULT 0,
+        Min_Seating_Balance INTEGER NOT NULL DEFAULT 0
     )
   ''');
 
@@ -565,6 +570,7 @@ Future<Database> get _db async {
     'ALTER TABLE System_State ADD COLUMN Current_Game_Epoch INTEGER',
     'ALTER TABLE Session ADD COLUMN Is_Away INTEGER DEFAULT 0',
     'ALTER TABLE Session ADD COLUMN Away_Since_Epoch INTEGER',
+    'ALTER TABLE System_State ADD COLUMN Min_Seating_Balance INTEGER NOT NULL DEFAULT 0',
   ]) {
     try {
       await _database!.execute(migration);

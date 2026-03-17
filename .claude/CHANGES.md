@@ -1,3 +1,27 @@
+# Carolina Card Club — Session Changes (2026-03-17)
+
+## Minimum Seating Balance — New Setting
+- `shared/constants.dart`: added `Shared.defaultMinSeatingBalance = 0`
+- `server/carolina_card_club_server.dart`: added `Min_Seating_Balance INTEGER DEFAULT 0` column to `System_State` schema + migration; extended `_updateDefaultsHandler` to accept `minSeatBalance`
+- `client/lib/services/api_service.dart`: `updateDefaultSessionTime` now sends `minSeatBalance`
+- `client/lib/providers/api_provider.dart`: added `minSeatingBalance` field, read from `GET /state`, threaded through `updateDefaultSessionTime`
+- `client/lib/pages/settings_page.dart`: added "Table Rules" section with "Minimum Seating Balance ($)" signed-int field; note on floor manager toggle
+
+## Tablet Seating — No Payment UI
+- `client/lib/widgets/start_session_dialog.dart`: added `isTablet: bool = false`; in tablet mode: no payment text field, no negative-balance warning box; prepay switch shown only when balance ≥ prepay cost
+- `client/lib/pages/tablet_table_page.dart`: balance check before showing dialog — if `balance < api.minSeatingBalance`, shows error AlertDialog directing player to admin; passes `isTablet: true` to `StartSessionDialog`
+
+## Seat Color States — Balance-Based Flashing
+- `client/lib/widgets/table_oval_widget.dart`: added `SeatState.lowBalance` (flashing yellow); `overdue` threshold changed from `balance <= 0` to `balance < 0`
+- `client/lib/pages/tablet_table_page.dart`: `_getSeatState` updated — `balance < 0` → overdue (flash red); `balance <= minSeatingBalance` → lowBalance (flash yellow); time-based warning (solid amber) only above minimum
+
+## Tablet Auto-Discovery
+- `client/lib/shells/tablet_shell.dart`: complete rewrite; `TabletShell` now routes all non-connected states (connecting/failed/disconnected) to `_ServerSearchScreen` — prevents `DbConnectionProvider`'s reconnect loop from destroying mid-scan
+- `_ServerSearchScreen`: new StatefulWidget; watches `DbConnectionProvider` via `didChangeDependencies`, starts scan on first failure (not immediately); tries saved IP first then full subnet scan via existing `SubnetScanner`; on success updates `AppSettingsProvider` (proxy provider auto-reconnects WebSocket); on failure shows manual IP field + "Retry Scan" / "Connect" buttons
+- 8-second fallback timer ensures scan starts even if failure event is missed
+
+---
+
 # Carolina Card Club — Session Changes (2026-03-12)
 
 ## Tablet UI — Full-Screen Immersive Mode

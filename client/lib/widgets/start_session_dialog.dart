@@ -12,12 +12,14 @@ class StartSessionDialog extends StatefulWidget {
   final PlayerSelectionItem player;
   final int? initialTableId;
   final int? initialSeat;
+  final bool isTablet;
 
   const StartSessionDialog({
     super.key,
     required this.player,
     this.initialTableId,
     this.initialSeat,
+    this.isTablet = false,
   });
 
   @override
@@ -101,7 +103,12 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
     final timeProvider = Provider.of<TimeProvider>(context);
 
     final activeTables = api.activeTables;
-    final bool needsPaymentUI = _targetPrepay > 0 || _currentBalance < 0;
+
+    // In tablet mode: show prepay switch only when balance fully covers prepay cost.
+    final bool tabletCanPrepay = widget.isTablet && _targetPrepay > 0 && _currentBalance >= _targetPrepay;
+
+    // In admin mode: show full payment UI when prepay is configured or balance is negative.
+    final bool needsPaymentUI = !widget.isTablet && (_targetPrepay > 0 || _currentBalance < 0);
 
     return AlertDialog(
       title: Text("Seat ${widget.player.name}"),
@@ -136,7 +143,7 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                 ),
               ],
 
-              if (_currentBalance < 0)
+              if (!widget.isTablet && _currentBalance < 0)
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 16),
@@ -245,7 +252,21 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
                       });
                     },
                   ),
-              ]
+              ],
+
+              if (tabletCanPrepay) ...[
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text("Prepaid Session", style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text("Cost: \$$_targetPrepay (covered by balance)"),
+                  value: _isPrepaid,
+                  activeThumbColor: Colors.blue,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (val) => setState(() => _isPrepaid = val),
+                ),
+              ],
             ]
           ],
         ),
@@ -257,21 +278,23 @@ class _StartSessionDialogState extends State<StartSessionDialog> {
             int paymentAmount = int.tryParse(_amountController.text) ?? 0;
             int resultingBalance = _currentBalance + paymentAmount;
 
-            if (!_isPrepaid && resultingBalance < 0) {
-              _showErrorPopup(
-                "Resulting balance cannot be negative.\n\n"
-                "You must collect at least \$${-_currentBalance} to clear the existing debt."
-              );
-              return;
-            }
+            if (!widget.isTablet) {
+              if (!_isPrepaid && resultingBalance < 0) {
+                _showErrorPopup(
+                  "Resulting balance cannot be negative.\n\n"
+                  "You must collect at least \$${-_currentBalance} to clear the existing debt."
+                );
+                return;
+              }
 
-            if (_isPrepaid && resultingBalance < _targetPrepay) {
-              _showErrorPopup(
-                "Insufficient funds for a Prepaid Session.\n\n"
-                "The resulting balance must be at least \$$_targetPrepay. "
-                "You must collect at least \$${_targetPrepay - _currentBalance}."
-              );
-              return;
+              if (_isPrepaid && resultingBalance < _targetPrepay) {
+                _showErrorPopup(
+                  "Insufficient funds for a Prepaid Session.\n\n"
+                  "The resulting balance must be at least \$$_targetPrepay. "
+                  "You must collect at least \$${_targetPrepay - _currentBalance}."
+                );
+                return;
+              }
             }
 
             final navigator = Navigator.of(context);

@@ -70,7 +70,8 @@ class _TabletTablePageState extends State<TabletTablePage> {
     if (playerMatches.isEmpty) return SeatState.healthy;
 
     final balance = api.getDynamicBalance(playerMatches.first, time.nowEpoch);
-    if (balance <= 0) return SeatState.overdue;
+    if (balance < 0) return SeatState.overdue;
+    if (balance <= api.minSeatingBalance) return SeatState.lowBalance;
 
     final warningThreshold =
         (Shared.defaultWarningPurchasedSecondsRemaining *
@@ -433,12 +434,42 @@ class _TabletTablePageState extends State<TabletTablePage> {
     );
     if (player == null || !context.mounted) return;
 
+    final api = Provider.of<ApiProvider>(context, listen: false);
+    final timeProvider = Provider.of<TimeProvider>(context, listen: false);
+    final balance = api.getDynamicBalance(player, timeProvider.nowEpoch);
+
+    if (balance < api.minSeatingBalance) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Cannot Seat Player",
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            content: Text(
+              "${player.name} has an insufficient balance (\$$balance).\n\n"
+              "A minimum balance of \$${api.minSeatingBalance} is required to be seated.\n\n"
+              "Please direct the player to the admin station to add funds.",
+              style: const TextStyle(fontSize: 16),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("OK"),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     await showDialog<bool>(
       context: context,
       builder: (_) => StartSessionDialog(
         player: player,
         initialTableId: table.pokerTableId,
         initialSeat: seatNum,
+        isTablet: true,
       ),
     );
   }

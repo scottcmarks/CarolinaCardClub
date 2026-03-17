@@ -26,6 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _fmIdController;
   late TextEditingController _hourController;
   late TextEditingController _minuteController;
+  late TextEditingController _minSeatBalanceController;
 
   bool _isDirty = false;
   String _lastKnownSavedIp = '';
@@ -42,9 +43,12 @@ class _SettingsPageState extends State<SettingsPage> {
     _fmIdController = TextEditingController(text: s.floorManagerPlayerId?.toString() ?? '');
     _hourController = TextEditingController(text: Shared.defaultSessionHour.toString());
     _minuteController = TextEditingController(text: Shared.defaultSessionMinute.toString());
+    final api = Provider.of<ApiProvider>(context, listen: false);
+    _minSeatBalanceController = TextEditingController(text: api.minSeatingBalance.toString());
 
     for (final c in [_ipController, _portController, _apiKeyController,
-                     _timeoutController, _fmIdController, _hourController, _minuteController]) {
+                     _timeoutController, _fmIdController, _hourController, _minuteController,
+                     _minSeatBalanceController]) {
       c.addListener(_onFieldChanged);
     }
   }
@@ -69,7 +73,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     for (final c in [_ipController, _portController, _apiKeyController,
-                     _timeoutController, _fmIdController, _hourController, _minuteController]) {
+                     _timeoutController, _fmIdController, _hourController, _minuteController,
+                     _minSeatBalanceController]) {
       c.removeListener(_onFieldChanged);
       c.dispose();
     }
@@ -94,9 +99,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
     final hour = int.tryParse(_hourController.text) ?? Shared.defaultSessionHour;
     final minute = int.tryParse(_minuteController.text) ?? Shared.defaultSessionMinute;
+    final minSeatBalance = int.tryParse(_minSeatBalanceController.text) ?? Shared.defaultMinSeatingBalance;
 
     try {
-      await api.updateDefaultSessionTime(hour, minute);
+      await api.updateDefaultSessionTime(hour, minute, minSeatBalance);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -180,6 +186,20 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           _buildIntField('Manager Player ID', _fmIdController,
               'Default: ${Shared.defaultFloorManagerPlayerId}'),
+          const Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 4),
+            child: Text(
+              'Leave blank to disable floor manager reserved seat.',
+              style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          const Text('Table Rules',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          _buildSignedIntField('Minimum Seating Balance (\$)', _minSeatBalanceController,
+              'Default: ${Shared.defaultMinSeatingBalance}'),
 
           const Divider(height: 48),
           OutlinedButton.icon(
@@ -224,6 +244,23 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+    );
+  }
+
+  Widget _buildSignedIntField(String label, TextEditingController controller, String hint) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(signed: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^-?\d*'))],
       ),
     );
   }

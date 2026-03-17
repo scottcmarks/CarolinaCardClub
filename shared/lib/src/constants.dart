@@ -27,6 +27,7 @@ class Shared {
   // --- Session Warning / Away Thresholds ---
   static const int defaultWarningPurchasedSecondsRemaining = 10 * 60; // 10 minutes
   static const int defaultAwayTimeoutSeconds = 20 * 60; // 20 minutes
+  static const int defaultMinSeatingBalance = 0; // minimum balance required to be seated at a table
 
   // --- Floor Manager (Preserved) ---
   static const int defaultFloorManagerPlayerId = 1;
