@@ -4,7 +4,18 @@
       "Bash(flutter run:*)",
       "Bash(pgrep:*)",
       "Bash(sqlite3:*)",
-      "Bash(flutter analyze:*)"
+      "Bash(flutter analyze:*)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pip3:*)",
+      "Bash(/usr/local/bin/python3:*)",
+      "Bash(python3.9:*)",
+      "Read(//usr/local/bin/**)",
+      "Read(//Users/scott/**)",
+      "Bash(.venv/bin/python3:*)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)"
     ]
   }
 }
