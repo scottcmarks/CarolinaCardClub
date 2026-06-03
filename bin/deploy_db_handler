@@ -1,0 +1,33 @@
+#!/bin/bash
+# Deploy db_handler.php to carolinacardclub.com (InMotion shared hosting) and
+# smoke-test the live endpoint. Requires the 'ccc' ssh alias (~/.ssh/config:
+# HostName carolinacardclub.com, User magnol9, Port 2222).
+set -euo pipefail
+
+LOCAL="${HOME}/carolina_card_club/db_connection/db_handler.php"
+REMOTE_DIR="carolinacardclub"            # site docroot under ~ on the host
+URL="https://carolinacardclub.com/db_handler.php"
+API_KEY="31221da269c89d6e770cd96ad259433dffedd1f75250597cff4114144086129797bf09ab6fff19234e9674d7e48e428cd8aeb8a5a23a36abcd705acae8d1c030"
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+SSH="ssh -o BatchMode=yes"
+
+[ -f "$LOCAL" ] || { echo "❌ $LOCAL not found"; exit 1; }
+
+echo "💾 Backing up remote handler..."
+$SSH ccc "cd ~/$REMOTE_DIR && cp db_handler.php db_handler.php.bak-\$(date +%Y%m%d-%H%M%S)"
+
+echo "🚀 Uploading db_handler.php..."
+rsync -avz -e "$SSH" "$LOCAL" "ccc:$REMOTE_DIR/db_handler.php"
+
+echo "🔎 Smoke-testing live endpoint..."
+code=$(curl -s -o /tmp/_ccc_q.json -w "%{http_code}" -H "User-Agent: $UA" \
+  -X POST --data "apiKey=$API_KEY&action=query&query=email_list" "$URL")
+if [ "$code" = "200" ] && head -c1 /tmp/_ccc_q.json | grep -q '\['; then
+  n=$(python3 -c 'import json,sys;print(len(json.load(open("/tmp/_ccc_q.json"))))')
+  echo "✅ Deployed. email_list query returned $n rows (HTTP $code)."
+else
+  echo "❌ Smoke test failed (HTTP $code):"; head -c 300 /tmp/_ccc_q.json; echo
+  echo "   Remote backup db_handler.php.bak-* is available to restore."
+  exit 1
+fi
+rm -f /tmp/_ccc_q.json

@@ -10,8 +10,67 @@ $backup_dir = 'backups/';
 $secret_api_key = "31221da269c89d6e770cd96ad259433dffedd1f75250597cff41141440861297".
                   "97bf09ab6fff19234e9674d7e48e428cd8aeb8a5a23a36abcd705acae8d1c030";
 
+// --- WHITELISTED QUERIES ---
+// Read-only, named queries only. No free-form SQL is ever accepted from the
+// client; the client sends a query *name*, never SQL. Add new entries here.
+$allowed_queries = array(
+    'email_list' => 'SELECT * FROM Email_List',
+);
+
 // Check the request method (GET or POST)
 $request_method = $_SERVER['REQUEST_METHOD'];
+
+// The provided API key may arrive via query string (GET) or POST body.
+$provided_key = isset($_REQUEST['apiKey']) ? $_REQUEST['apiKey'] : null;
+
+// --- Handle named-query Request (GET or POST, action=query) ---
+if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'query') {
+    header('Content-Type: application/json');
+
+    // SECURITY CHECK: verify the secret key.
+    if ($provided_key !== $secret_api_key) {
+        header("HTTP/1.1 403 Forbidden");
+        echo json_encode(array('error' => 'Invalid or missing API key.'));
+        exit;
+    }
+
+    $name = isset($_REQUEST['query']) ? $_REQUEST['query'] : '';
+    if (!isset($allowed_queries[$name])) {
+        header("HTTP/1.1 400 Bad Request");
+        echo json_encode(array(
+            'error' => 'Unknown query name.',
+            'allowed' => array_keys($allowed_queries),
+        ));
+        exit;
+    }
+
+    if (!file_exists($db_file)) {
+        header("HTTP/1.1 404 Not Found");
+        echo json_encode(array('error' => 'Database file not found on the server.'));
+        exit;
+    }
+
+    try {
+        // Open strictly read-only so a query can never mutate the database.
+        $db = new SQLite3($db_file, SQLITE3_OPEN_READONLY);
+        $db->busyTimeout(5000);
+        $result = $db->query($allowed_queries[$name]);
+        if ($result === false) {
+            throw new Exception($db->lastErrorMsg());
+        }
+        $rows = array();
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $rows[] = $row;
+        }
+        $db->close();
+        header("HTTP/1.1 200 OK");
+        echo json_encode($rows);
+    } catch (Exception $e) {
+        header("HTTP/1.1 500 Internal Server Error");
+        echo json_encode(array('error' => 'Query failed: ' . $e->getMessage()));
+    }
+    exit;
+}
 
 if ($request_method === 'GET') {
     // --- Handle Download Request ---
