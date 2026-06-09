@@ -1,0 +1,7 @@
+#!/bin/bash
+# Sentinel-gated unattended sender. Sends today's reviewed POKER TONIGHT draft
+# via the Gmail API ONLY if ~/carolina_card_club/send_email_ok exists, then
+# deletes that sentinel. Safe to run from cron at the target send time (2:30 PM).
+cd ~/carolina_card_club/server || exit 1
+[ -f venv/bin/activate ] && . venv/bin/activate
+python3 send_if_armed.py "$@"

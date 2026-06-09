@@ -1,0 +1,72 @@
+#!/bin/bash
+#
+# One-click installer for the two LOCAL cron jobs of the weekly poker email:
+#   * Tue 12:00  export_recipients --remote   (refresh recipients from remote DB)
+#   * Tue 14:30  send_if_armed                 (send reviewed draft IFF sentinel present)
+#
+# The third piece — building the draft at ~1pm — is a Cowork scheduled task, not a
+# cron job, so it is NOT installed here (Cowork sets that up separately).
+#
+# Idempotent: re-running replaces the managed block, never duplicates it.
+# Usage:   bin/install_cron          (install/update)
+#          bin/install_cron --remove (remove the managed block)
+#          bin/install_cron --dry-run
+set -euo pipefail
+
+BIN="$HOME/carolina_card_club/bin"
+MARK_BEGIN="# >>> carolina_card_club weekly email >>>"
+MARK_END="# <<< carolina_card_club weekly email <<<"
+
+MODE="install"
+case "${1:-}" in
+  --remove)  MODE="remove" ;;
+  --dry-run) MODE="dry-run" ;;
+  "" )       MODE="install" ;;
+  *) echo "Unknown option: $1"; exit 2 ;;
+esac
+
+# Sanity: the referenced scripts should exist and be executable.
+for f in "$BIN/export_recipients" "$BIN/send_if_armed"; do
+  if [ ! -x "$f" ]; then
+    echo "WARNING: $f is missing or not executable (chmod +x it)."
+  fi
+done
+
+# Current crontab with any previously-managed block stripped out.
+EXISTING="$(crontab -l 2>/dev/null | awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+  $0==b {skip=1}
+  skip==0 {print}
+  $0==e {skip=0}
+' || true)"
+
+BLOCK="$MARK_BEGIN
+# Refresh recipient list from the authoritative remote DB — Tuesday 12:00
+0 12 * * 2 $BIN/export_recipients --remote >> /tmp/ccc_export.log 2>&1
+# Send today's reviewed draft IF ~/carolina_card_club/send_email_ok exists — Tuesday 14:30
+30 14 * * 2 $BIN/send_if_armed >> /tmp/ccc_send.log 2>&1
+$MARK_END"
+
+if [ "$MODE" = "remove" ]; then
+  printf '%s\n' "$EXISTING" | crontab -
+  echo "Removed the carolina_card_club weekly-email cron block."
+  exit 0
+fi
+
+NEW="$EXISTING"
+[ -n "$NEW" ] && NEW="$NEW"$'\n'"$BLOCK" || NEW="$BLOCK"
+
+if [ "$MODE" = "dry-run" ]; then
+  echo "=== crontab would become: ==="
+  printf '%s\n' "$NEW"
+  exit 0
+fi
+
+printf '%s\n' "$NEW" | crontab -
+echo "Installed. The managed block is now:"
+echo "------------------------------------"
+printf '%s\n' "$BLOCK"
+echo "------------------------------------"
+echo "Verify any time with:  crontab -l"
+echo
+echo "Note (macOS): if the jobs never fire, grant cron Full Disk Access —"
+echo "System Settings > Privacy & Security > Full Disk Access > add /usr/sbin/cron."

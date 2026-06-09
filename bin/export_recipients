@@ -1,0 +1,7 @@
+#!/bin/bash
+# Headless replacement for `email_list`: dumps the current weekly recipients
+# from the LIVE database to server/weekly_recipients.json for the Cowork
+# "weekly poker email" workflow to read. Safe to run from cron.
+cd ~/carolina_card_club/server || exit 1
+[ -f venv/bin/activate ] && . venv/bin/activate
+python3 export_recipients.py "$@"
