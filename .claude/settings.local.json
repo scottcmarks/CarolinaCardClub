@@ -49,7 +49,19 @@
       "Bash(bin/email_list)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(unzip -l poker-hand-logger-files.zip)",
+      "Bash(unzip -q poker-hand-logger.zip)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(bash -lc 'command -v node npm')",
+      "Bash(git commit *)",
+      "Read(//usr/local/**)",
+      "Bash(/opt/homebrew/bin/brew list *)",
+      "Bash(/opt/homebrew/bin/brew install *)",
+      "Bash(ls -1 tailwind.config.* postcss.config.*)",
+      "Bash(grep -rin \"tailwind\" src index.html package.json)"
     ]
   }
 }
