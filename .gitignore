@@ -58,3 +58,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# pull_db backup
+server/CarolinaCardClub.db.before-pull
