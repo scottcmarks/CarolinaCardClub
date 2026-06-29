@@ -1,259 +1,85 @@
 import { X } from "lucide-react";
-import { HOLE_START, POSITIONS_9, SEAT_COUNT, tableTheme, theme } from "../constants.js";
+import { HOLE_START, SEAT_COUNT, tableTheme, theme } from "../constants.js";
 import { sameTarget } from "../lib/cards.js";
 import Slot from "./Slot.jsx";
 
-// Seat geometry: dealer notch at top (12 o'clock). Seats go COUNTER-clockwise
-// from the viewer (so the dealer's left = upper-right on screen):
-//   seat 1 upper-right, seat 2 right, ..., seat 5 bottom (across from dealer),
-//   ..., seat 9 upper-left.
-// Place 9 seats on the ellipse at angles ψ_n = n * (2π/10) measured CCW from
-// the top; ψ=0 stays empty (dealer).
-// Flatten the table — wider than tall.
-const RX = 46;
-const RY = 34;
+// Wider-than-tall oval; seats CCW from the top (dealer notch). Seat 1
+// upper-right, seat 5 across from dealer at the bottom, seat 9 upper-left.
+// Positions are % of the inner aspect-ratio box (which is itself wide).
+const RX = 45;
+const RY = 41;
 function seatPos(n) {
   const psi = (n * 2 * Math.PI) / (SEAT_COUNT + 1);
-  // CCW from top, viewer perspective: positive ψ goes to the right.
-  const left = 50 + RX * Math.sin(psi);
-  const top = 50 - RY * Math.cos(psi);
-  return { left: `${left}%`, top: `${top}%` };
+  return { left: `${50 + RX * Math.sin(psi)}%`, top: `${50 - RY * Math.cos(psi)}%` };
 }
-
-// Place the dealer-button chip slightly inboard of the named seat so it
-// reads as "this seat has the button" without overlapping the cards.
 function buttonChipPos(n) {
   const psi = (n * 2 * Math.PI) / (SEAT_COUNT + 1);
-  const left = 50 + (RX - 14) * Math.sin(psi);
-  const top = 50 - (RY - 12) * Math.cos(psi);
-  return { left: `${left}%`, top: `${top}%` };
+  return { left: `${50 + (RX - 13) * Math.sin(psi)}%`, top: `${50 - (RY - 11) * Math.cos(psi)}%` };
 }
 
-// Resolve position label for a seat given where the button sits.
-function positionLabel(seat, button) {
-  const offset = (seat - button + SEAT_COUNT) % SEAT_COUNT;
-  return POSITIONS_9[offset];
-}
-
-function CommunityRow({ cards, active, onSelect }) {
-  const slot = (i) => {
-    const target = { type: "board", index: i };
-    return (
-      <Slot
-        key={i}
-        card={cards[i]}
-        isActive={sameTarget(active, target)}
-        onSelect={() => onSelect(target)}
-        w={34}
-        h={48}
-      />
-    );
-  };
-  return (
-    <div
-      className="flex items-center"
-      style={{
-        position: "absolute",
-        left: "50%",
-        top: "50%",
-        transform: "translate(-50%, -50%)",
-      }}
-    >
-      <div className="flex gap-1">{[0, 1, 2].map(slot)}</div>
-      <div style={{ width: 14 }} />
-      {slot(3)}
-      <div style={{ width: 14 }} />
-      {slot(4)}
-    </div>
-  );
-}
-
-function HeroSeat({ n, cards, active, onSelect, position }) {
-  const { left, top } = seatPos(n);
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left,
-        top,
-        transform: "translate(-50%, -50%)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 2,
-      }}
-    >
-      <div className="flex gap-1">
-        {[HOLE_START, HOLE_START + 1].map((i) => {
-          const target = { type: "board", index: i };
-          return (
-            <Slot
-              key={i}
-              card={cards[i]}
-              isActive={sameTarget(active, target)}
-              onSelect={() => onSelect(target)}
-              w={32}
-              h={46}
-              hole
-            />
-          );
-        })}
-      </div>
-      <span
-        className="uppercase"
-        style={{
-          fontSize: 9,
-          letterSpacing: "0.1em",
-          color: "rgba(201,162,39,0.85)",
-          fontWeight: 700,
-        }}
-      >
-        You · S{n} · {position}
-      </span>
-    </div>
-  );
-}
-
-function VillainSeat({ n, revealIdx, reveal, active, onSelect, onRemove, position }) {
-  const { left, top } = seatPos(n);
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left,
-        top,
-        transform: "translate(-50%, -50%)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 2,
-      }}
-    >
-      <div className="flex gap-1">
-        {[0, 1].map((c) => {
-          const target = { type: "reveal", r: revealIdx, c };
-          return (
-            <Slot
-              key={c}
-              card={reveal.cards[c]}
-              isActive={sameTarget(active, target)}
-              onSelect={() => onSelect(target)}
-              w={30}
-              h={42}
-            />
-          );
-        })}
-      </div>
-      <div className="flex items-center gap-1">
-        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.6)" }}>S{n} · {position}</span>
-        <button onClick={() => onRemove(revealIdx)} style={{ color: "rgba(255,255,255,0.5)" }}>
-          <X size={11} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function EmptySeat({ n, onSelectSeat, position }) {
-  const { left, top } = seatPos(n);
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left,
-        top,
-        transform: "translate(-50%, -50%)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 2,
-      }}
-    >
-      <button
-        onClick={() => onSelectSeat(n)}
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          background: "rgba(0,0,0,0.35)",
-          border: "1px dashed rgba(255,255,255,0.3)",
-          color: "rgba(255,255,255,0.65)",
-          fontSize: 13,
-          fontWeight: 700,
-        }}
-        className="active:scale-95"
-      >
-        {n}
-      </button>
-      <span
-        style={{
-          fontSize: 8,
-          letterSpacing: "0.1em",
-          color: "rgba(255,255,255,0.45)",
-          fontWeight: 600,
-        }}
-      >
-        {position}
-      </span>
-    </div>
-  );
-}
-
-function DealerButton({ seat, onTap }) {
-  const { left, top } = buttonChipPos(seat);
+function CardBack({ w = 32, h = 46, onClick }) {
   return (
     <button
-      onClick={onTap}
-      title="Tap to advance the button one seat"
+      onClick={onClick}
+      className="rounded-lg shrink-0"
+      style={{
+        width: w,
+        height: h,
+        background: "repeating-linear-gradient(45deg, #7a1420 0 6px, #5e0f19 6px 12px)",
+        border: "1px solid rgba(255,255,255,0.25)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
+      }}
+    />
+  );
+}
+
+function SeatFrame({ n, active, folded, children }) {
+  const { left, top } = seatPos(n);
+  return (
+    <div
+      data-seat={n}
       style={{
         position: "absolute",
         left,
         top,
         transform: "translate(-50%, -50%)",
-        width: 26,
-        height: 26,
-        borderRadius: "50%",
-        background: "#F6F3EA",
-        color: "#23201A",
-        fontSize: 11,
-        fontWeight: 900,
-        border: "2px solid #C9A227",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
-        zIndex: 5,
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
-        letterSpacing: 0,
+        gap: 2,
+        opacity: folded ? 0.4 : 1,
+        filter: folded ? "grayscale(0.6)" : "none",
       }}
-      className="active:scale-95"
     >
-      D
-    </button>
+      <div
+        className={active ? "animate-pulse" : ""}
+        style={{
+          padding: 3,
+          borderRadius: 12,
+          boxShadow: active ? `0 0 0 2px ${theme.gold}, 0 0 14px rgba(201,162,39,0.7)` : "none",
+        }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
-function DealerNotch() {
+function Tag({ name, sub, committed }) {
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: "50%",
-        top: 0,
-        transform: "translate(-50%, -50%)",
-        width: 56,
-        height: 20,
-        borderRadius: 10,
-        background: tableTheme.rail,
-        border: "1px solid rgba(255,255,255,0.15)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 9,
-        letterSpacing: "0.15em",
-        color: "rgba(255,255,255,0.55)",
-      }}
-    >
-      DEALER
+    <div className="flex flex-col items-center" style={{ lineHeight: 1.15, marginTop: 1 }}>
+      <span
+        style={{ fontSize: 9.5, color: "rgba(255,255,255,0.85)", fontWeight: 600, maxWidth: 72 }}
+        className="truncate"
+      >
+        {name}
+      </span>
+      <span style={{ fontSize: 8, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)" }}>
+        {sub}
+        {committed > 0 && (
+          <b style={{ color: theme.gold }}>{sub ? " · " : ""}${committed}</b>
+        )}
+      </span>
     </div>
   );
 }
@@ -261,30 +87,52 @@ function DealerNotch() {
 export default function PokerTable({
   cards,
   reveals,
+  heroRevealed,
   active,
+  mode,
+  phase,
+  bet,
+  seats,
+  positions,
   heroSeat,
+  heroName,
   buttonSeat,
-  onSelect,
+  onSelectCommunity,
+  onTapHeroCard,
+  onSeatAct,
   onSelectSeat,
   onRemoveReveal,
+  onSeatNew,
   onAdvanceButton,
 }) {
-  // Map seat number → reveal index (only for non-hero seats).
+  const showdown = phase === "showdown";
   const revealBySeat = new Map();
-  reveals.forEach((r, i) => {
-    if (r.seat) revealBySeat.set(String(r.seat), i);
-  });
+  reveals.forEach((r, i) => r.seat && revealBySeat.set(String(r.seat), i));
+
+  const communitySlot = (i) => {
+    const target = { type: "board", index: i };
+    return (
+      <Slot
+        key={i}
+        card={cards[i]}
+        isActive={mode === "cards" && sameTarget(active, target)}
+        onSelect={() => onSelectCommunity(target)}
+        w={34}
+        h={48}
+      />
+    );
+  };
 
   return (
     <div
-      className="relative my-3"
-      style={{ flex: 1, minHeight: 320 }}
+      className="relative my-3 flex items-center justify-center"
+      style={{ flex: 1, minHeight: 250 }}
     >
-      {/* Felt oval */}
+      <div style={{ position: "relative", width: "100%", aspectRatio: "1.35" }}>
       <div
         style={{
           position: "absolute",
-          inset: 6,
+          inset: 4,
           borderRadius: "50%",
           background: tableTheme.feltOval,
           border: `8px solid ${tableTheme.rail}`,
@@ -292,43 +140,201 @@ export default function PokerTable({
         }}
       />
 
-      <DealerNotch />
+      {/* dealer notch */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: 0,
+          transform: "translate(-50%, -50%)",
+          width: 56,
+          height: 20,
+          borderRadius: 10,
+          background: tableTheme.rail,
+          border: "1px solid rgba(255,255,255,0.15)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 9,
+          letterSpacing: "0.15em",
+          color: "rgba(255,255,255,0.55)",
+        }}
+      >
+        DEALER
+      </div>
 
-      <CommunityRow cards={cards} active={active} onSelect={onSelect} />
+      {/* community + pot */}
+      <div
+        className="flex flex-col items-center"
+        style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
+      >
+        <div className="flex items-center">
+          <div className="flex gap-1">{[0, 1, 2].map(communitySlot)}</div>
+          <div style={{ width: 12 }} />
+          {communitySlot(3)}
+          <div style={{ width: 12 }} />
+          {communitySlot(4)}
+        </div>
+        <div
+          style={{
+            marginTop: 6,
+            padding: "2px 12px",
+            borderRadius: 12,
+            background: "rgba(0,0,0,0.4)",
+            color: theme.gold,
+            fontSize: 12,
+            fontWeight: 800,
+            letterSpacing: "0.04em",
+          }}
+        >
+          POT ${bet.pot}
+        </div>
+      </div>
 
+      {/* seats */}
       {Array.from({ length: SEAT_COUNT }, (_, k) => k + 1).map((n) => {
-        const pos = positionLabel(n, buttonSeat);
+        const seat = seats[n - 1];
+        const occupied = seat && seat.occupied;
+        const pos = positions[n] || "";
+        const committed = bet.committed[n] || 0;
+        const folded = bet.foldedStreet[n] != null;
+        const isActor = bet.actor === n && mode === "betting";
+
         if (n === heroSeat) {
+          const faceUp = heroRevealed || showdown;
           return (
-            <HeroSeat
-              key={n}
-              n={n}
-              cards={cards}
-              active={active}
-              onSelect={onSelect}
-              position={pos}
-            />
+            <SeatFrame key={n} n={n} active={isActor} folded={folded}>
+              <div className="flex gap-1">
+                {[HOLE_START, HOLE_START + 1].map((i) => {
+                  if (!cards[i]) {
+                    const target = { type: "board", index: i };
+                    return (
+                      <Slot
+                        key={i}
+                        card={null}
+                        isActive={mode === "cards" && sameTarget(active, target)}
+                        onSelect={() => onTapHeroCard(i)}
+                        w={32}
+                        h={46}
+                        hole
+                      />
+                    );
+                  }
+                  return faceUp ? (
+                    <Slot key={i} card={cards[i]} isActive={false} onSelect={() => onTapHeroCard(i)} w={32} h={46} hole />
+                  ) : (
+                    <CardBack key={i} onClick={() => onTapHeroCard(i)} />
+                  );
+                })}
+              </div>
+              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} committed={committed} />
+            </SeatFrame>
           );
         }
+
+        if (!occupied) {
+          const { left, top } = seatPos(n);
+          return (
+            <button
+              key={n}
+              data-seat={n}
+              onClick={() => onSeatNew(n)}
+              style={{
+                position: "absolute",
+                left,
+                top,
+                transform: "translate(-50%, -50%)",
+                width: 38,
+                height: 38,
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.3)",
+                border: "1px dashed rgba(255,255,255,0.22)",
+                color: "rgba(255,255,255,0.4)",
+                fontSize: 11,
+              }}
+              className="active:scale-95"
+            >
+              +{n}
+            </button>
+          );
+        }
+
+        // occupied villain seat
         const ri = revealBySeat.get(String(n));
-        if (ri !== undefined) {
-          return (
-            <VillainSeat
-              key={n}
-              n={n}
-              revealIdx={ri}
-              reveal={reveals[ri]}
-              active={active}
-              onSelect={onSelect}
-              onRemove={onRemoveReveal}
-              position={pos}
-            />
-          );
-        }
-        return <EmptySeat key={n} n={n} onSelectSeat={onSelectSeat} position={pos} />;
+        const hasReveal = ri !== undefined;
+        const clickable = showdown ? () => onSelectSeat(n) : () => onSeatAct(n);
+        const revealActive = (c) =>
+          mode === "cards" && active.type === "reveal" && active.r === ri && active.c === c;
+
+        return (
+          <SeatFrame key={n} n={n} active={isActor} folded={folded}>
+            {hasReveal ? (
+              <div className="flex gap-1">
+                {[0, 1].map((c) => (
+                  <Slot
+                    key={c}
+                    card={reveals[ri].cards[c]}
+                    isActive={revealActive(c)}
+                    onSelect={() => onSelectSeat(n)}
+                    w={28}
+                    h={40}
+                  />
+                ))}
+              </div>
+            ) : (
+              <button
+                onClick={clickable}
+                style={{
+                  width: 64,
+                  height: 40,
+                  borderRadius: 10,
+                  background: folded ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.07)",
+                  border: isActor ? `1px solid ${theme.gold}` : "1px solid rgba(255,255,255,0.12)",
+                  color: "rgba(255,255,255,0.6)",
+                  fontSize: 10,
+                }}
+                className="active:scale-95"
+              >
+                {folded ? "folded" : showdown ? "show?" : "—"}
+              </button>
+            )}
+            <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} />
+            {hasReveal && showdown && (
+              <button
+                onClick={() => onRemoveReveal(ri)}
+                style={{ color: "rgba(255,255,255,0.45)", marginTop: 1 }}
+              >
+                <X size={11} />
+              </button>
+            )}
+          </SeatFrame>
+        );
       })}
 
-      <DealerButton seat={buttonSeat} onTap={onAdvanceButton} />
+      {/* dealer button */}
+      <button
+        onClick={onAdvanceButton}
+        title="Tap to advance the button one seat"
+        style={{
+          position: "absolute",
+          ...buttonChipPos(buttonSeat),
+          transform: "translate(-50%, -50%)",
+          width: 24,
+          height: 24,
+          borderRadius: "50%",
+          background: "#F6F3EA",
+          color: "#23201A",
+          fontSize: 11,
+          fontWeight: 900,
+          border: "2px solid #C9A227",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
+          zIndex: 6,
+        }}
+        className="active:scale-95"
+      >
+        D
+      </button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import { Copy, X, Trash2, FileText } from "lucide-react";
+import { Copy, X, Trash2, FileText, Eye, EyeOff } from "lucide-react";
 import { theme } from "../constants.js";
 import { hhmm, holeStr } from "../lib/cards.js";
+import { actionsSummary } from "../lib/betting.js";
 import { toText, toCSV, download } from "../lib/export.js";
 import Chip from "./Chip.jsx";
 
@@ -78,6 +79,11 @@ export default function HistoryPanel({ log, editingId, onClose, onEdit, onDelete
                       <span style={{ color: "rgba(201,162,39,0.8)", fontSize: 10, margin: "0 4px" }}>HERO</span>
                       <Chip c={h.cards[5]} />
                       <Chip c={h.cards[6]} />
+                      {h.heroRevealed ? (
+                        <Eye size={11} color="rgba(255,255,255,0.5)" style={{ marginLeft: 3 }} />
+                      ) : (
+                        <EyeOff size={11} color="rgba(255,255,255,0.4)" style={{ marginLeft: 3 }} />
+                      )}
                     </>
                   )}
                 </div>
@@ -89,6 +95,17 @@ export default function HistoryPanel({ log, editingId, onClose, onEdit, onDelete
                         {rv.cards.map((c, ci) => <Chip key={ci} c={c} />)}
                       </span>
                     ))}
+                  </div>
+                )}
+                {h.pot != null && (
+                  <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, marginTop: 5 }}>
+                    Pot <b style={{ color: theme.gold }}>${h.pot}</b>
+                    {h.rake != null && ` · rake $${h.rake}`}
+                  </div>
+                )}
+                {h.actions && actionsSummary(h.actions) && (
+                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, marginTop: 3, lineHeight: 1.3 }}>
+                    {actionsSummary(h.actions)}
                   </div>
                 )}
                 <div style={{ color: "rgba(201,162,39,0.7)", fontSize: 10.5, marginTop: 6 }}>Tap to edit</div>

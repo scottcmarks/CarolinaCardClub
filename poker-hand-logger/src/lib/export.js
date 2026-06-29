@@ -1,4 +1,5 @@
 import { boardStr, holeStr, hhmm, cardStr } from "./cards.js";
+import { actionsSummary } from "./betting.js";
 
 const ctxOf = (h) =>
   [h.location, h.table && "T" + h.table, h.seat && "S" + h.seat].filter(Boolean).join(" ");
@@ -8,6 +9,9 @@ const revealsText = (h) =>
     .map((r) => (r.seat ? "S" + r.seat + ":" : "") + r.cards.map(cardStr).join(""))
     .join("  ");
 
+const moneyText = (h) =>
+  h.pot != null ? `pot $${h.pot}${h.rake != null ? " rake $" + h.rake : ""}` : "";
+
 // Human-readable session dump (newest hand last, matching play order).
 export function toText(log) {
   return log
@@ -16,10 +20,17 @@ export function toText(log) {
     .map((h, i) => {
       const ctx = ctxOf(h);
       const rv = revealsText(h);
+      const money = moneyText(h);
+      const acts = actionsSummary(h.actions);
+      const heroShown = !holeStr(h.cards).includes("·")
+        ? "  hero " + holeStr(h.cards) + (h.heroRevealed ? " (shown)" : " (mucked)")
+        : "";
       return (
         `#${i + 1} ${hhmm(h.ts)}${ctx ? "  " + ctx : ""}  |  ${boardStr(h.cards)}` +
-        (holeStr(h.cards).includes("·") ? "" : "  hero " + holeStr(h.cards)) +
-        (rv ? "  |  " + rv : "")
+        heroShown +
+        (rv ? "  |  " + rv : "") +
+        (money ? "  |  " + money : "") +
+        (acts ? "\n     " + acts : "")
       );
     })
     .join("\n");
@@ -27,7 +38,11 @@ export function toText(log) {
 
 // CSV for spreadsheets / trackers. One row per hand; reveals collapsed to one column.
 export function toCSV(log) {
-  const head = ["time", "location", "table", "seat", "flop", "turn", "river", "hero", "reveals"];
+  const head = [
+    "time", "location", "table", "seat", "hero_name",
+    "flop", "turn", "river", "hero", "hero_shown",
+    "pot", "rake", "reveals", "actions",
+  ];
   const esc = (v) => {
     const s = String(v ?? "");
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -40,6 +55,7 @@ export function toCSV(log) {
       const turn = cardStr(h.cards[3]);
       const river = cardStr(h.cards[4]);
       const hero = holeStr(h.cards).includes("·") ? "" : holeStr(h.cards);
+      const heroShown = hero ? (h.heroRevealed ? "yes" : "no") : "";
       const reveals = h.reveals
         .map((r) => (r.seat ? "S" + r.seat + ":" : "") + r.cards.map(cardStr).join(""))
         .join("; ");
@@ -48,11 +64,16 @@ export function toCSV(log) {
         h.location,
         h.table,
         h.seat,
+        h.heroName || "",
         flop,
         turn,
         river,
         hero,
+        heroShown,
+        h.pot ?? "",
+        h.rake ?? "",
         reveals,
+        actionsSummary(h.actions),
       ].map(esc).join(",");
     });
   return [head.join(","), ...rows].join("\n");

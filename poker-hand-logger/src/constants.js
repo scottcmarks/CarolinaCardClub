@@ -30,6 +30,14 @@ export const RANK_ROWS = [
 
 export const SEAT_COUNT = 9;
 export const DEFAULT_HERO_SEAT = 2;
+export const DEFAULT_HERO_NAME = "Scott";
+
+// Default seating: every seat occupied, generic "Player N" names.
+export const defaultSeats = (count = SEAT_COUNT) =>
+  Array.from({ length: count }, (_, i) => ({
+    occupied: true,
+    name: `Player ${i + 1}`,
+  }));
 
 // Poker position labels going CLOCKWISE around the table from the dealer
 // button (so offset 0 = BTN, 1 = SB, 2 = BB, …). The button rotates one
