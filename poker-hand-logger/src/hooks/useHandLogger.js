@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { TOTAL, HOLE_START } from "../constants.js";
+import { TOTAL, HOLE_START, SEAT_COUNT } from "../constants.js";
 import { cardId, firstEmpty, holeStr } from "../lib/cards.js";
 import { loadLog, saveLog, loadSession, saveSession, maxId } from "../lib/storage.js";
 
@@ -75,11 +75,14 @@ export function useHandLogger() {
           location: session.location,
           table: session.table,
           seat: session.seat,
+          button: session.button,
           cards: [...c],
           reveals: revealsRaw,
         };
         setLog((p) => [entry, ...p]);
         showFlash(holeStr(c).includes("·") ? "Hand saved" : "Hand saved · " + holeStr(c));
+        // Advance the dealer button one seat clockwise for the next hand.
+        setSession((s) => ({ ...s, button: ((s.button || 1) % SEAT_COUNT) + 1 }));
       }
       resetWorking();
     },
@@ -104,17 +107,16 @@ export function useHandLogger() {
       if (active.type === "board") {
         const next = [...cards];
         next[active.index] = card;
-        // Auto-end only on a NEW hand when both hero cards are completed.
-        if (
-          editingId === null &&
-          active.index >= HOLE_START &&
-          next[HOLE_START] &&
-          next[HOLE_START + 1]
-        ) {
-          endHand({ cards: next, reveals });
-          return;
-        }
         setCards(next);
+        // If we're filling hero hole cards, stay on hero (advance to the
+        // partner hole slot) rather than jumping back to a community slot.
+        if (active.index >= HOLE_START) {
+          const partner = active.index === HOLE_START ? HOLE_START + 1 : HOLE_START;
+          if (!next[partner]) {
+            setActive({ type: "board", index: partner });
+            return;
+          }
+        }
         const e = firstEmpty(next);
         setActive({ type: "board", index: e === null ? active.index : e });
       } else {
@@ -213,6 +215,23 @@ export function useHandLogger() {
     [cards]
   );
 
+  const selectSeat = useCallback((seatNum) => {
+    buzz(6);
+    setPendingRank(null);
+    const key = String(seatNum);
+    setReveals((prev) => {
+      const idx = prev.findIndex((r) => r.seat === key);
+      if (idx >= 0) {
+        const e = firstEmpty(prev[idx].cards);
+        setActive({ type: "reveal", r: idx, c: e === null ? 0 : e });
+        return prev;
+      }
+      const nr = [...prev, { seat: key, cards: [null, null] }];
+      setActive({ type: "reveal", r: nr.length - 1, c: 0 });
+      return nr;
+    });
+  }, []);
+
   const setRevealSeat = useCallback((r, val) => {
     setReveals((p) =>
       p.map((x, i) => (i === r ? { ...x, seat: val.replace(/\D/g, "").slice(0, 2) } : x))
@@ -221,6 +240,17 @@ export function useHandLogger() {
 
   const updateSession = useCallback((patch) => setSession((s) => ({ ...s, ...patch })), []);
 
+  const setButton = useCallback((seatNum) => {
+    buzz(8);
+    const n = Math.min(Math.max(parseInt(seatNum, 10) || 1, 1), SEAT_COUNT);
+    setSession((s) => ({ ...s, button: n }));
+  }, []);
+
+  const advanceButton = useCallback(() => {
+    buzz(8);
+    setSession((s) => ({ ...s, button: ((s.button || 1) % SEAT_COUNT) + 1 }));
+  }, []);
+
   return {
     // state
     cards, reveals, active, pendingRank, session, log, editingId, editingEntry, flash,
@@ -228,6 +258,7 @@ export function useHandLogger() {
     usedIds, anyEntered, canUndo: undoStack.length > 0,
     // actions
     pickRank, pickSuit, selectTarget, undo, clearHand, cancelEdit, endHand,
-    loadHand, deleteHand, addReveal, removeReveal, setRevealSeat, updateSession,
+    loadHand, deleteHand, addReveal, removeReveal, setRevealSeat, selectSeat, updateSession,
+    setButton, advanceButton,
   };
 }

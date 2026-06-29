@@ -31,7 +31,12 @@ export function saveLog(log) {
 export function loadSession() {
   if (typeof localStorage === "undefined") return { location: "", table: "", seat: "" };
   const s = safeParse(localStorage.getItem(SESSION_KEY), {});
-  return { location: s.location || "", table: s.table || "", seat: s.seat || "" };
+  return {
+    location: s.location || "",
+    table: s.table || "",
+    seat: s.seat || "",
+    button: typeof s.button === "number" ? s.button : 1,
+  };
 }
 
 export function saveSession(session) {

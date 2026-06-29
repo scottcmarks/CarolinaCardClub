@@ -138,3 +138,36 @@
 
 ## Logo
 - Switched from `CCCBanner.png` (white background) to `CCCBannerA.png` (transparent, GIMP Color to Alpha)
+
+---
+
+# Carolina Card Club — Session Changes (2026-06-29) — poker-hand-logger redesign
+
+## Build / deps
+- Installed **Tailwind v4** (`tailwindcss` + `@tailwindcss/vite`) — root cause of "buttons crammed left": every utility class was inert because Tailwind had never been added.
+- Wired `@tailwindcss/vite` into `vite.config.js`; added `@import "tailwindcss";` at top of `src/index.css`.
+
+## Keypad (`src/components/Keypad.jsx`)
+- Rewrote: **3-row rank grid** `A K Q J T / 9 8 7 6 5 / 4 3 2`, bottom row centered via explicit `gridColumn`, 58px buttons.
+- Suit chooser → **fixed-position popover centered on the tapped rank button** (overlays the keypad rather than docking below it). 64px suit buttons, viewport-clamped, transparent backdrop dismisses.
+
+## Poker Table (`src/components/PokerTable.jsx` — NEW; replaces `Board` + `Reveals`)
+- Felt oval (flattened: `RX=46`, `RY=34`), brown rail, dealer notch at top.
+- 9 seats CCW from top → seat 1 upper-right, seat 5 across from dealer at bottom, seat 9 upper-left (matches the user's club layout).
+- Hero seat (`heroSeat` from `session.seat`, default 2): two hole-card slots with gold accent.
+- Villain seats: tappable empty chip → creates reveal via new `selectSeat` action; populated seats show their two cards + `S{n} · POS` + remove button.
+- Community cards centered on the felt: flop · 14px · turn · 14px · river.
+- **Dealer button**: gold-ringed "D" chip placed inboard of the button seat; auto-advances +1 each saved hand; tap to force-advance one seat. Persisted as `session.button`.
+- **Position labels** (BTN/SB/BB/UTG/UTG+1/MP/LJ/HJ/CO) rendered under every seat, computed from the button seat.
+
+## Hook (`src/hooks/useHandLogger.js`)
+- Removed auto-end-on-hero-completion. Hand now saves only on explicit End Hand (so villain reveals collected after showdown).
+- After filling either hero hole card, selection stays on hero (advances to partner slot) instead of `firstEmpty` jumping back to community.
+- Added `selectSeat(n)`, `setButton(n)`, `advanceButton()`. `endHand` advances `session.button` by 1 mod 9 on save and writes `button` into the saved log entry.
+
+## Constants / storage
+- `src/constants.js`: added `RANK_ROWS`, `SEAT_COUNT=9`, `DEFAULT_HERO_SEAT=2`, `POSITIONS_9`, `tableTheme`.
+- `src/lib/storage.js`: extended `loadSession` to include `button` (default 1).
+
+## Removed
+- `src/components/Board.jsx`, `src/components/Reveals.jsx` (subsumed by `PokerTable`).

@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { theme } from "./constants.js";
+import { DEFAULT_HERO_SEAT, SEAT_COUNT, theme } from "./constants.js";
 import { hhmm } from "./lib/cards.js";
 import { useHandLogger } from "./hooks/useHandLogger.js";
 import SessionBar from "./components/SessionBar.jsx";
-import Board from "./components/Board.jsx";
-import Reveals from "./components/Reveals.jsx";
+import PokerTable from "./components/PokerTable.jsx";
 import StatusLine from "./components/StatusLine.jsx";
 import Keypad from "./components/Keypad.jsx";
 import Actions from "./components/Actions.jsx";
@@ -15,6 +14,10 @@ export default function App() {
   const h = useHandLogger();
   const [showHistory, setShowHistory] = useState(false);
   const editing = h.editingId !== null;
+  const heroSeat = Math.min(
+    Math.max(parseInt(h.session.seat, 10) || DEFAULT_HERO_SEAT, 1),
+    SEAT_COUNT
+  );
 
   return (
     <div className="min-h-screen w-full flex justify-center" style={{ background: theme.felt }}>
@@ -41,20 +44,19 @@ export default function App() {
           </div>
         )}
 
-        <Board cards={h.cards} active={h.active} onSelect={h.selectTarget} />
-
-        <Reveals
+        <PokerTable
+          cards={h.cards}
           reveals={h.reveals}
           active={h.active}
+          heroSeat={heroSeat}
+          buttonSeat={Math.min(Math.max(h.session.button || 1, 1), SEAT_COUNT)}
           onSelect={h.selectTarget}
-          onAdd={h.addReveal}
-          onRemove={h.removeReveal}
-          onSeat={h.setRevealSeat}
+          onSelectSeat={h.selectSeat}
+          onRemoveReveal={h.removeReveal}
+          onAdvanceButton={h.advanceButton}
         />
 
         <StatusLine flash={h.flash} pendingRank={h.pendingRank} active={h.active} editing={editing} />
-
-        <div className="flex-1" style={{ minHeight: 8 }} />
 
         <Keypad pendingRank={h.pendingRank} usedIds={h.usedIds} onRank={h.pickRank} onSuit={h.pickSuit} />
 
