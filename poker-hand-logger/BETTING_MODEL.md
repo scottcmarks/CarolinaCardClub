@@ -78,21 +78,23 @@ be corrected inline — the hand is flagged `fubar` and must be fixed in the off
 
 ## Pot & rake (`lib/rake.js`)
 
-`pot` = sum of all committed chips (derived). Rake is computed at hand end:
+`pot` = sum of all committed chips (derived). Rake is computed at hand end as **two
+independently-capped percentage components** (house rake + jackpot/promo drop):
 
 ```
-rake = sawFlop || !dropOnFlopOnly
-     ? (capIncludesDrop ? min(drop + floor(pot·pct), cap)
-                        : drop + min(floor(pot·pct), cap))
-     : 0
-cap  = playersDealt ≤ shortHandedThreshold ? shortHandedCap : rakeCap
+if (!sawFlop && dropOnFlopOnly) total = 0
+else:
+  rakeCap = playersDealt ≤ shortHandedThreshold ? shortHandedRakeCap : rakeCap
+  rake    = min(floor(pot·rakePercent),  rakeCap)
+  promo   = min(floor(pot·promoPercent), promoCap)
+  total   = rake + promo
 ```
 
 Rake profiles live in a small **editable** localStorage table (`phl:rakes:v1`), keyed by
-id. Seeded entry `danville-1-3` (Danville $1/$3): drop $2, 10%, $7 cap, short-handed
-(≤5 dealt) cap $5, no-flop-no-drop. **These seed numbers are the user's stated values and
-a pending web-research check; because the table is user-editable in-app, an unconfirmed
-default is acceptable and easily corrected.**
+id. Seeded entry `danville-1-3` = **Caesars Virginia (WSOP Poker Room), Danville VA**,
+$1/$3: web-sourced "10% to $7 **+** 10% to $2" → max $9/pot ($20 pot→$4, $70+→$9). The
+short-handed (≤5 dealt) reduced rake cap ($5) and no-flop-no-drop are the user's
+recollection, **unconfirmed online** — both editable in setup.
 
 ## Hero card concealment
 

@@ -1,24 +1,28 @@
 // Rake profiles + the rake calculation. Profiles are a small, USER-EDITABLE
-// table in localStorage keyed by id, so an unconfirmed seed default is fine —
-// the user can correct any venue's structure in-app.
+// table in localStorage keyed by id, so any venue's structure can be corrected
+// in-app.
 
 const RAKES_KEY = "phl:rakes:v1";
 
-// Seed: Danville $1/$3. Numbers are the user's stated values pending a web
-// research check; capIncludesDrop=true models "($2 drop + 10%) up to $7 total".
+// Seed: Danville $1/$3 = Caesars Virginia (WSOP Poker Room), Danville VA.
+// Web-sourced (PokerAtlas + poker.org reviews, 2025): "10% up to $7, and for
+// promotions 10% up to $2" — two independently-capped components, max $9/pot.
+//   $20 pot -> $2 + $2 = $4 ;  $70+ pot -> $7 + $2 = $9.
+// dropOnFlopOnly and the short-handed (<=5) reduced cap are UNCONFIRMED online
+// and reflect the user's recollection — both easily edited in setup.
 export const SEED_RAKES = [
   {
     id: "danville-1-3",
     venue: "Danville",
-    label: "Danville 1-3",
+    label: "Danville 1-3 (Caesars VA)",
     sb: 1,
     bb: 3,
-    drop: 2, // flat drop per raked pot
-    rakePercent: 0.1, // 10%
-    rakeCap: 7, // normal max
-    capIncludesDrop: true, // cap is the TOTAL (drop + pct), not the pct alone
-    shortHandedThreshold: 5, // <= this many dealt in => reduced cap
-    shortHandedCap: 5, // reduced max (pending confirmation)
+    rakePercent: 0.1, // house rake %
+    rakeCap: 7, // house rake max
+    promoPercent: 0.1, // jackpot/promo drop %
+    promoCap: 2, // jackpot/promo drop max
+    shortHandedThreshold: 5, // <= this many dealt in => reduced rake cap
+    shortHandedRakeCap: 5, // house-rake cap when short-handed (promo unchanged)
     dropOnFlopOnly: true, // "no flop, no drop"
   },
 ];
@@ -53,37 +57,33 @@ export const findRake = (rakes, id) =>
 
 // Compute the rake taken from a finished pot.
 //   pot          total chips in the pot
-//   playersDealt occupied seats dealt into the hand (for short-handed cap)
+//   playersDealt occupied seats dealt into the hand (for the short-handed cap)
 //   sawFlop      did the hand reach a flop (drives no-flop-no-drop)
 //   profile      a rake profile object
-// Returns { drop, pct, cap, total } in whole dollars.
+// Returns { rake, promo, total } in whole dollars.
 export function computeRake({ pot, playersDealt, sawFlop, profile }) {
   const p = profile || SEED_RAKES[0];
-  if (!pot || pot <= 0) return { drop: 0, pct: 0, cap: 0, total: 0 };
-  if (!sawFlop && p.dropOnFlopOnly) return { drop: 0, pct: 0, cap: 0, total: 0 };
+  if (!pot || pot <= 0) return { rake: 0, promo: 0, total: 0 };
+  if (!sawFlop && p.dropOnFlopOnly) return { rake: 0, promo: 0, total: 0 };
 
-  const cap =
+  const rakeCap =
     playersDealt <= (p.shortHandedThreshold ?? 0)
-      ? p.shortHandedCap ?? p.rakeCap
+      ? p.shortHandedRakeCap ?? p.rakeCap
       : p.rakeCap;
 
-  const pct = Math.floor(pot * (p.rakePercent || 0));
-  const drop = p.drop || 0;
-  const total = p.capIncludesDrop
-    ? Math.min(drop + pct, cap)
-    : drop + Math.min(pct, cap);
-
-  return { drop, pct, cap, total };
+  const rake = Math.min(Math.floor(pot * (p.rakePercent || 0)), rakeCap);
+  const promo = Math.min(Math.floor(pot * (p.promoPercent || 0)), p.promoCap || 0);
+  return { rake, promo, total: rake + promo };
 }
 
-// Human summary of a profile, e.g. "$2 + 10% to $7 (≤5: $5) · no flop no drop".
+// Human summary, e.g. "10% to $7 + 10% to $2 (≤5: rake to $5) · no flop no drop".
 export function rakeSummary(p) {
   if (!p) return "";
-  const main = `$${p.drop} + ${Math.round((p.rakePercent || 0) * 100)}% to $${p.rakeCap}`;
-  const sh =
-    p.shortHandedCap != null
-      ? ` (≤${p.shortHandedThreshold}: $${p.shortHandedCap})`
-      : "";
-  const flop = p.dropOnFlopOnly ? " · no flop no drop" : "";
-  return main + sh + flop;
+  const pct = (x) => `${Math.round((x || 0) * 100)}%`;
+  let s = `${pct(p.rakePercent)} to $${p.rakeCap}`;
+  if (p.promoCap) s += ` + ${pct(p.promoPercent)} to $${p.promoCap}`;
+  if (p.shortHandedRakeCap != null)
+    s += ` (≤${p.shortHandedThreshold}: rake to $${p.shortHandedRakeCap})`;
+  if (p.dropOnFlopOnly) s += " · no flop no drop";
+  return s;
 }
