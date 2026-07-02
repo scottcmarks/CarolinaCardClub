@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
-        name: "Poker Hand Logger",
-        short_name: "Hand Log",
+        name: "CCC Hand Logger",
+        short_name: "CCHand",
         description: "Log live poker hands fast — board, hero cards, and showdown reveals.",
         theme_color: "#14342b",
         background_color: "#0e241d",

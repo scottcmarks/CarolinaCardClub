@@ -5,7 +5,7 @@ mid-task (Claude Code paused right before installing Tailwind).
 
 ## Where the project lives / how to run
 
-- Path: `~/carolina_card_club/poker-hand-logger/` (a subdir of the carolina_card_club repo).
+- Path: `~/carolina_card_club/cchand/` (a subdir of the carolina_card_club repo).
 - Node was just installed via Homebrew (`brew install node`) — Node 26.4.0 / npm 11.17.0.
   `npm`/`node` are at `/opt/homebrew/bin` (export PATH if a shell can't find them).
 - Stack: **Vite 7 + React 18 + vite-plugin-pwa**. `npm run dev -- --host` then open the
@@ -33,7 +33,7 @@ Install Tailwind v4 and wire it in — this repairs centering across the ENTIRE 
 redesign on top:
 
 ```bash
-cd ~/carolina_card_club/poker-hand-logger
+cd ~/carolina_card_club/cchand
 npm install -D tailwindcss @tailwindcss/vite
 ```
 

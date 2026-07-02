@@ -31,6 +31,13 @@ export default function App() {
           paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
         }}
       >
+        <div
+          className="text-center mb-1"
+          style={{ color: "rgba(255,255,255,0.5)", fontSize: 10.5, letterSpacing: "0.16em", fontWeight: 700 }}
+        >
+          CCC HAND LOGGER
+        </div>
+
         <SessionBar
           session={h.session}
           logCount={h.log.length}
