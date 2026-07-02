@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SEAT_COUNT, defaultSeats, theme } from "../constants.js";
 import { rakeSummary } from "../lib/rake.js";
+import RakeEditor from "./RakeEditor.jsx";
 
 const field = {
   background: "rgba(255,255,255,0.08)",
@@ -11,7 +12,8 @@ const field = {
 
 // Startup / re-openable setup: venue, table, hero name + seat, which seats are
 // occupied, the button, and the rake profile.
-export default function Onboarding({ session, rakes, onDone, onClose }) {
+export default function Onboarding({ session, rakes, onDone, onClose, onUpsertRake, onDeleteRake }) {
+  const [editingRake, setEditingRake] = useState(null); // null | "new" | profile
   const [venue, setVenue] = useState(session.location || "");
   const [table, setTable] = useState(session.table || "");
   const [heroName, setHeroName] = useState(session.heroName || "Scott");
@@ -22,21 +24,35 @@ export default function Onboarding({ session, rakes, onDone, onClose }) {
     session.seats && session.seats.length ? session.seats.map((s) => ({ ...s })) : defaultSeats()
   );
 
-  const toggleSeat = (i) =>
+  const toggleSeat = (i) => {
+    if (i + 1 === heroSeat) return; // hero's seat can't be vacated
     setSeats((p) => p.map((s, j) => (j === i ? { ...s, occupied: !s.occupied } : s)));
+  };
   const renameSeat = (i, name) =>
     setSeats((p) => p.map((s, j) => (j === i ? { ...s, name } : s)));
+  const restack = (i, v) =>
+    setSeats((p) =>
+      p.map((s, j) =>
+        j === i ? { ...s, stack: v === "" ? null : Math.max(0, parseInt(v, 10) || 0) } : s
+      )
+    );
 
-  const submit = () =>
+  const submit = () => {
+    const hn = heroName.trim() || "Hero";
+    // hero's seat is always occupied and carries the hero's name
+    const outSeats = seats.map((s, i) =>
+      i + 1 === heroSeat ? { ...s, occupied: true, name: hn } : s
+    );
     onDone({
       location: venue.trim(),
       table: String(table).replace(/\D/g, "").slice(0, 3),
-      heroName: heroName.trim() || "Hero",
+      heroName: hn,
       seat: String(heroSeat),
       button,
       rakeProfileId,
-      seats,
+      seats: outSeats,
     });
+  };
 
   const profile = rakes.find((r) => r.id === rakeProfileId);
 
@@ -126,8 +142,22 @@ export default function Onboarding({ session, rakes, onDone, onClose }) {
             </label>
           </div>
 
-          <label style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
-            Stakes / rake
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+            <div className="flex items-center justify-between">
+              <span>Stakes / rake</span>
+              <div className="flex items-center gap-3">
+                {onUpsertRake && profile && (
+                  <button onClick={() => setEditingRake(profile)} style={{ color: theme.gold, fontSize: 12 }}>
+                    Edit
+                  </button>
+                )}
+                {onUpsertRake && (
+                  <button onClick={() => setEditingRake("new")} style={{ color: theme.gold, fontSize: 12 }}>
+                    + New
+                  </button>
+                )}
+              </div>
+            </div>
             <select
               value={rakeProfileId}
               onChange={(e) => setRakeProfileId(e.target.value)}
@@ -145,7 +175,7 @@ export default function Onboarding({ session, rakes, onDone, onClose }) {
                 {rakeSummary(profile)}
               </span>
             )}
-          </label>
+          </div>
 
           <div>
             <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 6 }}>
@@ -180,6 +210,15 @@ export default function Onboarding({ session, rakes, onDone, onClose }) {
                       opacity: s.occupied ? 1 : 0.4,
                     }}
                   />
+                  <input
+                    value={s.stack ?? ""}
+                    disabled={!s.occupied}
+                    inputMode="numeric"
+                    placeholder="stack"
+                    onChange={(e) => restack(i, e.target.value)}
+                    className="px-2 py-1.5 rounded-lg outline-none text-center"
+                    style={{ ...field, fontSize: 12, width: 62, opacity: s.occupied ? 1 : 0.4 }}
+                  />
                 </div>
               ))}
             </div>
@@ -196,6 +235,27 @@ export default function Onboarding({ session, rakes, onDone, onClose }) {
           </button>
         </div>
       </div>
+
+      {editingRake && (
+        <RakeEditor
+          init={editingRake === "new" ? null : editingRake}
+          rakes={rakes}
+          onSave={(p) => {
+            onUpsertRake(p);
+            setRakeProfileId(p.id);
+            setEditingRake(null);
+          }}
+          onDelete={(id) => {
+            onDeleteRake(id);
+            if (rakeProfileId === id) {
+              const next = rakes.find((r) => r.id !== id);
+              if (next) setRakeProfileId(next.id);
+            }
+            setEditingRake(null);
+          }}
+          onClose={() => setEditingRake(null)}
+        />
+      )}
     </div>
   );
 }

@@ -65,7 +65,7 @@ function SeatFrame({ n, active, folded, children }) {
   );
 }
 
-function Tag({ name, sub, committed }) {
+function Tag({ name, sub, committed, allIn }) {
   return (
     <div className="flex flex-col items-center" style={{ lineHeight: 1.15, marginTop: 1 }}>
       <span
@@ -76,8 +76,10 @@ function Tag({ name, sub, committed }) {
       </span>
       <span style={{ fontSize: 8, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)" }}>
         {sub}
-        {committed > 0 && (
-          <b style={{ color: theme.gold }}>{sub ? " · " : ""}${committed}</b>
+        {allIn ? (
+          <b style={{ color: "#ff7a7a" }}>{sub ? " · " : ""}ALL-IN</b>
+        ) : (
+          committed > 0 && <b style={{ color: theme.gold }}>{sub ? " · " : ""}${committed}</b>
         )}
       </span>
     </div>
@@ -198,6 +200,7 @@ export default function PokerTable({
         const pos = positions[n] || "";
         const committed = bet.committed[n] || 0;
         const folded = bet.foldedStreet[n] != null;
+        const isAllIn = bet.allIn.includes(n);
         const isActor = bet.actor === n && mode === "betting";
 
         if (n === heroSeat) {
@@ -227,7 +230,7 @@ export default function PokerTable({
                   );
                 })}
               </div>
-              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} committed={committed} />
+              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} />
             </SeatFrame>
           );
         }
@@ -298,7 +301,7 @@ export default function PokerTable({
                 {folded ? "folded" : showdown ? "show?" : "—"}
               </button>
             )}
-            <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} />
+            <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} />
             {hasReveal && showdown && (
               <button
                 onClick={() => onRemoveReveal(ri)}

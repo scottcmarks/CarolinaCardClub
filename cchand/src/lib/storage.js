@@ -40,6 +40,7 @@ function normalizeSeats(seats) {
   return seats.slice(0, SEAT_COUNT).map((s, i) => ({
     occupied: s && typeof s.occupied === "boolean" ? s.occupied : true,
     name: (s && s.name) || `Player ${i + 1}`,
+    stack: s && typeof s.stack === "number" ? s.stack : null,
   }));
 }
 
@@ -53,6 +54,9 @@ export function loadSession() {
     rakeProfileId: "danville-1-3",
     seats: defaultSeats(),
     onboarded: false,
+    startedAt: null, // epoch ms — start of the current sitting
+    endedAt: null, // epoch ms — set when the sitting is ended
+    prepaid: false, // time venues: did the player take the flat prepay
   };
   if (typeof localStorage === "undefined") return base;
   const s = safeParse(localStorage.getItem(SESSION_KEY), {});
@@ -66,6 +70,9 @@ export function loadSession() {
     rakeProfileId: s.rakeProfileId || base.rakeProfileId,
     seats: normalizeSeats(s.seats),
     onboarded: !!s.onboarded,
+    startedAt: typeof s.startedAt === "number" ? s.startedAt : null,
+    endedAt: typeof s.endedAt === "number" ? s.endedAt : null,
+    prepaid: !!s.prepaid,
   };
 }
 

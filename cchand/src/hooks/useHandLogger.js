@@ -166,30 +166,46 @@ export function useHandLogger() {
     [actions, cards, reveals, heroRevealed, seats, button, rakeProfile, editingId, session, resetWorking]
   );
 
-  // ---- apply a new betting action log and drive phase transitions ----
-  const commitActions = useCallback(
-    (newActions) => {
+  // ---- apply a new action log and drive phase transitions ----
+  // Called after any betting action OR after a street's board is completed.
+  // Handles the all-in run-out: if a freshly-opened street is already closed
+  // (everyone all-in), it advances straight to the next board / showdown.
+  const afterActionsChanged = useCallback(
+    (newActions, cardsOverride) => {
+      const c = cardsOverride || cards;
       const nb = reduceBetting(newActions, { seats, button });
       setActions(newActions);
       if (nb.playersLeft <= 1) {
-        finishHand(newActions);
+        finishHand(newActions, c);
         return;
       }
+      setPhase(nb.street);
       if (nb.roundClosed) {
-        if (phase === "river") {
-          setPhase("showdown");
+        if (nb.street === "river") {
           setMode("cards");
           setHeroRevealed(true);
+          setDealingStreet(null);
           setActive({ type: "board", index: HOLE_START });
         } else {
-          const nextSt = nextStreetAfter(phase);
+          const nextSt = nextStreetAfter(nb.street);
           setDealingStreet(nextSt);
           setMode("cards");
-          setActive({ type: "board", index: firstCommunityIndex(nextSt, cards) });
+          setActive({ type: "board", index: firstCommunityIndex(nextSt, c) });
         }
+      } else {
+        setDealingStreet(null);
+        setMode("betting");
       }
     },
-    [seats, button, phase, cards, finishHand]
+    [seats, button, cards, finishHand]
+  );
+
+  const stackOf = useCallback(
+    (n) => {
+      const s = seats[n - 1];
+      return s && typeof s.stack === "number" ? s.stack : null;
+    },
+    [seats]
   );
 
   // ---- betting: act for the current actor ----
@@ -200,9 +216,33 @@ export function useHandLogger() {
       pushSnapshot();
       const a = { seat: bet.actor, street: phase, type };
       if (amount != null) a.amount = amount;
-      commitActions([...actions, a]);
+      afterActionsChanged([...actions, a]);
     },
-    [mode, bet, phase, actions, pushSnapshot, commitActions]
+    [mode, bet, phase, actions, pushSnapshot, afterActionsChanged]
+  );
+
+  // all-in: commit the actor's whole remaining stack (or a typed amount if the
+  // stack is unknown). typed comes from the pad when no stack is set.
+  const allIn = useCallback(
+    (typed) => {
+      if (mode !== "betting" || bet.actor == null) return;
+      const seat = bet.actor;
+      const stack = stackOf(seat);
+      let amount;
+      if (stack != null) {
+        const remaining = Math.max(0, stack - (bet.totalCommitted[seat] || 0));
+        amount = (bet.committed[seat] || 0) + remaining;
+      } else if (typed && typed > 0) {
+        amount = typed;
+      } else {
+        showFlash("Set a stack, or type the all-in amount");
+        return;
+      }
+      buzz(16);
+      pushSnapshot();
+      afterActionsChanged([...actions, { seat, street: phase, type: "allin", amount }]);
+    },
+    [mode, bet, phase, actions, stackOf, pushSnapshot, afterActionsChanged]
   );
 
   // ---- betting: tap a seat to jump/correct ----
@@ -248,11 +288,12 @@ export function useHandLogger() {
       const folds = [];
       for (let i = ai; i < ti; i++) {
         const s = order[i];
-        if (bet.inHand.includes(s)) folds.push({ seat: s, street: phase, type: "fold" });
+        if (bet.inHand.includes(s) && !bet.allIn.includes(s))
+          folds.push({ seat: s, street: phase, type: "fold" });
       }
-      commitActions([...actions, ...folds]);
+      afterActionsChanged([...actions, ...folds]);
     },
-    [mode, bet, phase, actions, seats, button, pushSnapshot, commitActions]
+    [mode, bet, phase, actions, seats, button, pushSnapshot, afterActionsChanged]
   );
 
   // ---- card entry ----
@@ -287,12 +328,12 @@ export function useHandLogger() {
           return;
         }
 
-        // community card: if we're dealing a street and it's now complete, open betting
+        // community card: if we're dealing a street and it's now complete, open
+        // that street's betting round (or auto-advance if everyone's all-in)
         if (dealingStreet && communityComplete(next, dealingStreet)) {
-          setActions((prev) => [...prev, { type: "street", street: dealingStreet }]);
-          setPhase(dealingStreet);
+          const st = dealingStreet;
           setDealingStreet(null);
-          setMode("betting");
+          afterActionsChanged([...actions, { type: "street", street: st }], next);
           return;
         }
         // otherwise advance to the next empty community slot of this group
@@ -310,7 +351,7 @@ export function useHandLogger() {
         if (active.c === 0) setActive({ type: "reveal", r: active.r, c: 1 });
       }
     },
-    [pendingRank, usedIds, active, cards, reveals, phase, dealingStreet, pushSnapshot]
+    [pendingRank, usedIds, active, cards, reveals, phase, dealingStreet, actions, pushSnapshot, afterActionsChanged]
   );
 
   // select a card slot to fill (switches to card-entry mode)
@@ -428,8 +469,29 @@ export function useHandLogger() {
   // ---- session + seat + rake mutation ----
   const updateSession = useCallback((patch) => setSession((s) => ({ ...s, ...patch })), []);
   const completeOnboarding = useCallback((patch) => {
-    setSession((s) => ({ ...s, ...patch, onboarded: true }));
+    // hybrid timing: auto-start the clock on the FIRST setup only. Re-opening
+    // setup later leaves the clock (incl. an ended session) untouched.
+    setSession((s) => ({
+      ...s,
+      ...patch,
+      onboarded: true,
+      ...(s.onboarded ? {} : { startedAt: Date.now(), endedAt: null }),
+    }));
   }, []);
+  const setSessionStart = useCallback(
+    (ts) =>
+      setSession((s) => ({ ...s, startedAt: Math.min(ts, s.endedAt || Date.now()) })),
+    []
+  );
+  const endSession = useCallback(() => {
+    buzz(10);
+    setSession((s) => ({ ...s, endedAt: Date.now() }));
+  }, []);
+  const startNewSession = useCallback(() => {
+    buzz(10);
+    setSession((s) => ({ ...s, startedAt: Date.now(), endedAt: null, prepaid: false }));
+  }, []);
+  const setPrepaid = useCallback((v) => setSession((s) => ({ ...s, prepaid: !!v })), []);
   const setButton = useCallback((seatNum) => {
     buzz(8);
     setSession((s) => ({ ...s, button: clampSeat(seatNum) }));
@@ -450,12 +512,27 @@ export function useHandLogger() {
       seats: s.seats.map((x, i) => (i === n - 1 ? { ...x, name } : x)),
     }));
   }, []);
+  const setSeatStack = useCallback((n, stack) => {
+    const v = stack === "" || stack == null ? null : Math.max(0, parseInt(stack, 10) || 0);
+    setSession((s) => ({
+      ...s,
+      seats: s.seats.map((x, i) => (i === n - 1 ? { ...x, stack: v } : x)),
+    }));
+  }, []);
   const setRakeProfileId = useCallback((id) => updateSession({ rakeProfileId: id }), [updateSession]);
   const upsertRake = useCallback((profile) => {
     setRakes((rs) => {
       const i = rs.findIndex((r) => r.id === profile.id);
       if (i === -1) return [...rs, profile];
       return rs.map((r, j) => (j === i ? profile : r));
+    });
+  }, []);
+  const deleteRake = useCallback((id) => {
+    setRakes((rs) => {
+      if (rs.length <= 1) return rs;
+      const next = rs.filter((r) => r.id !== id);
+      setSession((s) => (s.rakeProfileId === id ? { ...s, rakeProfileId: next[0].id } : s));
+      return next;
     });
   }, []);
 
@@ -470,13 +547,14 @@ export function useHandLogger() {
     // card-entry actions
     pickRank, pickSuit, selectTarget, tapHeroCard, undo, clearHand, endHand,
     // betting actions
-    act, tapSeatToAct,
+    act, allIn, tapSeatToAct, stackOf,
     // showdown
     selectSeat, removeReveal,
     // hands
     loadHand, deleteHand, cancelEdit, restartBetting,
     // session/seat/rake
     updateSession, completeOnboarding, setButton, advanceButton,
-    setSeatOccupied, setSeatName, setRakeProfileId, upsertRake,
+    setSeatOccupied, setSeatName, setSeatStack, setRakeProfileId, upsertRake, deleteRake,
+    setSessionStart, endSession, startNewSession, setPrepaid,
   };
 }

@@ -13,7 +13,7 @@ re-derive.
 
 ```
 action = { seat, street, type, amount? }
-  type ∈ post | fold | check | call | bet | raise | street | reveal
+  type ∈ post | fold | check | call | bet | raise | allin | street | reveal
   street ∈ preflop | flop | turn | river
 ```
 
@@ -21,11 +21,26 @@ action = { seat, street, type, amount? }
   are in the pot even if they later fold. Sets the opening `currentBet = bb`.
 - `bet` / `raise` — `amount` is the **total this player has in for the street** ("raise
   to X"), not the increment. Increment to the pot = `amount − committedThisStreet`.
+- `allin` — like bet/raise (`amount` = the resulting street total, computed upstream from
+  the seat's stack, or typed when no stack is set) but also marks the seat **all-in**:
+  it persists in `allInSet` (across streets — committed resets, all-in doesn't), and
+  all-in seats are excluded from `needsAct`/`actor`. A short all-in (amount < currentBet)
+  doesn't raise the bet. **Side pots are not modelled** — the total pot is all rake needs;
+  side pots only matter for splitting winnings, which aren't logged yet.
 - `call` — match `currentBet`. `check` — pass with nothing owed.
 - `fold` — out; already-committed chips stay in the pot. We record the street so a fold
   in a *prior* street can be flagged (see Corrections).
 - `street` — marks the transition that starts a new betting round (resets
   per-street commit + currentBet).
+
+**All-in run-out:** when a betting round opens already-closed (everyone all-in),
+`afterActionsChanged` (called from both a betting action and from board-completion in
+`pickSuit`) detects `roundClosed` and advances straight to the next board / showdown — so
+an all-in hand just walks through the remaining community cards with no action prompts.
+
+**Stacks** are optional per-seat (`session.seats[i].stack`, set in setup). `!` on the
+ActionPad commits `stack − totalCommitted`; with no stack it prompts for / uses a typed
+amount. Stacks are user-maintained (not auto-updated by results).
 
 ## Order, blinds, positions (`lib/positions.js`)
 
@@ -61,11 +76,12 @@ flop-bet ─▶ deal TURN ─▶ turn-bet ─▶ deal RIVER ─▶ river-bet ─
 
 ## ActionPad (`components/ActionPad.jsx`)
 
-Layout `7 8 9 / 4 5 6 / 1 2 3 / ✖ 0 ✓`:
+Layout `7 8 9 / 4 5 6 / 1 2 3 / ✖ 0 ✓`, plus a `!` **all-in** button:
 - digits accumulate an amount;
 - `✖` (solid black, digit-sized) = **fold**;
 - `✓` (large green check) = **check** if nothing owed, **call** if an amount is owed and
   no digits typed, or **bet/raise to** the typed amount;
+- `!` = **all-in** (whole stack, or the typed amount if no stack is set);
 - positioned so the bottom-row `0` sits under the finger: just over the next-to-act seat
   during normal stepping, or under the tapped seat when the user jumps ahead.
 
@@ -76,25 +92,39 @@ pending seat in between, then makes the tapped seat the actor (keypad jumps to i
 its current-street action; it becomes the actor again). A fold in a **prior** round can't
 be corrected inline — the hand is flagged `fubar` and must be fixed in the offline editor.
 
-## Pot & rake (`lib/rake.js`)
+## House charge — rake types (`lib/rake.js`)
 
-`pot` = sum of all committed chips (derived). Rake is computed at hand end as **two
-independently-capped percentage components** (house rake + jackpot/promo drop):
+`pot` = sum of all committed chips (derived). A rake profile has a **`type`**:
 
-```
-if (!sawFlop && dropOnFlopOnly) total = 0
-else:
-  rakeCap = playersDealt ≤ shortHandedThreshold ? shortHandedRakeCap : rakeCap
-  rake    = min(floor(pot·rakePercent),  rakeCap)
-  promo   = min(floor(pot·promoPercent), promoCap)
-  total   = rake + promo
-```
+- **`percent`** — per-pot rake as a list of independently-capped `{percent, cap, shortCap?}`
+  **components** (Danville: `[{10%,$7,short$5},{10%,$2}]`). Per hand:
+  ```
+  if (!sawFlop && dropOnFlopOnly) total = 0
+  else total = Σ min(floor(pot·percent), (short ? shortCap : cap))     // short = playersDealt ≤ shortHandedThreshold
+  ```
+- **`time`** — per-seat time collection `{perHour, minHours, prepay?}`. **Per-hand rake is
+  0**; the charge is a *session* cost via `computeTimeCharge`:
+  `charge = prepaid ? prepay : max(minHours, ceil(elapsedHours)) · perHour`.
+- **`none`** — no house cut.
 
-Rake profiles live in a small **editable** localStorage table (`phl:rakes:v1`), keyed by
-id. Seeded entry `danville-1-3` = **Caesars Virginia (WSOP Poker Room), Danville VA**,
-$1/$3: web-sourced "10% to $7 **+** 10% to $2" → max $9/pot ($20 pot→$4, $70+→$9). The
-short-handed (≤5 dealt) reduced rake cap ($5) and no-flop-no-drop are the user's
-recollection, **unconfirmed online** — both editable in setup.
+Profiles live in a small **editable** localStorage table (`phl:rakes:v1`); `migrate()`
+upgrades old flat-shape entries. Managed in-app via `RakeEditor` (add/edit/delete, pick
+type). Seeds:
+- `danville-1-3` = **Caesars Virginia (WSOP), Danville VA**, `percent`: 10%→$7 + 10%→$2,
+  max $9/pot ($20→$4, $70+→$9); ≤5-handed rake cap $5 + no-flop-no-drop (user's
+  recollection, unconfirmed online).
+- `five-oaks` = **Five Oaks Club, Durham NC**, `time`: $6/hr, 2-hr min, $30 prepay
+  (blinds placeholder $1/$2 — edit in setup).
+
+## Session envelope + time charge
+
+For a `time` venue the charge needs elapsed seated time, so a **session** has
+`startedAt` / `endedAt` (`session`, persisted). Hybrid capture: auto-started at setup
+(kept on re-setup), editable (±15 min) in the session sheet. `SessionClock` (header pill)
+self-ticks and shows elapsed + the running metered charge for time venues; tapping it
+opens `SessionSummary` — elapsed, hands-this-sitting (`ts ≥ startedAt`), per-pot rake
+total, and (time venues) metered-vs-prepay with an **End session** / **Restart clock**
+control. Per-hand timestamps (`ts`) remain a fallback bracket.
 
 ## Hero card concealment
 

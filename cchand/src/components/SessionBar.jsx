@@ -1,7 +1,8 @@
 import { MapPin, Settings, List } from "lucide-react";
 import { theme } from "../constants.js";
+import SessionClock from "./SessionClock.jsx";
 
-export default function SessionBar({ session, logCount, onOpenHistory, onOpenSetup }) {
+export default function SessionBar({ session, profile, logCount, onOpenHistory, onOpenSetup, onOpenSession }) {
   const summary = [
     session.location || "Set venue",
     "T" + (session.table || "–"),
@@ -20,6 +21,13 @@ export default function SessionBar({ session, logCount, onOpenHistory, onOpenSet
         <span className="truncate">{summary}</span>
         <Settings size={12} color="rgba(255,255,255,0.5)" />
       </button>
+      <SessionClock
+        startedAt={session.startedAt}
+        endedAt={session.endedAt}
+        prepaid={session.prepaid}
+        profile={profile}
+        onClick={onOpenSession}
+      />
       <button
         onClick={onOpenHistory}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shrink-0"

@@ -12,11 +12,13 @@ import ActionPad from "./components/ActionPad.jsx";
 import Actions from "./components/Actions.jsx";
 import HistoryPanel from "./components/HistoryPanel.jsx";
 import Onboarding from "./components/Onboarding.jsx";
+import SessionSummary from "./components/SessionSummary.jsx";
 
 export default function App() {
   const h = useHandLogger();
   const [showHistory, setShowHistory] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
+  const [showSession, setShowSession] = useState(false);
   const editing = h.editingId !== null;
   const needsOnboard = !h.session.onboarded;
   const betting = h.mode === "betting";
@@ -40,9 +42,11 @@ export default function App() {
 
         <SessionBar
           session={h.session}
+          profile={h.rakeProfile}
           logCount={h.log.length}
           onOpenHistory={() => setShowHistory(true)}
           onOpenSetup={() => setShowSetup(true)}
+          onOpenSession={() => setShowSession(true)}
         />
 
         {editing && h.editingEntry && (
@@ -170,6 +174,22 @@ export default function App() {
           toCall={toCall(h.bet, h.bet.actor)}
           currentBet={h.bet.currentBet}
           onAct={h.act}
+          onAllIn={h.allIn}
+        />
+      )}
+
+      {showSession && (
+        <SessionSummary
+          session={h.session}
+          log={h.log}
+          profile={h.rakeProfile}
+          onSetStart={h.setSessionStart}
+          onSetPrepaid={h.setPrepaid}
+          onEndSession={h.endSession}
+          onStartNew={() => {
+            h.startNewSession();
+          }}
+          onClose={() => setShowSession(false)}
         />
       )}
 
@@ -177,6 +197,8 @@ export default function App() {
         <Onboarding
           session={h.session}
           rakes={h.rakes}
+          onUpsertRake={h.upsertRake}
+          onDeleteRake={h.deleteRake}
           onDone={(patch) => {
             h.completeOnboarding(patch);
             setShowSetup(false);

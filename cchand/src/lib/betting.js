@@ -22,6 +22,7 @@ export function reduceBetting(actions, ctx) {
   const { seats, button } = ctx;
   const occ = occupiedSeats(seats);
   const inHand = new Set(occ);
+  const allInSet = new Set(); // seats with no chips left — still in, can't act
   const foldedStreet = {};
   const committed = {}; // chips this street
   const totalCommitted = {}; // chips all streets (pot share)
@@ -84,6 +85,20 @@ export function reduceBetting(actions, ctx) {
       lastAggressor = seat;
       actedThisStreet.add(seat);
       lastActor = seat;
+    } else if (type === "allin") {
+      // amount = this-street total the player is all-in for (computed upstream
+      // from their stack, or typed). May be a full raise or a short call.
+      const to = amount;
+      const add = Math.max(0, to - (committed[seat] || 0));
+      committed[seat] = Math.max(committed[seat] || 0, to);
+      totalCommitted[seat] += add;
+      if (to > currentBet) {
+        currentBet = to;
+        lastAggressor = seat;
+      }
+      actedThisStreet.add(seat);
+      allInSet.add(seat); // persists across streets (committed resets, this doesn't)
+      lastActor = seat;
     }
   }
 
@@ -91,9 +106,16 @@ export function reduceBetting(actions, ctx) {
 
   const needsAct = (seat) =>
     inHand.has(seat) &&
+    !allInSet.has(seat) && // all-in players are done acting
     (!actedThisStreet.has(seat) || (committed[seat] || 0) < currentBet);
 
-  const anyNeeds = occ.some(needsAct);
+  // Betting is only live if 2+ players still have chips, OR the lone chip-holder
+  // still owes a call to an all-in. Otherwise the hand just runs out the board.
+  const liveWithChips = occ.filter((s) => inHand.has(s) && !allInSet.has(s));
+  const bettingPossible =
+    liveWithChips.length > 1 ||
+    liveWithChips.some((s) => (committed[s] || 0) < currentBet);
+  const anyNeeds = bettingPossible && occ.some(needsAct);
   let actor = null;
   if (anyNeeds && inHand.size > 1) {
     const b = blinds(seats, button);
@@ -118,6 +140,7 @@ export function reduceBetting(actions, ctx) {
   return {
     street,
     inHand: [...inHand],
+    allIn: [...allInSet],
     foldedStreet,
     committed,
     totalCommitted,

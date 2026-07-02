@@ -1,29 +1,47 @@
-// Rake profiles + the rake calculation. Profiles are a small, USER-EDITABLE
-// table in localStorage keyed by id, so any venue's structure can be corrected
-// in-app.
+// Rake / house-charge profiles + their math. Profiles are a small USER-EDITABLE
+// table in localStorage, so any venue's structure can be corrected in-app.
+//
+// A profile has a `type`:
+//   'percent' — per-pot rake: a list of independently-capped {percent, cap}
+//               components (Danville: 10%→$7 + 10%→$2), optional short-handed
+//               cap override, optional no-flop-no-drop.
+//   'time'    — per-seat time collection: perHour, minHours, optional prepay
+//               flat for the whole session. Charged once per session, NOT per
+//               hand (per-hand rake is 0).
+//   'none'    — no house cut (e.g. a purely social game).
 
 const RAKES_KEY = "phl:rakes:v1";
 
-// Seed: Danville $1/$3 = Caesars Virginia (WSOP Poker Room), Danville VA.
-// Web-sourced (PokerAtlas + poker.org reviews, 2025): "10% up to $7, and for
-// promotions 10% up to $2" — two independently-capped components, max $9/pot.
-//   $20 pot -> $2 + $2 = $4 ;  $70+ pot -> $7 + $2 = $9.
-// dropOnFlopOnly and the short-handed (<=5) reduced cap are UNCONFIRMED online
-// and reflect the user's recollection — both easily edited in setup.
 export const SEED_RAKES = [
+  // Danville $1/$3 = Caesars Virginia (WSOP Poker Room). Web-sourced:
+  // "10% up to $7, and for promotions 10% up to $2" — max $9/pot.
   {
     id: "danville-1-3",
     venue: "Danville",
     label: "Danville 1-3 (Caesars VA)",
+    type: "percent",
     sb: 1,
     bb: 3,
-    rakePercent: 0.1, // house rake %
-    rakeCap: 7, // house rake max
-    promoPercent: 0.1, // jackpot/promo drop %
-    promoCap: 2, // jackpot/promo drop max
-    shortHandedThreshold: 5, // <= this many dealt in => reduced rake cap
-    shortHandedRakeCap: 5, // house-rake cap when short-handed (promo unchanged)
-    dropOnFlopOnly: true, // "no flop, no drop"
+    components: [
+      { percent: 0.1, cap: 7, shortCap: 5 }, // house rake (≤5-handed: $5)
+      { percent: 0.1, cap: 2 }, // jackpot/promo drop
+    ],
+    shortHandedThreshold: 5,
+    dropOnFlopOnly: true, // "no flop, no drop" (user's recollection)
+  },
+  // Five Oaks Club (Durham, NC) — time charge, not a pot rake.
+  // $6/hr, 2-hr minimum, or prepay $30 flat for the session. Blinds unknown —
+  // placeholder $1/$2; edit in setup.
+  {
+    id: "five-oaks",
+    venue: "Five Oaks",
+    label: "Five Oaks (Durham)",
+    type: "time",
+    sb: 1,
+    bb: 2,
+    perHour: 6,
+    minHours: 2,
+    prepay: 30,
   },
 ];
 
@@ -36,11 +54,35 @@ const safeParse = (raw, fallback) => {
   }
 };
 
+// Bring a stored profile up to the current shape (migrate the old
+// rakePercent/rakeCap/promo* fields into type:'percent' + components).
+function migrate(p) {
+  if (!p || typeof p !== "object") return p;
+  if (p.type) return p; // already current
+  const hasLegacy =
+    p.rakePercent != null || p.rakeCap != null || p.promoPercent != null || p.promoCap != null;
+  if (hasLegacy) {
+    const components = [];
+    if (p.rakePercent != null || p.rakeCap != null)
+      components.push({ percent: p.rakePercent || 0, cap: p.rakeCap || 0, shortCap: p.shortHandedRakeCap });
+    if (p.promoPercent != null || p.promoCap != null)
+      components.push({ percent: p.promoPercent || 0, cap: p.promoCap || 0 });
+    return {
+      ...p,
+      type: "percent",
+      components,
+      shortHandedThreshold: p.shortHandedThreshold,
+      dropOnFlopOnly: !!p.dropOnFlopOnly,
+    };
+  }
+  return { ...p, type: "none" };
+}
+
 export function loadRakes() {
   if (typeof localStorage === "undefined") return [...SEED_RAKES];
   const data = safeParse(localStorage.getItem(RAKES_KEY), null);
   if (!Array.isArray(data) || data.length === 0) return [...SEED_RAKES];
-  return data;
+  return data.map(migrate);
 }
 
 export function saveRakes(rakes) {
@@ -55,35 +97,54 @@ export function saveRakes(rakes) {
 export const findRake = (rakes, id) =>
   rakes.find((r) => r.id === id) || rakes[0] || SEED_RAKES[0];
 
-// Compute the rake taken from a finished pot.
-//   pot          total chips in the pot
-//   playersDealt occupied seats dealt into the hand (for the short-handed cap)
-//   sawFlop      did the hand reach a flop (drives no-flop-no-drop)
-//   profile      a rake profile object
-// Returns { rake, promo, total } in whole dollars.
+export const isTimeRake = (p) => p && p.type === "time";
+
+// Per-hand rake taken from a finished pot. Time/none profiles take nothing per
+// hand (time is a session charge — see computeTimeCharge). Returns { total }.
 export function computeRake({ pot, playersDealt, sawFlop, profile }) {
   const p = profile || SEED_RAKES[0];
-  if (!pot || pot <= 0) return { rake: 0, promo: 0, total: 0 };
-  if (!sawFlop && p.dropOnFlopOnly) return { rake: 0, promo: 0, total: 0 };
+  if (p.type !== "percent") return { total: 0, parts: [] };
+  if (!pot || pot <= 0) return { total: 0, parts: [] };
+  if (!sawFlop && p.dropOnFlopOnly) return { total: 0, parts: [] };
 
-  const rakeCap =
-    playersDealt <= (p.shortHandedThreshold ?? 0)
-      ? p.shortHandedRakeCap ?? p.rakeCap
-      : p.rakeCap;
-
-  const rake = Math.min(Math.floor(pot * (p.rakePercent || 0)), rakeCap);
-  const promo = Math.min(Math.floor(pot * (p.promoPercent || 0)), p.promoCap || 0);
-  return { rake, promo, total: rake + promo };
+  const short = playersDealt <= (p.shortHandedThreshold ?? 0);
+  const parts = (p.components || []).map((c) => {
+    const cap = short && c.shortCap != null ? c.shortCap : c.cap;
+    return Math.min(Math.floor(pot * (c.percent || 0)), cap ?? Infinity);
+  });
+  return { total: parts.reduce((a, b) => a + b, 0), parts };
 }
 
-// Human summary, e.g. "10% to $7 + 10% to $2 (≤5: rake to $5) · no flop no drop".
+// Session-level time charge for a 'time' profile.
+//   elapsedHours  seated hours (fractional)
+//   prepaid       did the player take the flat prepay option
+// Returns { metered, prepay, charge } in whole dollars.
+export function computeTimeCharge({ elapsedHours, prepaid, profile }) {
+  const p = profile || {};
+  if (p.type !== "time") return { metered: 0, prepay: 0, charge: 0 };
+  const hrs = Math.max(p.minHours || 0, Math.ceil(elapsedHours || 0));
+  const metered = hrs * (p.perHour || 0);
+  const prepay = p.prepay ?? null;
+  const charge = prepaid && prepay != null ? prepay : metered;
+  return { metered, prepay, charge, hours: hrs };
+}
+
+// Human summary line for a profile.
 export function rakeSummary(p) {
   if (!p) return "";
+  if (p.type === "time") {
+    let s = `$${p.perHour}/hr`;
+    if (p.minHours) s += `, ${p.minHours}hr min`;
+    if (p.prepay != null) s += `, or $${p.prepay}/session`;
+    return s;
+  }
+  if (p.type === "none") return "no house rake";
+  // percent
   const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-  let s = `${pct(p.rakePercent)} to $${p.rakeCap}`;
-  if (p.promoCap) s += ` + ${pct(p.promoPercent)} to $${p.promoCap}`;
-  if (p.shortHandedRakeCap != null)
-    s += ` (≤${p.shortHandedThreshold}: rake to $${p.shortHandedRakeCap})`;
+  const comps = (p.components || []).map((c) => `${pct(c.percent)} to $${c.cap}`).join(" + ");
+  let s = comps || "no rake";
+  const sc = (p.components || []).find((c) => c.shortCap != null);
+  if (sc) s += ` (≤${p.shortHandedThreshold}: rake to $${sc.shortCap})`;
   if (p.dropOnFlopOnly) s += " · no flop no drop";
   return s;
 }

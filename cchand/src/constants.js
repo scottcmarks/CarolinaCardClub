@@ -32,11 +32,12 @@ export const SEAT_COUNT = 9;
 export const DEFAULT_HERO_SEAT = 2;
 export const DEFAULT_HERO_NAME = "Scott";
 
-// Default seating: every seat occupied, generic "Player N" names.
+// Default seating: every seat occupied, generic "Player N" names, no stack set.
 export const defaultSeats = (count = SEAT_COUNT) =>
   Array.from({ length: count }, (_, i) => ({
     occupied: true,
     name: `Player ${i + 1}`,
+    stack: null,
   }));
 
 // Poker position labels going CLOCKWISE around the table from the dealer

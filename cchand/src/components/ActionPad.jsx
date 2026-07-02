@@ -2,18 +2,20 @@ import { useState, useLayoutEffect, useRef } from "react";
 import { theme } from "../constants.js";
 
 const PAD_W = 198;
-const PAD_H = 268;
+const PAD_H = 312;
 
-// Floating numeric action pad: 7 8 9 / 4 5 6 / 1 2 3 / ✖ 0 ✓.
+// Floating numeric action pad: 7 8 9 / 4 5 6 / 1 2 3 / ✖ 0 ✓, plus "!" all-in.
 // Positions itself so the bottom-row 0 sits just under the actor's seat.
-export default function ActionPad({ actorSeat, actorLabel, pot, toCall, currentBet, onAct }) {
+export default function ActionPad({ actorSeat, actorLabel, pot, toCall, currentBet, onAct, onAllIn }) {
   const [amount, setAmount] = useState("");
+  const [err, setErr] = useState("");
   const [pos, setPos] = useState(null);
   const padRef = useRef(null);
 
   // reset typed amount whenever the actor changes
   useLayoutEffect(() => {
     setAmount("");
+    setErr("");
   }, [actorSeat]);
 
   // anchor the pad to the actor's seat element
@@ -38,10 +40,16 @@ export default function ActionPad({ actorSeat, actorLabel, pot, toCall, currentB
   }, [actorSeat]);
 
   const n = parseInt(amount, 10) || 0;
-  const press = (d) => setAmount((a) => (a + d).slice(0, 6));
+  const press = (d) => {
+    setErr("");
+    setAmount((a) => (a + d).slice(0, 6));
+  };
   const confirm = () => {
-    if (n > 0 && n > currentBet) onAct(currentBet > 0 ? "raise" : "bet", n);
-    else if (toCall > 0) onAct("call");
+    if (amount) {
+      // a typed amount is always a bet/raise-to; reject if it isn't a legal raise
+      if (n > currentBet) onAct(currentBet > 0 ? "raise" : "bet", n);
+      else setErr(`Must exceed $${currentBet}`);
+    } else if (toCall > 0) onAct("call");
     else onAct("check");
   };
 
@@ -115,16 +123,28 @@ export default function ActionPad({ actorSeat, actorLabel, pot, toCall, currentB
           ✕
         </Btn>
         <Btn onClick={() => press(0)}>0</Btn>
-        <Btn onClick={confirm} bg="#1f8a4c" color="#fff" fontSize={18}>
-          {amount ? "✓" : ""}
-          {!amount && (toCall > 0 ? "✓" : "✓")}
+        <Btn onClick={confirm} bg="#1f8a4c" color="#fff" fontSize={20}>
+          ✓
         </Btn>
       </div>
-      <div
-        className="flex items-center justify-center"
-        style={{ marginTop: 6, color: "rgba(255,255,255,0.75)", fontSize: 11 }}
-      >
-        {checkLabel}
+      <div className="flex items-center justify-between" style={{ marginTop: 6, gap: 8 }}>
+        <span style={{ color: err ? "#ff9a9a" : "rgba(255,255,255,0.75)", fontSize: 11 }}>
+          {err || checkLabel}
+        </span>
+        <button
+          onClick={() => onAllIn(n > 0 ? n : null)}
+          className="rounded-lg flex items-center justify-center gap-1 active:scale-95 font-extrabold"
+          style={{
+            height: 30,
+            padding: "0 12px",
+            background: "#8a1f1f",
+            color: "#fff",
+            fontSize: 13,
+            boxShadow: "0 2px 0 rgba(0,0,0,0.35)",
+          }}
+        >
+          <span style={{ fontSize: 16 }}>!</span> ALL-IN
+        </button>
       </div>
     </div>
   );
