@@ -44,6 +44,7 @@ export default function SessionSummary({
 
   const handsThis = log.filter((h) => start && h.ts >= start && (!end || h.ts <= end));
   const potRakeTotal = handsThis.reduce((a, h) => a + (h.rake || 0), 0);
+  const heroNet = handsThis.reduce((a, h) => a + (h.heroNet || 0), 0);
 
   const time = isTimeRake(profile);
   const tc = time
@@ -84,6 +85,12 @@ export default function SessionSummary({
               <Row label="Elapsed">{dur(elapsedMs)}</Row>
               <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "6px 0" }} />
               <Row label="Hands this session">{handsThis.length}</Row>
+              <div className="flex items-center justify-between py-1.5">
+                <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Your P&amp;L (stacks)</span>
+                <span style={{ color: heroNet >= 0 ? "#7fe0a6" : "#ff9a9a", fontSize: 14, fontWeight: 700 }}>
+                  {heroNet >= 0 ? "+" : "−"}${Math.abs(heroNet)}
+                </span>
+              </div>
               {!time && <Row label="Pot rake paid">${potRakeTotal}</Row>}
 
               {time && tc && (

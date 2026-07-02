@@ -57,6 +57,7 @@ export function loadSession() {
     startedAt: null, // epoch ms — start of the current sitting
     endedAt: null, // epoch ms — set when the sitting is ended
     prepaid: false, // time venues: did the player take the flat prepay
+    sittingOut: false, // hero has stood up (seatless)
   };
   if (typeof localStorage === "undefined") return base;
   const s = safeParse(localStorage.getItem(SESSION_KEY), {});
@@ -73,6 +74,7 @@ export function loadSession() {
     startedAt: typeof s.startedAt === "number" ? s.startedAt : null,
     endedAt: typeof s.endedAt === "number" ? s.endedAt : null,
     prepaid: !!s.prepaid,
+    sittingOut: !!s.sittingOut,
   };
 }
 

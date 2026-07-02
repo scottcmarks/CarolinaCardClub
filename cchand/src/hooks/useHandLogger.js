@@ -3,7 +3,7 @@ import { TOTAL, HOLE_START, SEAT_COUNT, defaultSeats } from "../constants.js";
 import { cardId, firstEmpty, holeStr } from "../lib/cards.js";
 import { loadLog, saveLog, loadSession, saveSession, maxId } from "../lib/storage.js";
 import { loadRakes, saveRakes, findRake, computeRake } from "../lib/rake.js";
-import { reduceBetting, seedPosts } from "../lib/betting.js";
+import { reduceBetting, seedPosts, settleStacks, settleResult, contestedPot } from "../lib/betting.js";
 import {
   blinds,
   occupiedSeats,
@@ -49,6 +49,7 @@ export function useHandLogger() {
   const [log, setLog] = useState(loadLog);
   const [editingId, setEditingId] = useState(null);
   const [flash, setFlash] = useState(null);
+  const [settling, setSettling] = useState(false); // showdown: awaiting winner tap
   const nextId = useRef(maxId(loadLog()) + 1);
 
   useEffect(() => saveLog(log), [log]);
@@ -90,60 +91,87 @@ export function useHandLogger() {
   const pushSnapshot = useCallback(() => setSnapshots((s) => [...s, snapshot()]), [snapshot]);
 
   const resetWorking = useCallback(
-    (buttonForHand) => {
+    (buttonForHand, seatsForHand) => {
+      const sd = seatsForHand || seats;
       const sb = rakeProfile.sb ?? 1;
       const bb = rakeProfile.bb ?? 3;
       setCards(emptyHand());
       setReveals([]);
       setHeroRevealed(false);
-      setActions(seedPosts(seats, buttonForHand ?? button, sb, bb));
+      setActions(seedPosts(sd, buttonForHand ?? button, sb, bb));
       setPhase("preflop");
       setDealingStreet(null);
       setMode("betting");
       setActive({ type: "board", index: HOLE_START });
       setPendingRank(null);
       setSnapshots([]);
+      setSettling(false);
     },
     [seats, button, rakeProfile]
   );
 
-  // ---- finishing a hand (manual End, fold-out, or showdown End) ----
+  // ---- finishing a hand (manual End, fold-out, or showdown award) ----
+  // winnerSeat: the seat that won the pot (fold-to-one is automatic; a showdown
+  // uses the tap-the-winner SCAFFOLDING — a stand-in until the logger evaluates
+  // hands itself). null winner ⇒ record only, no stack settlement.
   const finishHand = useCallback(
-    (actsArg, cardsArg, revealsArg, heroRevArg) => {
+    (winnerArg, actsArg, cardsArg, revealsArg, heroRevArg) => {
+      const editing = editingId !== null;
       const acts = actsArg || actions;
       const c = cardsArg || cards;
       const rv = revealsArg || reveals;
       const heroRev = heroRevArg ?? heroRevealed;
-      const b = reduceBetting(acts, { seats, button });
+
+      // when editing, reconstruct the hand's ORIGINAL context from the stored
+      // entry (seats/button/rake/heroSeat) rather than the live session
+      const ent = editing ? editingEntry : null;
+      const ctxSeats = ent?.seats || seats;
+      const ctxButton = ent?.button ?? button;
+      const ctxProfile = ent ? findRake(rakes, ent.rakeProfileId) : rakeProfile;
+      const ctxHeroSeat = ent ? clampSeat(ent.seat) : heroSeat;
+
+      const b = reduceBetting(acts, { seats: ctxSeats, button: ctxButton });
       const sawFlop = !!(c[0] && c[1] && c[2]);
-      const playersDealt = occupiedSeats(seats).length;
-      const rk = computeRake({ pot: b.pot, playersDealt, sawFlop, profile: rakeProfile });
+      const playersDealt = occupiedSeats(ctxSeats).length;
+      const pot = contestedPot(b.totalCommitted);
+      const rk = computeRake({ pot, playersDealt, sawFlop, profile: ctxProfile });
 
       const hasCards = c.some(Boolean);
       const hasReveal = rv.some((r) => r.cards.some(Boolean));
       const hasBetting = acts.some((a) => a.type !== "post" && a.type !== "street");
       if (!hasCards && !hasReveal && !hasBetting) return;
 
+      const winners = (Array.isArray(winnerArg) ? winnerArg : winnerArg != null ? [winnerArg] : [])
+        .map(Number)
+        .filter((w) => b.inHand.includes(w));
+      const { winnings, unresolved } = settleResult(b.totalCommitted, winners, rk.total);
+      const heroNet = winners.length
+        ? (winnings[ctxHeroSeat] || 0) - (b.totalCommitted[ctxHeroSeat] || 0)
+        : 0; // null winner ⇒ no result recorded, no P&L impact
+
       const revealsRaw = rv
         .filter((r) => r.cards.some(Boolean))
         .map((r) => ({ seat: r.seat, cards: [...r.cards] }));
-      const bl = blinds(seats, button);
+      const bl = blinds(ctxSeats, ctxButton);
       const common = {
         cards: [...c],
         reveals: revealsRaw,
         heroRevealed: heroRev,
         actions: acts.map((a) => ({ ...a })),
-        pot: b.pot,
+        pot,
         rake: rk.total,
-        blinds: bl ? { sb: rakeProfile.sb, bb: rakeProfile.bb, sbSeat: bl.sb, bbSeat: bl.bb } : null,
-        button,
-        seats: seats.map((s) => ({ ...s })),
-        rakeProfileId: session.rakeProfileId,
+        winner: winners.length === 1 ? winners[0] : winners.length ? winners : null,
+        heroNet,
+        blinds: bl ? { sb: ctxProfile.sb, bb: ctxProfile.bb, sbSeat: bl.sb, bbSeat: bl.bb } : null,
+        button: ctxButton,
+        seats: ctxSeats.map((s) => ({ ...s })),
+        rakeProfileId: ent ? ent.rakeProfileId : session.rakeProfileId,
       };
 
-      if (editingId !== null) {
+      if (editing) {
+        // offline edit updates the record only — never re-settles stacks
         setLog((prev) => prev.map((h) => (h.id === editingId ? { ...h, ...common } : h)));
-        showFlash("Hand updated");
+        showFlash(unresolved ? "Updated · verify side-pot stacks" : "Hand updated");
         setEditingId(null);
         resetWorking();
       } else {
@@ -157,13 +185,23 @@ export function useHandLogger() {
           ...common,
         };
         setLog((p) => [entry, ...p]);
-        showFlash(holeStr(c).includes("·") ? "Hand saved" : "Hand saved · " + holeStr(c));
+        showFlash(
+          unresolved
+            ? "Saved · side pot not settled — verify stacks"
+            : holeStr(c).includes("·")
+            ? "Hand saved"
+            : "Hand saved · " + holeStr(c)
+        );
         const nextButton = (button % SEAT_COUNT) + 1;
-        setSession((s) => ({ ...s, button: nextButton }));
+        setSession((s) => ({
+          ...s,
+          button: nextButton,
+          ...(winners.length ? { seats: settleStacks(s.seats, b, winners, rk.total) } : {}),
+        }));
         resetWorking(nextButton);
       }
     },
-    [actions, cards, reveals, heroRevealed, seats, button, rakeProfile, editingId, session, resetWorking]
+    [actions, cards, reveals, heroRevealed, seats, button, heroSeat, rakeProfile, rakes, editingId, editingEntry, session, resetWorking]
   );
 
   // ---- apply a new action log and drive phase transitions ----
@@ -176,7 +214,8 @@ export function useHandLogger() {
       const nb = reduceBetting(newActions, { seats, button });
       setActions(newActions);
       if (nb.playersLeft <= 1) {
-        finishHand(newActions, c);
+        // folded to one — that player wins automatically (no tap needed)
+        finishHand(nb.inHand[0] ?? null, newActions, c);
         return;
       }
       setPhase(nb.street);
@@ -344,11 +383,14 @@ export function useHandLogger() {
           setActive({ type: "board", index: e === null ? active.index : e });
         }
       } else {
-        // reveal entry (villain showdown hands)
+        // a shown/exposed card for any seat — can be entered at ANY point in the
+        // hand (a flash, a tabled card, a showdown). Two shown cards = a hand
+        // eligible to win the showdown.
         const nr = reveals.map((r) => ({ ...r, cards: [...r.cards] }));
         nr[active.r].cards[active.c] = card;
         setReveals(nr);
         if (active.c === 0) setActive({ type: "reveal", r: active.r, c: 1 });
+        else if (phase !== "showdown") setMode("betting"); // both in → back to the action
       }
     },
     [pendingRank, usedIds, active, cards, reveals, phase, dealingStreet, actions, pushSnapshot, afterActionsChanged]
@@ -398,7 +440,33 @@ export function useHandLogger() {
     resetWorking();
   }, [resetWorking]);
 
-  const endHand = useCallback(() => finishHand(), [finishHand]);
+  // End hand → award the pot. Fold-to-one or a walk settles immediately; a
+  // contested pot enters "settling" and prompts the winner tap (scaffolding).
+  const endHand = useCallback(() => {
+    if (editingId !== null) {
+      finishHand(editingEntry ? editingEntry.winner ?? null : null);
+      return;
+    }
+    if (bet.playersLeft >= 2 && bet.pot > 0) {
+      setSettling(true);
+      return;
+    }
+    finishHand(bet.playersLeft === 1 ? bet.inHand[0] : null);
+  }, [editingId, editingEntry, bet, finishHand]);
+
+  const awardTo = useCallback(
+    (winners) => {
+      buzz(12);
+      setSettling(false);
+      finishHand(winners); // scalar or array — normalized in finishHand
+    },
+    [finishHand]
+  );
+  const skipSettle = useCallback(() => {
+    setSettling(false);
+    finishHand(null);
+  }, [finishHand]);
+  const cancelSettle = useCallback(() => setSettling(false), []);
 
   const cancelEdit = useCallback(() => {
     buzz(12);
@@ -466,6 +534,20 @@ export function useHandLogger() {
     setReveals((p) => p.filter((_, i) => i !== r));
   }, []);
 
+  // enter a seat's shown cards at any point in the hand (hero → own hole slot,
+  // villain → a reveal). Two shown cards make a hand eligible to win.
+  const enterCards = useCallback(
+    (n) => {
+      if (n === heroSeat && !session.sittingOut) {
+        const i = !cards[HOLE_START] ? HOLE_START : HOLE_START + 1;
+        selectTarget({ type: "board", index: i });
+      } else {
+        selectSeat(n);
+      }
+    },
+    [heroSeat, session.sittingOut, cards, selectTarget, selectSeat]
+  );
+
   // ---- session + seat + rake mutation ----
   const updateSession = useCallback((patch) => setSession((s) => ({ ...s, ...patch })), []);
   const completeOnboarding = useCallback((patch) => {
@@ -475,6 +557,7 @@ export function useHandLogger() {
       ...s,
       ...patch,
       onboarded: true,
+      sittingOut: false, // finishing setup means you're seated
       ...(s.onboarded ? {} : { startedAt: Date.now(), endedAt: null }),
     }));
   }, []);
@@ -519,6 +602,77 @@ export function useHandLogger() {
       seats: s.seats.map((x, i) => (i === n - 1 ? { ...x, stack: v } : x)),
     }));
   }, []);
+
+  // occupancy/position changes reseed the (between-hands) working hand so blinds
+  // + positions track the new seating.
+  const applySeating = useCallback(
+    (newSeats, patch) => {
+      // seating changes happen between hands — don't wipe a hand mid-entry
+      if (anyEntered) {
+        showFlash("Finish or clear the hand first");
+        return;
+      }
+      setSession((s) => ({ ...s, seats: newSeats, ...patch }));
+      resetWorking(button, newSeats);
+    },
+    [anyEntered, button, resetWorking]
+  );
+
+  const moveHeroTo = useCallback(
+    (n) => {
+      buzz(8);
+      const to = clampSeat(n);
+      if (to === heroSeat && !session.sittingOut) return;
+      const st = seats[heroSeat - 1]?.stack ?? null;
+      const newSeats = seats.map((x, i) => {
+        if (i + 1 === heroSeat) return { ...x, occupied: false, stack: null }; // stack travels with hero
+        if (i + 1 === to) return { ...x, occupied: true, name: session.heroName, stack: st };
+        return x;
+      });
+      applySeating(newSeats, { seat: String(to), sittingOut: false });
+    },
+    [seats, heroSeat, session.heroName, session.sittingOut, applySeating]
+  );
+
+  const heroStandUp = useCallback(() => {
+    buzz(10);
+    const newSeats = seats.map((x, i) => (i + 1 === heroSeat ? { ...x, occupied: false } : x));
+    applySeating(newSeats, { sittingOut: true }); // keep session.seat so the stack stays put
+  }, [seats, heroSeat, applySeating]);
+
+  const heroSitDown = useCallback(
+    (n) => {
+      buzz(8);
+      const to = clampSeat(n);
+      const st = seats[heroSeat - 1]?.stack ?? null; // hero's stack rests on the old seat entry
+      const newSeats = seats.map((x, i) =>
+        i + 1 === to ? { ...x, occupied: true, name: session.heroName, stack: st } : x
+      );
+      applySeating(newSeats, { seat: String(to), sittingOut: false });
+    },
+    [seats, heroSeat, session.heroName, applySeating]
+  );
+
+  const seatVillain = useCallback(
+    (n) => {
+      // a fresh occupant starts from an unknown (null) stack
+      const newSeats = seats.map((x, i) =>
+        i + 1 === n ? { ...x, occupied: true, name: x.name || `Player ${n}`, stack: null } : x
+      );
+      applySeating(newSeats, {});
+    },
+    [seats, applySeating]
+  );
+
+  const vacateSeat = useCallback(
+    (n) => {
+      buzz(8);
+      // player leaves with their chips — clear the seat's stack
+      const newSeats = seats.map((x, i) => (i + 1 === n ? { ...x, occupied: false, stack: null } : x));
+      applySeating(newSeats, {});
+    },
+    [seats, applySeating]
+  );
   const setRakeProfileId = useCallback((id) => updateSession({ rakeProfileId: id }), [updateSession]);
   const upsertRake = useCallback((profile) => {
     setRakes((rs) => {
@@ -538,23 +692,26 @@ export function useHandLogger() {
 
   return {
     // working state
-    cards, reveals, heroRevealed, active, pendingRank, mode, phase, dealingStreet,
+    cards, reveals, heroRevealed, active, pendingRank, mode, phase, dealingStreet, settling,
     // derived
     bet, positions, seats, heroSeat, button, rakeProfile,
     usedIds, anyEntered, canUndo: snapshots.length > 0,
+    // settling
+    awardTo, skipSettle, cancelSettle,
     // session/log
     session, log, rakes, editingId, editingEntry, flash,
     // card-entry actions
     pickRank, pickSuit, selectTarget, tapHeroCard, undo, clearHand, endHand,
     // betting actions
     act, allIn, tapSeatToAct, stackOf,
-    // showdown
-    selectSeat, removeReveal,
+    // showdown / reveals (any time)
+    selectSeat, removeReveal, enterCards,
     // hands
     loadHand, deleteHand, cancelEdit, restartBetting,
     // session/seat/rake
     updateSession, completeOnboarding, setButton, advanceButton,
     setSeatOccupied, setSeatName, setSeatStack, setRakeProfileId, upsertRake, deleteRake,
     setSessionStart, endSession, startNewSession, setPrepaid,
+    moveHeroTo, heroStandUp, heroSitDown, seatVillain, vacateSeat,
   };
 }

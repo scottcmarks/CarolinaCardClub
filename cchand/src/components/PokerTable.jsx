@@ -65,9 +65,9 @@ function SeatFrame({ n, active, folded, children }) {
   );
 }
 
-function Tag({ name, sub, committed, allIn }) {
+function Tag({ name, sub, committed, allIn, onClick }) {
   return (
-    <div className="flex flex-col items-center" style={{ lineHeight: 1.15, marginTop: 1 }}>
+    <button onClick={onClick} className="flex flex-col items-center" style={{ lineHeight: 1.15, marginTop: 1 }}>
       <span
         style={{ fontSize: 9.5, color: "rgba(255,255,255,0.85)", fontWeight: 600, maxWidth: 72 }}
         className="truncate"
@@ -82,7 +82,7 @@ function Tag({ name, sub, committed, allIn }) {
           committed > 0 && <b style={{ color: theme.gold }}>{sub ? " · " : ""}${committed}</b>
         )}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -99,15 +99,26 @@ export default function PokerTable({
   heroSeat,
   heroName,
   buttonSeat,
+  settling,
+  selectedWinners,
+  sittingOut,
+  moving,
   onSelectCommunity,
   onTapHeroCard,
   onSeatAct,
   onSelectSeat,
   onRemoveReveal,
-  onSeatNew,
   onAdvanceButton,
+  onAwardWinner,
+  onOpenMenu,
+  onMoveHere,
+  onSitHere,
 }) {
   const showdown = phase === "showdown";
+  // menu is disabled while awarding a pot so a seat change can't wipe the hand
+  const openMenu = (n) => {
+    if (!settling) onOpenMenu(n);
+  };
   const revealBySeat = new Map();
   reveals.forEach((r, i) => r.seat && revealBySeat.set(String(r.seat), i));
 
@@ -203,7 +214,7 @@ export default function PokerTable({
         const isAllIn = bet.allIn.includes(n);
         const isActor = bet.actor === n && mode === "betting";
 
-        if (n === heroSeat) {
+        if (n === heroSeat && !sittingOut) {
           const faceUp = heroRevealed || showdown;
           return (
             <SeatFrame key={n} n={n} active={isActor} folded={folded}>
@@ -230,34 +241,38 @@ export default function PokerTable({
                   );
                 })}
               </div>
-              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} />
+              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
             </SeatFrame>
           );
         }
 
         if (!occupied) {
           const { left, top } = seatPos(n);
+          const highlight = moving || sittingOut;
+          const onTap = () =>
+            moving ? onMoveHere(n) : sittingOut ? onSitHere(n) : openMenu(n);
           return (
             <button
               key={n}
               data-seat={n}
-              onClick={() => onSeatNew(n)}
+              onClick={onTap}
               style={{
                 position: "absolute",
                 left,
                 top,
                 transform: "translate(-50%, -50%)",
-                width: 38,
-                height: 38,
+                width: 40,
+                height: 40,
                 borderRadius: "50%",
-                background: "rgba(0,0,0,0.3)",
-                border: "1px dashed rgba(255,255,255,0.22)",
-                color: "rgba(255,255,255,0.4)",
+                background: highlight ? "rgba(31,138,76,0.35)" : "rgba(0,0,0,0.3)",
+                border: highlight ? "1px solid #1f8a4c" : "1px dashed rgba(255,255,255,0.22)",
+                color: highlight ? "#c7f0d5" : "rgba(255,255,255,0.4)",
                 fontSize: 11,
+                fontWeight: highlight ? 700 : 400,
               }}
               className="active:scale-95"
             >
-              +{n}
+              {highlight ? "sit" : `+${n}`}
             </button>
           );
         }
@@ -301,7 +316,7 @@ export default function PokerTable({
                 {folded ? "folded" : showdown ? "show?" : "—"}
               </button>
             )}
-            <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} />
+            <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
             {hasReveal && showdown && (
               <button
                 onClick={() => onRemoveReveal(ri)}
@@ -313,6 +328,37 @@ export default function PokerTable({
           </SeatFrame>
         );
       })}
+
+      {/* winner tap (SCAFFOLDING): overlay an award target on each live seat */}
+      {settling &&
+        bet.inHand.map((n) => {
+          const { left, top } = seatPos(n);
+          const picked = (selectedWinners || []).includes(n);
+          return (
+            <button
+              key={"win" + n}
+              onClick={() => onAwardWinner(n)}
+              className="active:scale-95"
+              style={{
+                position: "absolute",
+                left,
+                top,
+                transform: "translate(-50%, -50%)",
+                zIndex: 8,
+                padding: "4px 10px",
+                borderRadius: 10,
+                background: picked ? "rgba(31,138,76,0.96)" : "rgba(0,0,0,0.6)",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 800,
+                border: picked ? "2px solid #7fe0a6" : "1px solid rgba(255,255,255,0.4)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+              }}
+            >
+              {picked ? "WON ✓" : "won?"}
+            </button>
+          );
+        })}
 
       {/* dealer button */}
       <button

@@ -171,3 +171,50 @@
 
 ## Removed
 - `src/components/Board.jsx`, `src/components/Reveals.jsx` (subsumed by `PokerTable`).
+
+---
+
+# Carolina Card Club — cchand round-of-play expansion (2026-06-29 → 07-02)
+
+App renamed **poker-hand-logger → cchand** (`CCHand`/`cchand`/`CCC Hand Logger`). Went
+from "record the cards" to "record the play." See `cchand/BETTING_MODEL.md`.
+
+## Betting engine (`src/lib/betting.js`, `src/lib/positions.js`)
+- Action log is source of truth; `reduceBetting` derives whose-turn/pot/folded/all-in.
+- Blinds posted & kept in pot; positions (BTN/SB/BB/UTG…); heads-up; all-in (`allin`
+  action + `allInSet`, run-out advances the board when ≤1 player has chips).
+- `contestedPot` (uncalled bets returned), `distributePots`/`settleResult` (layered side
+  pots + split/chop winners + rake), `settleStacks`, `actionsSummary`.
+
+## Rake (`src/lib/rake.js`, `RakeEditor.jsx`)
+- `type: percent` (N `{percent,cap,shortCap}` components) `| time` (perHour/minHours/
+  prepay) `| none`. `computeRake` per-hand; `computeTimeCharge` per-session. Legacy
+  auto-migrate. Seeds: Danville (Caesars VA 10%→$7 + 10%→$2) + Five Oaks (time $6/hr,
+  2hr min, $30 prepay). In-app editor (add/edit/delete).
+
+## Stacks, results, P&L
+- Optional per-seat `stack`; `!` all-in shoves it. Stacks **auto-settled** at hand end
+  (debit committed, credit winner pot−rake). Fold-to-one auto-wins; contested = **tap the
+  winner (SCAFFOLDING** for a future hand-evaluator), multi-select for chops. `heroNet`
+  per hand → **hero P&L** in the session sheet.
+
+## Live seating (`PlayerMenu.jsx`)
+- Tap a seat's name tag → menu: set stack (live add-on/correction), rename, **enter shown
+  cards (any time)**, change seat / stand up (hero), sit out (villain), seat a player.
+  Stack travels on a move; stand-up = seatless/sitting-out. Seating changes refuse
+  mid-hand (flash).
+
+## Session timing (`SessionClock.jsx`, `SessionSummary.jsx`)
+- `startedAt`/`endedAt` (auto-start first setup, editable ±15) + `prepaid`. Header clock
+  pill (live elapsed + running time charge); session sheet (elapsed, hands, per-pot rake,
+  metered-vs-prepay, P&L, End/Restart).
+
+## Onboarding / misc
+- Startup/setup modal (venue, table, hero name+seat, button, rake, per-seat occupancy +
+  names + stacks). Hero cards render face-down; reveal any time; two-card rule = evaluator
+  spec. Export/history carry pot/rake/winner/heroNet/hero-shown + action summary.
+
+## Verification
+- Two adversarial review workflows (13 + 10 confirmed → fixed; side pots, chops, uncalled
+  bets, ended-session revival, run-out phantom checks, stack duplication, etc.).
+- ~84-case Node engine harness (rebuilt in scratchpad; pure libs are React-free).

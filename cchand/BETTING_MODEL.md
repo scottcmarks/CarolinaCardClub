@@ -133,12 +133,61 @@ toggles it face-up (and back). Reaching showdown auto-faces them. The hand recor
 `heroRevealed` so history/export note whether the table actually saw hero's cards. Hero
 may also reveal retroactively via the offline editor.
 
+## Reveals any time + the two-card rule (evaluator spec)
+
+A shown/exposed card can be entered for **any seat at any point in the hand** — not just at
+showdown (cards flash, get tabled, or are shown for all sorts of reasons). Player menu →
+*Enter shown cards* starts reveal entry for that seat (hero → own hole slot; villain → a
+reveal); completing both mid-hand returns to the action.
+
+**To win a showdown a hand must show *two* cards.** So the eventual hand-evaluator (which
+replaces the winner-tap scaffolding) considers **only seats with both hole cards entered**
+as winner candidates, evaluates their best 5-of-7, and awards accordingly — a one-card or
+mucked hand can't win. The two-card reveal is a **"twofer"**: it both records what was shown
+*and* is the winner-determination input. Until the evaluator exists, the manual winner-tap
+stands in (and remains afterward as the override for mucked/unknown hands).
+
+## Result capture + stack settlement (auto-tracked stacks)
+
+Stacks (`session.seats[i].stack`, optional) are **maintained by the engine**: chips leave
+a seat as they're committed (already how `!` all-in computes the shove), and at hand end
+`settleStacks` debits each seat its `totalCommitted` and credits the **winner** `pot − rake`
+(`lib/betting.js`; net table change = −rake; untracked/null stacks untouched).
+
+**Winner:** fold-to-one wins automatically. A contested pot enters `settling` and the user
+**taps the winner** (`awardTo`) — green WON targets on each live seat.
+
+> ⚠️ **The winner-tap is TEMPORARY SCAFFOLDING.** The end state is the logger *evaluating*
+> the board + revealed hole cards to pick the winning hand itself; the tap bridges until
+> that hand-evaluator exists (and survives afterward only as the override for mucked /
+> unknown hands). It is labelled as scaffolding in the code and UI.
+
+`null` winner (skip) records the hand without settling. Each hand stores `winner` + `heroNet`
+(`won − committed`); `SessionSummary` sums `heroNet` over the sitting = **hero P&L** (free
+byproduct). Offline edits never re-settle. Manual `Set stack` (player menu) coexists —
+add-ons and eyeball corrections override the auto-tracked number anytime.
+
+## Live seating — player menu, seat change, stand-up
+
+Tapping a seat's **name tag** opens `PlayerMenu` (anchored via `data-seat`): *Set stack*,
+*Rename* (villain), and — hero — *Change seat* / *Stand up*; empty seat → *Seat a player*.
+Occupancy/position changes go through `applySeating(newSeats, patch)` → `setSession` +
+`resetWorking(button, newSeats)` (reseeds the between-hands hand's blinds/positions).
+
+- **Change seat:** *Change seat* → `moving` mode; tap an open seat → `moveHeroTo` (hero's
+  stack travels to the new seat, old seat opens).
+- **Stand up:** hero vacates and goes `sittingOut` (seatless, not dealt in; `session.seat`
+  is kept so the stack rests there); the table renders the seat empty. Tap any open seat →
+  `heroSitDown` (stack moves to the chosen seat). *"Buy the button" on re-entry is parked.*
+- Button/blinds already tolerate arbitrary/empty seats (dead button/SB), so a move or
+  stand-up needs no special positioning logic.
+
 ## Persistence
 
-- `session` (`phl:session:v1`): venue, table, heroName, heroSeat, button, rakeProfileId,
-  `seats:[{occupied,name}]`, `onboarded`.
-- `log` (`phl:log:v1`): each saved hand adds `actions`, `pot`, `rake`, `heroRevealed`,
-  `seats` snapshot, `button`, `blinds`, `fubar`.
-- `rakes` (`phl:rakes:v1`): editable rake profiles.
+- `session` (`phl:session:v1`): venue, table, heroName, seat, button, rakeProfileId,
+  `seats:[{occupied,name,stack}]`, `onboarded`, `startedAt`/`endedAt`/`prepaid`, `sittingOut`.
+- `log` (`phl:log:v1`): each saved hand adds `actions`, `pot`, `rake`, `winner`, `heroNet`,
+  `heroRevealed`, `seats` snapshot (pre-settlement starting stacks), `button`, `blinds`.
+- `rakes` (`phl:rakes:v1`): editable rake profiles (percent/time/none).
 
 Old hands without these fields stay readable (treated as no-betting hands).

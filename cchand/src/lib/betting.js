@@ -102,6 +102,8 @@ export function reduceBetting(actions, ctx) {
     }
   }
 
+  // Live pot = all chips on the table (raw). Uncalled bets are only returned at
+  // hand end — see contestedPot(), used for rake + the recorded pot.
   const pot = occ.reduce((s, seat) => s + (totalCommitted[seat] || 0), 0);
 
   const needsAct = (seat) =>
@@ -177,6 +179,88 @@ export function actionsSummary(actions) {
   }
   flush();
   return parts.join(" | ");
+}
+
+// The pot that's actually contested at hand end: a lone top (uncalled) bet is
+// capped at the second-highest contribution; the excess returns to the bettor.
+// Used for rake + the recorded pot (distributePots returns the excess in stacks).
+export function contestedPot(totalCommitted) {
+  const vals = Object.values(totalCommitted).map((v) => v || 0);
+  const max1 = vals.length ? Math.max(...vals) : 0;
+  const atMax = vals.filter((v) => v === max1).length;
+  const below = vals.filter((v) => v < max1);
+  const ceiling = atMax >= 2 ? max1 : below.length ? Math.max(...below) : 0;
+  return vals.reduce((a, v) => a + Math.min(v, ceiling), 0);
+}
+
+// Distribute the pot into layered (side) pots by contribution level and award
+// each layer to whichever winners are eligible for it (contributed to it).
+// Handles side pots (all-in for less) AND split/chopped pots. Uncalled excess
+// returns to the sole top contributor as its own single-eligible layer.
+// Returns { winnings: {seat: chips}, unresolved } — winnings sum to the full
+// pot; `unresolved` is true if some layer had no eligible winner (its chips are
+// returned to that layer's contributors, and the caller should warn).
+export function distributePots(totalCommitted, winners) {
+  const seats = Object.keys(totalCommitted)
+    .map(Number)
+    .filter((s) => (totalCommitted[s] || 0) > 0);
+  const levels = [...new Set(seats.map((s) => totalCommitted[s]))].sort((a, b) => a - b);
+  const winSet = new Set(winners || []);
+  const winnings = {};
+  let prev = 0;
+  let unresolved = false;
+  for (const lvl of levels) {
+    const contributors = seats.filter((s) => totalCommitted[s] >= lvl);
+    const layer = (lvl - prev) * contributors.length;
+    const elig = contributors.filter((s) => winSet.has(s)).sort((a, b) => a - b);
+    if (elig.length) {
+      const share = Math.floor(layer / elig.length);
+      const rem = layer - share * elig.length;
+      elig.forEach((w) => (winnings[w] = (winnings[w] || 0) + share));
+      for (let i = 0; i < rem; i++) winnings[elig[i % elig.length]] += 1; // odd chip → lowest seat
+    } else {
+      unresolved = true; // no designated winner for this layer — return it
+      contributors.forEach((c) => (winnings[c] = (winnings[c] || 0) + (lvl - prev)));
+    }
+    prev = lvl;
+  }
+  return { winnings, unresolved };
+}
+
+// Rake-adjusted winnings: winners bear the rake proportionally to their gross.
+export function settleResult(totalCommitted, winners, rake) {
+  const { winnings, unresolved } = distributePots(totalCommitted, winners);
+  const out = { ...winnings };
+  const gross = (winners || []).reduce((a, w) => a + (winnings[w] || 0), 0);
+  if (rake > 0 && gross > 0) {
+    const ws = (winners || []).filter((w) => (winnings[w] || 0) > 0).sort((a, b) => winnings[b] - winnings[a]);
+    let left = rake;
+    ws.forEach((w) => {
+      const take = Math.min(out[w], Math.floor((rake * winnings[w]) / gross));
+      out[w] -= take;
+      left -= take;
+    });
+    for (let i = 0; i < ws.length && left > 0; i++) {
+      const take = Math.min(out[ws[i]], left);
+      out[ws[i]] -= take;
+      left -= take;
+    }
+  }
+  return { winnings: out, unresolved };
+}
+
+// Settle stacks after a hand: newStack = stack − committed + winnings. Seats
+// with a null stack (untracked) are left untouched.
+export function settleStacks(seats, state, winners, rake) {
+  const { winnings } = settleResult(state.totalCommitted, winners, rake);
+  return seats.map((s, i) => {
+    const n = i + 1;
+    if (!s || s.stack == null) return s;
+    const committed = state.totalCommitted[n] || 0;
+    const won = winnings[n] || 0;
+    if (committed === 0 && won === 0) return s;
+    return { ...s, stack: Math.max(0, s.stack - committed + won) };
+  });
 }
 
 // Chips a seat must put in to call the current bet.

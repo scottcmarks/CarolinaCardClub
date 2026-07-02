@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { theme } from "./constants.js";
 import { hhmm } from "./lib/cards.js";
@@ -13,12 +13,20 @@ import Actions from "./components/Actions.jsx";
 import HistoryPanel from "./components/HistoryPanel.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import SessionSummary from "./components/SessionSummary.jsx";
+import PlayerMenu from "./components/PlayerMenu.jsx";
 
 export default function App() {
   const h = useHandLogger();
   const [showHistory, setShowHistory] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showSession, setShowSession] = useState(false);
+  const [menuSeat, setMenuSeat] = useState(null);
+  const [moving, setMoving] = useState(false);
+  const [winners, setWinners] = useState([]);
+  const sittingOut = h.session.sittingOut;
+
+  // reset the winner selection whenever the settling state flips
+  useEffect(() => setWinners([]), [h.settling]);
   const editing = h.editingId !== null;
   const needsOnboard = !h.session.onboarded;
   const betting = h.mode === "betting";
@@ -68,6 +76,22 @@ export default function App() {
           </div>
         )}
 
+        {(moving || sittingOut) && (
+          <div
+            className="flex items-center justify-between mb-2 px-2.5 py-1.5 rounded-lg"
+            style={{ background: "rgba(31,138,76,0.15)", border: "1px solid rgba(31,138,76,0.5)" }}
+          >
+            <span style={{ color: "#7fe0a6", fontSize: 12 }}>
+              {moving ? "Tap an empty seat to move there" : "You're standing — tap an empty seat to sit down"}
+            </span>
+            {moving && (
+              <button onClick={() => setMoving(false)} style={{ color: theme.gold, fontSize: 12 }}>
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
+
         <PokerTable
           cards={h.cards}
           reveals={h.reveals}
@@ -81,13 +105,25 @@ export default function App() {
           heroSeat={h.heroSeat}
           heroName={h.session.heroName}
           buttonSeat={h.button}
+          settling={h.settling}
+          selectedWinners={winners}
+          sittingOut={sittingOut}
+          moving={moving}
           onSelectCommunity={h.selectTarget}
           onTapHeroCard={h.tapHeroCard}
           onSeatAct={h.tapSeatToAct}
           onSelectSeat={h.selectSeat}
           onRemoveReveal={h.removeReveal}
-          onSeatNew={(n) => h.setSeatOccupied(n, true)}
           onAdvanceButton={h.advanceButton}
+          onAwardWinner={(n) =>
+            setWinners((w) => (w.includes(n) ? w.filter((x) => x !== n) : [...w, n]))
+          }
+          onOpenMenu={setMenuSeat}
+          onMoveHere={(n) => {
+            h.moveHeroTo(n);
+            setMoving(false);
+          }}
+          onSitHere={h.heroSitDown}
         />
 
         <StatusLine
@@ -105,7 +141,47 @@ export default function App() {
         />
 
         <div style={{ minHeight: 212 }} className="flex flex-col justify-end">
-          {betting ? (
+          {h.settling ? (
+            <div
+              className="rounded-xl px-3 py-3 mb-1"
+              style={{ background: "rgba(31,138,76,0.15)", border: "1px solid rgba(31,138,76,0.5)" }}
+            >
+              <div style={{ color: "#7fe0a6", fontSize: 13, fontWeight: 700 }}>
+                Tap the winner{winners.length > 1 ? "s (chop)" : ""} · Pot ${h.bet.pot}
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 2 }}>
+                Temporary: the logger will read the board and pick the winner itself later.
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={h.cancelSettle}
+                  className="h-9 px-3 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.08)", color: theme.textLight, fontSize: 13 }}
+                >
+                  Back
+                </button>
+                <button
+                  onClick={h.skipSettle}
+                  className="h-9 px-3 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.08)", color: theme.textLight, fontSize: 13 }}
+                >
+                  No result
+                </button>
+                <button
+                  onClick={() => h.awardTo(winners)}
+                  disabled={winners.length === 0}
+                  className="flex-1 h-9 rounded-lg font-semibold"
+                  style={{
+                    background: winners.length ? "#1f8a4c" : "rgba(255,255,255,0.08)",
+                    color: winners.length ? "#fff" : "rgba(255,255,255,0.35)",
+                    fontSize: 13,
+                  }}
+                >
+                  {winners.length > 1 ? `Split among ${winners.length}` : "Award pot"}
+                </button>
+              </div>
+            </div>
+          ) : betting ? (
             <div
               className="rounded-xl px-3 py-3 mb-1 flex items-center justify-between"
               style={{ background: "rgba(0,0,0,0.18)" }}
@@ -175,6 +251,39 @@ export default function App() {
           currentBet={h.bet.currentBet}
           onAct={h.act}
           onAllIn={h.allIn}
+        />
+      )}
+
+      {menuSeat != null && (
+        <PlayerMenu
+          seatNum={menuSeat}
+          isHero={menuSeat === h.heroSeat && !sittingOut}
+          occupied={!!h.seats[menuSeat - 1]?.occupied}
+          name={h.seats[menuSeat - 1]?.name || ""}
+          stack={h.seats[menuSeat - 1]?.stack ?? null}
+          onSetStack={h.setSeatStack}
+          onRename={h.setSeatName}
+          onEnterCards={(n) => {
+            h.enterCards(n);
+            setMenuSeat(null);
+          }}
+          onStartMove={() => {
+            setMoving(true);
+            setMenuSeat(null);
+          }}
+          onStandUp={() => {
+            h.heroStandUp();
+            setMenuSeat(null);
+          }}
+          onVacate={(n) => {
+            h.vacateSeat(n);
+            setMenuSeat(null);
+          }}
+          onSeat={(n) => {
+            h.seatVillain(n);
+            setMenuSeat(null);
+          }}
+          onClose={() => setMenuSeat(null)}
         />
       )}
 
