@@ -18,9 +18,10 @@ export default function PlayerMenu({
   occupied,
   name,
   stack,
+  canFold,
   onSetStack,
   onRename,
-  onEnterCards,
+  onFoldTo,
   onStartMove,
   onStandUp,
   onVacate,
@@ -104,7 +105,7 @@ export default function PlayerMenu({
                 />
               </label>
             )}
-            <Btn onClick={() => onEnterCards(seatNum)}>Enter shown cards</Btn>
+            {canFold && <Btn onClick={() => onFoldTo(seatNum)}>Fold to here</Btn>}
             {isHero ? (
               <>
                 <Btn onClick={onStartMove}>Change seat</Btn>

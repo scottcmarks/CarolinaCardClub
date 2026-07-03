@@ -111,8 +111,7 @@ export default function App() {
           moving={moving}
           onSelectCommunity={h.selectTarget}
           onTapHeroCard={h.tapHeroCard}
-          onSeatAct={h.tapSeatToAct}
-          onSelectSeat={h.selectSeat}
+          onSelectRevealCard={h.selectRevealCard}
           onRemoveReveal={h.removeReveal}
           onAdvanceButton={h.advanceButton}
           onAwardWinner={(n) =>
@@ -261,10 +260,16 @@ export default function App() {
           occupied={!!h.seats[menuSeat - 1]?.occupied}
           name={h.seats[menuSeat - 1]?.name || ""}
           stack={h.seats[menuSeat - 1]?.stack ?? null}
+          canFold={
+            h.mode === "betting" &&
+            h.bet.actor != null &&
+            menuSeat !== h.bet.actor &&
+            h.bet.inHand.includes(menuSeat)
+          }
           onSetStack={h.setSeatStack}
           onRename={h.setSeatName}
-          onEnterCards={(n) => {
-            h.enterCards(n);
+          onFoldTo={(n) => {
+            h.tapSeatToAct(n);
             setMenuSeat(null);
           }}
           onStartMove={() => {
