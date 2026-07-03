@@ -105,7 +105,8 @@ export default function PokerTable({
   moving,
   onSelectCommunity,
   onTapHeroCard,
-  onSelectRevealCard,
+  onSeatAct,
+  onSelectSeat,
   onRemoveReveal,
   onAdvanceButton,
   onAwardWinner,
@@ -276,34 +277,47 @@ export default function PokerTable({
           );
         }
 
-        // occupied villain seat — always shows two card slots you can tap to
-        // enter what was shown (a back until entered, a face once entered).
+        // occupied villain seat
         const ri = revealBySeat.get(String(n));
         const hasReveal = ri !== undefined;
-        const revCards = hasReveal ? reveals[ri].cards : [null, null];
+        const clickable = showdown ? () => onSelectSeat(n) : () => onSeatAct(n);
         const revealActive = (c) =>
           mode === "cards" && active.type === "reveal" && active.r === ri && active.c === c;
 
         return (
           <SeatFrame key={n} n={n} active={isActor} folded={folded}>
-            <div className="flex gap-1">
-              {[0, 1].map((c) =>
-                revCards[c] ? (
+            {hasReveal ? (
+              <div className="flex gap-1">
+                {[0, 1].map((c) => (
                   <Slot
                     key={c}
-                    card={revCards[c]}
+                    card={reveals[ri].cards[c]}
                     isActive={revealActive(c)}
-                    onSelect={() => onSelectRevealCard(n, c)}
+                    onSelect={() => onSelectSeat(n)}
                     w={28}
                     h={40}
                   />
-                ) : (
-                  <CardBack key={c} onClick={() => onSelectRevealCard(n, c)} w={28} h={40} />
-                )
-              )}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <button
+                onClick={clickable}
+                style={{
+                  width: 64,
+                  height: 40,
+                  borderRadius: 10,
+                  background: folded ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.07)",
+                  border: isActor ? `1px solid ${theme.gold}` : "1px solid rgba(255,255,255,0.12)",
+                  color: "rgba(255,255,255,0.6)",
+                  fontSize: 10,
+                }}
+                className="active:scale-95"
+              >
+                {folded ? "folded" : showdown ? "show?" : "—"}
+              </button>
+            )}
             <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
-            {hasReveal && (
+            {hasReveal && showdown && (
               <button
                 onClick={() => onRemoveReveal(ri)}
                 style={{ color: "rgba(255,255,255,0.45)", marginTop: 1 }}

@@ -534,24 +534,19 @@ export function useHandLogger() {
     setReveals((p) => p.filter((_, i) => i !== r));
   }, []);
 
-  // enter a specific shown card (slot c) for a villain seat, at ANY point in the
-  // hand — tapping a player's card back directly. Creates the reveal if needed.
-  const selectRevealCard = useCallback((seatNum, c) => {
-    buzz(6);
-    setPendingRank(null);
-    setMode("cards");
-    const key = String(seatNum);
-    setReveals((prev) => {
-      const idx = prev.findIndex((r) => r.seat === key);
-      if (idx >= 0) {
-        setActive({ type: "reveal", r: idx, c });
-        return prev;
+  // enter a seat's shown cards at any point in the hand (hero → own hole slot,
+  // villain → a reveal). Two shown cards make a hand eligible to win.
+  const enterCards = useCallback(
+    (n) => {
+      if (n === heroSeat && !session.sittingOut) {
+        const i = !cards[HOLE_START] ? HOLE_START : HOLE_START + 1;
+        selectTarget({ type: "board", index: i });
+      } else {
+        selectSeat(n);
       }
-      const nr = [...prev, { seat: key, cards: [null, null] }];
-      setActive({ type: "reveal", r: nr.length - 1, c });
-      return nr;
-    });
-  }, []);
+    },
+    [heroSeat, session.sittingOut, cards, selectTarget, selectSeat]
+  );
 
   // ---- session + seat + rake mutation ----
   const updateSession = useCallback((patch) => setSession((s) => ({ ...s, ...patch })), []);
@@ -710,7 +705,7 @@ export function useHandLogger() {
     // betting actions
     act, allIn, tapSeatToAct, stackOf,
     // showdown / reveals (any time)
-    selectSeat, removeReveal, selectRevealCard,
+    selectSeat, removeReveal, enterCards,
     // hands
     loadHand, deleteHand, cancelEdit, restartBetting,
     // session/seat/rake
