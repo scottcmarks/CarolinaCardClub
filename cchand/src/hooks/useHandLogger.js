@@ -63,6 +63,23 @@ export function useHandLogger() {
   const positions = useMemo(() => positionLabels(seats, button), [seats, button]);
   const bet = useMemo(() => reduceBetting(actions, { seats, button }), [actions, seats, button]);
 
+  // Seed the blinds for a fresh (not-yet-started) hand — including the very
+  // first hand of a session, and after a seating/button change before play
+  // begins. resetWorking handles subsequent hands; this covers the initial one.
+  useEffect(() => {
+    if (editingId !== null) return;
+    const started = actions.some((a) => a.type !== "post");
+    const hasCards = cards.some(Boolean) || reveals.some((r) => r.cards.some(Boolean));
+    if (started || hasCards) return;
+    const wanted = seedPosts(seats, button, rakeProfile.sb ?? 1, rakeProfile.bb ?? 3);
+    const same =
+      wanted.length === actions.length &&
+      wanted.every(
+        (w, i) => actions[i] && actions[i].seat === w.seat && actions[i].amount === w.amount
+      );
+    if (!same) setActions(wanted);
+  }, [seats, button, rakeProfile, editingId, actions, cards, reveals]);
+
   const usedIds = useMemo(() => {
     const s = new Set(cards.filter(Boolean).map(cardId));
     reveals.forEach((r) => r.cards.forEach((c) => c && s.add(cardId(c))));
