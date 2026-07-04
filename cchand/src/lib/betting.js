@@ -52,11 +52,13 @@ export function reduceBetting(actions, ctx) {
       startStreet(a.street);
       continue;
     }
-    if (type === "post") {
+    if (type === "post" || type === "straddle") {
+      // forced blinds + straddles. The last one posted (BB, or a straddler) is
+      // the "aggressor" and gets the last preflop action / option.
       committed[seat] = (committed[seat] || 0) + amount;
       totalCommitted[seat] = (totalCommitted[seat] || 0) + amount;
       currentBet = Math.max(currentBet, committed[seat]);
-      lastAggressor = seat; // BB closes the preflop option
+      lastAggressor = seat;
       continue;
     }
     if (type === "reveal") continue; // showdown markers don't affect betting
@@ -125,9 +127,7 @@ export function reduceBetting(actions, ctx) {
       lastActor != null
         ? lastActor
         : street === "preflop"
-        ? b
-          ? b.bb
-          : button // preflop: walk from BB so UTG is first
+        ? lastAggressor ?? (b ? b.bb : button) // preflop: walk from the last blind/straddle (BB, or straddler)
         : button; // postflop: walk from button so SB is first
     const n = seats.length;
     for (let k = 1; k <= n; k++) {

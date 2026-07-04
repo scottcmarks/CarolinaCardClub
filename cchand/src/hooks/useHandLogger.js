@@ -6,6 +6,7 @@ import { loadRakes, saveRakes, findRake, computeRake } from "../lib/rake.js";
 import { reduceBetting, seedPosts, settleStacks, settleResult, contestedPot } from "../lib/betting.js";
 import {
   blinds,
+  nextOccupied,
   occupiedSeats,
   positionLabels,
   preflopOrder,
@@ -93,6 +94,17 @@ export function useHandLogger() {
       actions.some((a) => a.type !== "post" && a.type !== "street"),
     [cards, reveals, actions]
   );
+
+  // Straddle (UTG-only): allowed preflop, before any voluntary action, when the
+  // table profile permits it. Amount(s) are site-dependent (auto if one).
+  const straddleAmounts = rakeProfile.straddleAmounts || [];
+  const canStraddle =
+    mode === "betting" &&
+    phase === "preflop" &&
+    straddleAmounts.length > 0 &&
+    !actions.some((a) => a.type === "straddle") &&
+    !actions.some((a) => a.type !== "post" && a.type !== "straddle" && a.type !== "street") &&
+    blinds(seats, button) != null;
   const editingEntry = useMemo(() => log.find((h) => h.id === editingId) || null, [log, editingId]);
 
   const showFlash = (m) => {
@@ -299,6 +311,24 @@ export function useHandLogger() {
       afterActionsChanged([...actions, { seat, street: phase, type: "allin", amount }]);
     },
     [mode, bet, phase, actions, stackOf, pushSnapshot, afterActionsChanged]
+  );
+
+  // post a UTG straddle before the action (a forced blind raise that acts last)
+  const straddle = useCallback(
+    (amount) => {
+      const b = blinds(seats, button);
+      if (!b) return;
+      const utg = nextOccupied(seats, b.bb);
+      if (utg == null) return;
+      buzz(10);
+      pushSnapshot();
+      setActions((prev) =>
+        prev.some((a) => a.type === "straddle")
+          ? prev
+          : [...prev, { seat: utg, street: "preflop", type: "straddle", amount }]
+      );
+    },
+    [seats, button, pushSnapshot]
   );
 
   // ---- betting: tap a seat to jump/correct ----
@@ -720,7 +750,7 @@ export function useHandLogger() {
     // card-entry actions
     pickRank, pickSuit, selectTarget, tapHeroCard, undo, clearHand, endHand,
     // betting actions
-    act, allIn, tapSeatToAct, stackOf,
+    act, allIn, tapSeatToAct, stackOf, straddle, canStraddle, straddleAmounts,
     // showdown / reveals (any time)
     selectSeat, removeReveal, enterCards,
     // hands

@@ -13,12 +13,20 @@ re-derive.
 
 ```
 action = { seat, street, type, amount? }
-  type ∈ post | fold | check | call | bet | raise | allin | street | reveal
+  type ∈ post | straddle | fold | check | call | bet | raise | allin | street | reveal
   street ∈ preflop | flop | turn | river
 ```
 
 - `post` — blind posted at hand start. SB and BB are seeded as posts so their chips
   are in the pot even if they later fold. Sets the opening `currentBet = bb`.
+- `straddle` — a UTG-only forced blind raise, posted before the action; behaves like a
+  post (raises `currentBet`, chips in the pot) but the straddler **acts last preflop**
+  (the preflop actor-walk anchors on the *last* forced poster = the straddler, else the
+  BB). Amount is site-dependent, from the table's rake profile `straddleAmounts` (one =
+  automatic; several = the user picks; absent = no straddle). Danville 1-3 = fixed $5;
+  Five Oaks 1-2 = $4 or $5. A quick "Straddle $N" button shows in the betting bar preflop
+  before any voluntary action. *Non-UTG straddles and the Five Oaks "Round-of-Each" (RoE
+  mixed game, ~$10 straddle) are future work.*
 - `bet` / `raise` — `amount` is the **total this player has in for the street** ("raise
   to X"), not the increment. Increment to the pot = `amount − committedThisStreet`.
 - `allin` — like bet/raise (`amount` = the resulting street total, computed upstream from

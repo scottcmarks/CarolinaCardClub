@@ -37,6 +37,7 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
   const [perHour, setPerHour] = useState(init?.perHour ?? 6);
   const [minHours, setMinHours] = useState(init?.minHours ?? 2);
   const [prepay, setPrepay] = useState(init?.prepay ?? "");
+  const [straddle, setStraddle] = useState((init?.straddleAmounts || []).join(", "));
 
   const setComp = (i, k, v) =>
     setComponents((p) => p.map((c, j) => (j === i ? { ...c, [k]: v } : c)));
@@ -54,6 +55,10 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
   };
 
   const save = () => {
+    const straddleAmounts = straddle
+      .split(/[,\s]+/)
+      .map(Number)
+      .filter((x) => Number.isFinite(x) && x > 0);
     const base = {
       id: uniqueId(),
       label: label.trim() || "Rake",
@@ -61,6 +66,7 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
       sb: num(sb) ?? 1,
       bb: num(bb) ?? 2,
       type,
+      ...(straddleAmounts.length ? { straddleAmounts } : {}),
     };
     let profile;
     if (type === "percent") {
@@ -136,6 +142,13 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
                 className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
             </label>
           </div>
+
+          <label className="flex flex-col gap-1">
+            <Label>Straddle $ (UTG; comma-separated, blank = none)</Label>
+            <input value={straddle} inputMode="numeric" placeholder="e.g. 5   or   4, 5"
+              onChange={(e) => setStraddle(e.target.value)}
+              className="px-3 py-2 rounded-lg outline-none" style={field} />
+          </label>
 
           <div className="flex gap-2">
             <TypeBtn v="percent">Pot rake</TypeBtn>

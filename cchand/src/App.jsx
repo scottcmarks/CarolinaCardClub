@@ -182,11 +182,31 @@ export default function App() {
               </div>
             </div>
           ) : betting ? (
-            <div
-              className="rounded-xl px-3 py-3 mb-1 flex items-center justify-between"
-              style={{ background: "rgba(0,0,0,0.18)" }}
-            >
-              <div className="flex flex-col">
+            <>
+              {h.canStraddle && (
+                <div className="flex gap-2 mb-1">
+                  {h.straddleAmounts.map((amt) => (
+                    <button
+                      key={amt}
+                      onClick={() => h.straddle(amt)}
+                      className="flex-1 h-9 rounded-lg font-semibold active:scale-95"
+                      style={{
+                        background: "rgba(201,162,39,0.22)",
+                        color: theme.gold,
+                        border: "1px solid rgba(201,162,39,0.5)",
+                        fontSize: 13,
+                      }}
+                    >
+                      Straddle ${amt}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div
+                className="rounded-xl px-3 py-3 mb-1 flex items-center justify-between"
+                style={{ background: "rgba(0,0,0,0.18)" }}
+              >
+                <div className="flex flex-col">
                 <span style={{ color: theme.gold, fontSize: 12, fontWeight: 700 }}>
                   {h.phase[0].toUpperCase() + h.phase.slice(1)} betting
                 </span>
@@ -204,7 +224,8 @@ export default function App() {
                   </div>
                 )}
               </div>
-            </div>
+              </div>
+            </>
           ) : (
             <Keypad
               pendingRank={h.pendingRank}

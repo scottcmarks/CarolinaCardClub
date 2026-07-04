@@ -28,6 +28,7 @@ export const SEED_RAKES = [
     ],
     shortHandedThreshold: 5,
     dropOnFlopOnly: true, // "no flop, no drop" (user's recollection)
+    straddleAmounts: [5], // UTG-only, fixed $5 (automatic — single option)
   },
   // Five Oaks Club (Durham, NC) — time charge, not a pot rake.
   // $6/hr, 2-hr minimum, or prepay $30 flat for the session. Blinds unknown —
@@ -42,8 +43,15 @@ export const SEED_RAKES = [
     perHour: 6,
     minHours: 2,
     prepay: 30,
+    straddleAmounts: [4, 5], // UTG-only, $4 or $5 (user picks). RoE variant ~$10 — TODO
   },
 ];
+
+// Straddle: a UTG-only forced blind raise, posted before the deal, that acts
+// last preflop. Amount is site/table-dependent (Danville 1-3 fixed $5; Five Oaks
+// 1-2 $4 or $5). `straddleAmounts` on a profile: [] / absent = no straddle; one
+// entry = automatic; multiple = the user picks. Non-UTG straddles (button /
+// Mississippi) and the "Round-of-Each" (RoE mixed-game, ~$10) are future work.
 
 const safeParse = (raw, fallback) => {
   if (!raw) return fallback;
