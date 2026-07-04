@@ -25,8 +25,11 @@ export default function App() {
   const [winners, setWinners] = useState([]);
   const sittingOut = h.session.sittingOut;
 
-  // reset the winner selection whenever the settling state flips
-  useEffect(() => setWinners([]), [h.settling]);
+  // on settling, pre-select the evaluated winner(s); the tap can still override
+  useEffect(() => {
+    setWinners(h.settling ? h.showdownEval?.winners || [] : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [h.settling]);
   const editing = h.editingId !== null;
   const needsOnboard = !h.session.onboarded;
   const betting = h.mode === "betting";
@@ -147,10 +150,14 @@ export default function App() {
               style={{ background: "rgba(31,138,76,0.15)", border: "1px solid rgba(31,138,76,0.5)" }}
             >
               <div style={{ color: "#7fe0a6", fontSize: 13, fontWeight: 700 }}>
-                Tap the winner{winners.length > 1 ? "s (chop)" : ""} · Pot ${h.bet.pot}
+                {h.showdownEval
+                  ? `${h.showdownEval.winners.length > 1 ? "Chop" : "Winner"}: ${h.showdownEval.best} · Pot $${h.bet.pot}`
+                  : `Tap the winner${winners.length > 1 ? "s (chop)" : ""} · Pot $${h.bet.pot}`}
               </div>
               <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 2 }}>
-                Temporary: the logger will read the board and pick the winner itself later.
+                {h.showdownEval
+                  ? "Read from the shown cards — tap a seat to override, then Award."
+                  : "Enter the shown hands (tap a seat), or tap the winner directly."}
               </div>
               <div className="flex gap-2 mt-2">
                 <button

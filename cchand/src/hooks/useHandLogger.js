@@ -4,6 +4,7 @@ import { cardId, firstEmpty, holeStr } from "../lib/cards.js";
 import { loadLog, saveLog, loadSession, saveSession, maxId } from "../lib/storage.js";
 import { loadRakes, saveRakes, findRake, computeRake } from "../lib/rake.js";
 import { reduceBetting, seedPosts, settleStacks, settleResult, contestedPot } from "../lib/betting.js";
+import { showdownWinners } from "../lib/handeval.js";
 import {
   blinds,
   nextOccupied,
@@ -94,6 +95,20 @@ export function useHandLogger() {
       actions.some((a) => a.type !== "post" && a.type !== "street"),
     [cards, reveals, actions]
   );
+
+  // Evaluate the showdown winner(s) from the board + shown hands (retires the
+  // winner-tap; the tap stays as the override for mucked / unknown hands).
+  const showdownEval = useMemo(() => {
+    if (phase !== "showdown" && !settling) return null;
+    const board = cards.slice(0, 5).filter(Boolean);
+    if (board.length < 3) return null;
+    const contenders = bet.inHand.map((seat) => {
+      if (seat === heroSeat) return { seat, cards: [cards[HOLE_START], cards[HOLE_START + 1]] };
+      const rv = reveals.find((r) => String(r.seat) === String(seat));
+      return { seat, cards: rv ? rv.cards : [null, null] };
+    });
+    return showdownWinners(contenders, board);
+  }, [phase, settling, cards, reveals, bet, heroSeat]);
 
   // Straddle (UTG-only): allowed preflop, before any voluntary action, when the
   // table profile permits it. Amount(s) are site-dependent (auto if one).
@@ -744,7 +759,7 @@ export function useHandLogger() {
     bet, positions, seats, heroSeat, button, rakeProfile,
     usedIds, anyEntered, canUndo: snapshots.length > 0,
     // settling
-    awardTo, skipSettle, cancelSettle,
+    awardTo, skipSettle, cancelSettle, showdownEval,
     // session/log
     session, log, rakes, editingId, editingEntry, flash,
     // card-entry actions

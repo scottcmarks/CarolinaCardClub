@@ -162,13 +162,12 @@ a seat as they're committed (already how `!` all-in computes the shove), and at 
 `settleStacks` debits each seat its `totalCommitted` and credits the **winner** `pot − rake`
 (`lib/betting.js`; net table change = −rake; untracked/null stacks untouched).
 
-**Winner:** fold-to-one wins automatically. A contested pot enters `settling` and the user
-**taps the winner** (`awardTo`) — green WON targets on each live seat.
-
-> ⚠️ **The winner-tap is TEMPORARY SCAFFOLDING.** The end state is the logger *evaluating*
-> the board + revealed hole cards to pick the winning hand itself; the tap bridges until
-> that hand-evaluator exists (and survives afterward only as the override for mucked /
-> unknown hands). It is labelled as scaffolding in the code and UI.
+**Winner:** fold-to-one wins automatically. At a contested showdown the **hand evaluator**
+(`lib/handeval.js`) reads the board + the shown hands and **auto-selects the winner(s)**
+when entering `settling`; the banner shows the winning hand ("Winner: Flush"). The user
+confirms with **Award**, or **taps a seat to override** — the tap survives only as the
+override for **mucked / unknown hands** (only hands showing two cards compete; the two-card
+rule). Chops select multiple seats and split with an odd-chip-to-lowest-seat rule.
 
 `null` winner (skip) records the hand without settling. Each hand stores `winner` + `heroNet`
 (`won − committed`); `SessionSummary` sums `heroNet` over the sitting = **hero P&L** (free
