@@ -100,20 +100,36 @@ export default function ActionPad({ actorSeat, actorLabel, stack, toCall, curren
           {stack != null ? `Stack $${stack}` : ""}
         </span>
       </div>
-      <div
-        onClick={() => setAmount("")}
-        className="flex items-center justify-center"
-        style={{
-          height: 30,
-          marginBottom: 6,
-          borderRadius: 8,
-          background: "rgba(255,255,255,0.06)",
-          color: amount ? theme.textLight : "rgba(255,255,255,0.4)",
-          fontSize: 16,
-          fontWeight: 700,
-        }}
-      >
-        {amount ? `$${amount}` : toCall > 0 ? `to call $${toCall}` : "tap a number to bet"}
+      <div className="flex items-center gap-1.5" style={{ marginBottom: 6 }}>
+        <div
+          onClick={() => {
+            setErr("");
+            setAmount("");
+          }}
+          className="flex-1 flex items-center justify-center"
+          style={{
+            height: 30,
+            borderRadius: 8,
+            background: "rgba(255,255,255,0.06)",
+            color: amount ? theme.textLight : "rgba(255,255,255,0.4)",
+            fontSize: 16,
+            fontWeight: 700,
+          }}
+        >
+          {amount ? `$${amount}` : toCall > 0 ? `to call $${toCall}` : "tap a number to bet"}
+        </div>
+        {amount && (
+          <button
+            onClick={() => {
+              setErr("");
+              setAmount((a) => a.slice(0, -1));
+            }}
+            className="rounded-lg flex items-center justify-center active:scale-95"
+            style={{ width: 42, height: 30, background: "rgba(255,255,255,0.12)", color: theme.textLight, fontSize: 15 }}
+          >
+            ⌫
+          </button>
+        )}
       </div>
       <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         {[7, 8, 9, 4, 5, 6, 1, 2, 3].map((d) => (
