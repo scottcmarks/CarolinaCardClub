@@ -267,7 +267,10 @@ export default function App() {
           actorLabel={`${
             h.bet.actor === h.heroSeat ? h.session.heroName || "You" : h.seats[h.bet.actor - 1]?.name || "Seat " + h.bet.actor
           } · ${h.positions[h.bet.actor] || ""}`}
-          pot={h.bet.pot}
+          stack={(() => {
+            const s = h.stackOf(h.bet.actor);
+            return s == null ? null : Math.max(0, s - (h.bet.totalCommitted[h.bet.actor] || 0));
+          })()}
           toCall={toCall(h.bet, h.bet.actor)}
           currentBet={h.bet.currentBet}
           onAct={h.act}

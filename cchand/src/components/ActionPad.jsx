@@ -6,7 +6,7 @@ const PAD_H = 312;
 
 // Floating numeric action pad: 7 8 9 / 4 5 6 / 1 2 3 / ✖ 0 ✓, plus "!" all-in.
 // Positions itself so the bottom-row 0 sits just under the actor's seat.
-export default function ActionPad({ actorSeat, actorLabel, pot, toCall, currentBet, onAct, onAllIn }) {
+export default function ActionPad({ actorSeat, actorLabel, stack, toCall, currentBet, onAct, onAllIn }) {
   const [amount, setAmount] = useState("");
   const [err, setErr] = useState("");
   const [pos, setPos] = useState(null);
@@ -96,7 +96,9 @@ export default function ActionPad({ actorSeat, actorLabel, pot, toCall, currentB
         style={{ marginBottom: 6, padding: "0 2px" }}
       >
         <span style={{ color: theme.gold, fontSize: 11, fontWeight: 700 }}>{actorLabel}</span>
-        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Pot ${pot}</span>
+        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 11 }}>
+          {stack != null ? `Stack $${stack}` : ""}
+        </span>
       </div>
       <div
         onClick={() => setAmount("")}
