@@ -100,6 +100,26 @@ pending seat in between, then makes the tapped seat the actor (keypad jumps to i
 its current-street action; it becomes the actor again). A fold in a **prior** round can't
 be corrected inline — the hand is flagged `fubar` and must be fixed in the offline editor.
 
+## Legality — warn, don't block (`raiseLegality`)
+
+Betting rules are **computed, not enforced**: a rule-violating action is gated behind an
+intrusive, *explained* "⚠️ That looks illegal — Cancel / Enter anyway" dialog, never
+blocked. The reducer tracks the pieces (`ctx.bb` supplies the big blind):
+
+- **`lastRaiseSize`** — size of the last *full* raise (blinds/straddle set it preflop; a
+  bet/raise updates it only when the increment ≥ the current `lastRaiseSize`). **`minRaiseTo`**
+  = `currentBet + lastRaiseSize`. Preflop first raise ⇒ 2×BB.
+- **`reraiseAllowed`** — a **short all-in** (increment < `lastRaiseSize`) raises the amount
+  to call but does **not reopen** the betting: players who have *already acted since the
+  last full raise* (`actedSinceRaise`) may only call/fold, not re-raise. A player who
+  hasn't acted yet keeps full options. A **full-raise all-in** (increment ≥ `lastRaiseSize`)
+  does reopen.
+
+`raiseLegality(state, type, amount, bb)` returns the reason string (or null) for a
+proposed bet/raise; the hook shows it in the override dialog (`illegalPrompt` /
+`confirmIllegal` / `cancelIllegal`). All-in / call / check / fold are always legal. The
+same gate generalizes to any future rule.
+
 ## House charge — rake types (`lib/rake.js`)
 
 `pot` = sum of all committed chips (derived). A rake profile has a **`type`**:

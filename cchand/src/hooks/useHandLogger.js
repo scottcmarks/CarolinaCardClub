@@ -3,7 +3,7 @@ import { TOTAL, HOLE_START, SEAT_COUNT, defaultSeats } from "../constants.js";
 import { cardId, firstEmpty, holeStr } from "../lib/cards.js";
 import { loadLog, saveLog, loadSession, saveSession, maxId } from "../lib/storage.js";
 import { loadRakes, saveRakes, findRake, computeRake } from "../lib/rake.js";
-import { reduceBetting, seedPosts, settleStacks, settleResult, contestedPot } from "../lib/betting.js";
+import { reduceBetting, seedPosts, settleStacks, settleResult, contestedPot, raiseLegality } from "../lib/betting.js";
 import { showdownWinners } from "../lib/handeval.js";
 import {
   blinds,
@@ -52,6 +52,7 @@ export function useHandLogger() {
   const [editingId, setEditingId] = useState(null);
   const [flash, setFlash] = useState(null);
   const [settling, setSettling] = useState(false); // showdown: awaiting winner tap
+  const [illegalPrompt, setIllegalPrompt] = useState(null); // { type, amount, reason } — override gate
   const nextId = useRef(maxId(loadLog()) + 1);
 
   useEffect(() => saveLog(log), [log]);
@@ -63,7 +64,10 @@ export function useHandLogger() {
   const heroSeat = clampSeat(session.seat);
   const rakeProfile = findRake(rakes, session.rakeProfileId);
   const positions = useMemo(() => positionLabels(seats, button), [seats, button]);
-  const bet = useMemo(() => reduceBetting(actions, { seats, button }), [actions, seats, button]);
+  const bet = useMemo(
+    () => reduceBetting(actions, { seats, button, bb: rakeProfile.bb ?? 3 }),
+    [actions, seats, button, rakeProfile]
+  );
 
   // Seed the blinds for a fresh (not-yet-started) hand — including the very
   // first hand of a session, and after a seating/button change before play
@@ -292,17 +296,37 @@ export function useHandLogger() {
   );
 
   // ---- betting: act for the current actor ----
-  const act = useCallback(
+  const commitAction = useCallback(
     (type, amount) => {
-      if (mode !== "betting" || bet.actor == null) return;
       buzz(type === "fold" ? 6 : 10);
       pushSnapshot();
       const a = { seat: bet.actor, street: phase, type };
       if (amount != null) a.amount = amount;
       afterActionsChanged([...actions, a]);
     },
-    [mode, bet, phase, actions, pushSnapshot, afterActionsChanged]
+    [bet, phase, actions, pushSnapshot, afterActionsChanged]
   );
+
+  // Gate rule-violating actions behind an explained "are you sure?" override
+  // rather than blocking them (poker rules are computed, not enforced).
+  const act = useCallback(
+    (type, amount) => {
+      if (mode !== "betting" || bet.actor == null) return;
+      const reason = raiseLegality(bet, type, amount, rakeProfile.bb ?? 3);
+      if (reason) {
+        setIllegalPrompt({ type, amount, reason });
+        return;
+      }
+      commitAction(type, amount);
+    },
+    [mode, bet, rakeProfile, commitAction]
+  );
+
+  const confirmIllegal = useCallback(() => {
+    if (illegalPrompt) commitAction(illegalPrompt.type, illegalPrompt.amount);
+    setIllegalPrompt(null);
+  }, [illegalPrompt, commitAction]);
+  const cancelIllegal = useCallback(() => setIllegalPrompt(null), []);
 
   // all-in: commit the actor's whole remaining stack (or a typed amount if the
   // stack is unknown). typed comes from the pad when no stack is set.
@@ -766,6 +790,7 @@ export function useHandLogger() {
     pickRank, pickSuit, selectTarget, tapHeroCard, undo, clearHand, endHand,
     // betting actions
     act, allIn, tapSeatToAct, stackOf, straddle, canStraddle, straddleAmounts,
+    illegalPrompt, confirmIllegal, cancelIllegal,
     // showdown / reveals (any time)
     selectSeat, removeReveal, enterCards,
     // hands

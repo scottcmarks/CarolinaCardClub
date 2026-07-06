@@ -20,6 +20,7 @@ export function seedPosts(seats, button, sbAmt, bbAmt) {
 //   ctx      { seats, button }
 export function reduceBetting(actions, ctx) {
   const { seats, button } = ctx;
+  const bbAmt = ctx.bb ?? 0;
   const occ = occupiedSeats(seats);
   const inHand = new Set(occ);
   const allInSet = new Set(); // seats with no chips left — still in, can't act
@@ -35,14 +36,18 @@ export function reduceBetting(actions, ctx) {
   let currentBet = 0;
   let lastAggressor = null;
   let lastActor = null;
+  let lastRaiseSize = bbAmt; // size of the last full raise (min legal raise increment)
   const actedThisStreet = new Set();
+  const actedSinceRaise = new Set(); // voluntary actors since the last FULL raise (re-raise rights)
 
   const startStreet = (st) => {
     street = st;
     currentBet = 0;
     lastAggressor = null;
     lastActor = null;
+    lastRaiseSize = bbAmt;
     actedThisStreet.clear();
+    actedSinceRaise.clear();
     occ.forEach((s) => (committed[s] = 0));
   };
 
@@ -57,7 +62,10 @@ export function reduceBetting(actions, ctx) {
       // the "aggressor" and gets the last preflop action / option.
       committed[seat] = (committed[seat] || 0) + amount;
       totalCommitted[seat] = (totalCommitted[seat] || 0) + amount;
-      currentBet = Math.max(currentBet, committed[seat]);
+      if (committed[seat] > currentBet) {
+        currentBet = committed[seat];
+        lastRaiseSize = currentBet; // the top blind/straddle sets the "bet" to raise over
+      }
       lastAggressor = seat;
       continue;
     }
@@ -71,34 +79,51 @@ export function reduceBetting(actions, ctx) {
       lastActor = seat;
     } else if (type === "check") {
       actedThisStreet.add(seat);
+      actedSinceRaise.add(seat);
       lastActor = seat;
     } else if (type === "call") {
       const add = Math.max(0, currentBet - (committed[seat] || 0));
       committed[seat] += add;
       totalCommitted[seat] += add;
       actedThisStreet.add(seat);
+      actedSinceRaise.add(seat);
       lastActor = seat;
     } else if (type === "bet" || type === "raise") {
       const to = amount;
+      const inc = to - currentBet;
       const add = Math.max(0, to - (committed[seat] || 0));
       committed[seat] = to;
       totalCommitted[seat] += add;
-      currentBet = Math.max(currentBet, to);
-      lastAggressor = seat;
+      if (to > currentBet) {
+        if (inc >= lastRaiseSize) {
+          lastRaiseSize = inc; // a full raise reopens the betting…
+          actedSinceRaise.clear();
+        }
+        currentBet = to;
+        lastAggressor = seat;
+      }
       actedThisStreet.add(seat);
+      actedSinceRaise.add(seat);
       lastActor = seat;
     } else if (type === "allin") {
       // amount = this-street total the player is all-in for (computed upstream
       // from their stack, or typed). May be a full raise or a short call.
       const to = amount;
+      const inc = to - currentBet;
       const add = Math.max(0, to - (committed[seat] || 0));
       committed[seat] = Math.max(committed[seat] || 0, to);
       totalCommitted[seat] += add;
       if (to > currentBet) {
+        if (inc >= lastRaiseSize) {
+          lastRaiseSize = inc; // a full-raise all-in reopens…
+          actedSinceRaise.clear();
+        }
+        // a short all-in (inc < lastRaiseSize) raises the call but does NOT reopen
         currentBet = to;
         lastAggressor = seat;
       }
       actedThisStreet.add(seat);
+      actedSinceRaise.add(seat);
       allInSet.add(seat); // persists across streets (committed resets, this doesn't)
       lastActor = seat;
     }
@@ -152,7 +177,35 @@ export function reduceBetting(actions, ctx) {
     lastAggressor,
     playersLeft: inHand.size,
     roundClosed: !anyNeeds || inHand.size <= 1,
+    lastRaiseSize,
+    minRaiseTo: currentBet + lastRaiseSize, // smallest legal raise-to
+    // whether the current actor may (re-)raise: they may unless they've already
+    // acted since the last FULL raise (i.e. they face only a short all-in).
+    reraiseAllowed: actor == null || !actedSinceRaise.has(actor),
   };
+}
+
+// Legality of a proposed bet/raise for the current actor. Returns a reason
+// string if it appears ILLEGAL (min-raise / reopening rules), else null. The
+// app never blocks — it uses this to gate the action behind an explained
+// "are you sure?" override. All-in / call / check / fold are always legal.
+export function raiseLegality(state, type, amount, bb) {
+  if (type !== "bet" && type !== "raise") return null;
+  if (!state.reraiseAllowed) {
+    return (
+      "The last all-in was less than a full raise, so it does not reopen the " +
+      "betting — players who already acted may only call or fold, not raise."
+    );
+  }
+  if (state.currentBet === 0) {
+    if (bb && amount < bb) return `A bet must be at least the big blind ($${bb}).`;
+  } else if (amount < state.minRaiseTo) {
+    return (
+      `The minimum raise is to $${state.minRaiseTo} — a raise must be at least ` +
+      `the size of the last raise ($${state.lastRaiseSize}).`
+    );
+  }
+  return null;
 }
 
 const STREET_ABBR = { preflop: "PF", flop: "F", turn: "T", river: "R" };

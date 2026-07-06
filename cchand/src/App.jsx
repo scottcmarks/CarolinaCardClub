@@ -285,6 +285,44 @@ export default function App() {
         />
       )}
 
+      {h.illegalPrompt && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center px-6"
+          style={{ background: "rgba(0,0,0,0.75)" }}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl p-4"
+            style={{ background: theme.panel, border: "1px solid rgba(255,120,120,0.6)" }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span style={{ fontSize: 18 }}>⚠️</span>
+              <span style={{ color: "#ff9a9a", fontSize: 15, fontWeight: 700 }}>
+                That looks illegal
+              </span>
+            </div>
+            <div style={{ color: theme.textLight, fontSize: 13, lineHeight: 1.45, marginBottom: 14 }}>
+              {h.illegalPrompt.reason}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={h.cancelIllegal}
+                className="flex-1 h-11 rounded-xl font-semibold"
+                style={{ background: "rgba(255,255,255,0.1)", color: theme.textLight, fontSize: 14 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={h.confirmIllegal}
+                className="flex-1 h-11 rounded-xl font-semibold"
+                style={{ background: "rgba(138,31,31,0.9)", color: "#fff", fontSize: 14 }}
+              >
+                Enter anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {menuSeat != null && (
         <PlayerMenu
           seatNum={menuSeat}
