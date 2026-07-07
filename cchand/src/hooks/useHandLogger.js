@@ -312,6 +312,16 @@ export function useHandLogger() {
   const act = useCallback(
     (type, amount) => {
       if (mode !== "betting" || bet.actor == null) return;
+      // With an all-in already in play, exact stacks are required to know whether
+      // this call/raise is itself all-in and to build side pots — insist on them.
+      if (
+        (type === "call" || type === "bet" || type === "raise") &&
+        stackOf(bet.actor) == null &&
+        bet.allIn.some((s) => bet.inHand.includes(s))
+      ) {
+        showFlash(`Set S${bet.actor}'s stack first (all-in in play) — tap their name`);
+        return;
+      }
       const reason = raiseLegality(bet, type, amount, rakeProfile.bb ?? 3);
       if (reason) {
         setIllegalPrompt({ type, amount, reason });
@@ -319,7 +329,7 @@ export function useHandLogger() {
       }
       commitAction(type, amount);
     },
-    [mode, bet, rakeProfile, commitAction]
+    [mode, bet, rakeProfile, stackOf, commitAction]
   );
 
   const confirmIllegal = useCallback(() => {
@@ -328,23 +338,20 @@ export function useHandLogger() {
   }, [illegalPrompt, commitAction]);
   const cancelIllegal = useCallback(() => setIllegalPrompt(null), []);
 
-  // all-in: commit the actor's whole remaining stack (or a typed amount if the
-  // stack is unknown). typed comes from the pad when no stack is set.
+  // all-in: commit the actor's whole remaining stack. Stacks are mandatory for
+  // an all-in — without one the pot/side-pot math and P&L can't be computed, so
+  // we require it be set (tap the name → Stack) rather than guessing.
   const allIn = useCallback(
-    (typed) => {
+    () => {
       if (mode !== "betting" || bet.actor == null) return;
       const seat = bet.actor;
       const stack = stackOf(seat);
-      let amount;
-      if (stack != null) {
-        const remaining = Math.max(0, stack - (bet.totalCommitted[seat] || 0));
-        amount = (bet.committed[seat] || 0) + remaining;
-      } else if (typed && typed > 0) {
-        amount = typed;
-      } else {
-        showFlash("Set a stack, or type the all-in amount");
+      if (stack == null) {
+        showFlash(`Set S${seat}'s stack to log the all-in — tap their name`);
         return;
       }
+      const remaining = Math.max(0, stack - (bet.totalCommitted[seat] || 0));
+      const amount = (bet.committed[seat] || 0) + remaining;
       buzz(16);
       pushSnapshot();
       afterActionsChanged([...actions, { seat, street: phase, type: "allin", amount }]);

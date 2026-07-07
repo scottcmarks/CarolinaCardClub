@@ -58,3 +58,8 @@ export const tableTheme = {
   rail: "#3a2a1a",
   feltOval: "radial-gradient(120% 90% at 50% 35%, #1f5446 0%, #163a30 55%, #0f2a22 100%)",
 };
+
+// Felt outline is a superellipse (Lamé curve) |x/a|^n + |y/b|^n = 1. n=2 is a
+// plain ellipse (too pointy/"oval"); higher n squares off the corners. "oval"
+// keeps a soft super-egg curve, "rect" pushes toward a rounded rectangle.
+export const TABLE_EXPONENT = { oval: 3, rect: 5 };

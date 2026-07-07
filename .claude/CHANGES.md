@@ -218,3 +218,43 @@ from "record the cards" to "record the play." See `cchand/BETTING_MODEL.md`.
 - Two adversarial review workflows (13 + 10 confirmed → fixed; side pots, chops, uncalled
   bets, ended-session revival, run-out phantom checks, stack duplication, etc.).
 - ~84-case Node engine harness (rebuilt in scratchpad; pure libs are React-free).
+
+---
+
+# Carolina Card Club — cchand table shape + all-in stack fixes (2026-07-07)
+
+## Table geometry (`PokerTable.jsx`, `constants.js`, `Onboarding.jsx`, `storage.js`)
+- Felt + seat ring now ride a **superellipse** (Lamé curve) instead of a pure ellipse —
+  the old `border-radius:50%` was "too oval". `TABLE_EXPONENT = { oval: 3, rect: 5 }`
+  (n=2 ellipse → n=3 "super-egg"; rect squarer). Felt drawn as two `clip-path` polygon
+  layers (rail + felt) since `border-radius` can't express n>2.
+- Two new setup toggles, persisted in `session` and edited in Onboarding (segmented
+  `Seg` control):
+  - **Dealing** `dealer | self`. Dealer = house dealer: DEALER notch at top, 10-slot
+    spacing leaves the top gap (seat 1 upper-right / 5 bottom / 9 upper-left). Self-dealt =
+    no notch, 9 seats evenly with no gap — seat 2 at the right end, seats 6 & 7 flanking
+    the far (left) end.
+  - **Table shape** `oval | rect`.
+- `seatAngle`/`ringPos`/`superClip`/`superPt` helpers; `storage.loadSession` defaults +
+  normalizes `dealt`/`tableShape`.
+
+## Betting engine — all-in by call (`src/lib/betting.js`)
+- **Bug**: 3-handed, big stack covers both; short jams, big calls, third player *calls*
+  off their whole stack. Engine only marked all-in on the explicit `!` action, so it still
+  counted the caller as live and offered the lone big stack a bet on the next street
+  instead of running to showdown.
+- **Fix**: a seat is all-in whenever `totalCommitted[seat] >= stackOf(seat)` — a plain
+  `call`/`bet`/`raise` for the last chip counts, not just the all-in button. A `call` is
+  also capped at remaining chips (short call = all-in for less → correct side pot).
+- Verified with the exact scenario + regressions (untracked stacks unchanged, deep stacks
+  keep betting live, short call builds a side pot).
+
+## Stacks mandatory — nudge + gate (`PokerTable.jsx`, `useHandLogger.js`)
+- User principle: stacks must be set for logging to make sense (needn't be exact; adjust
+  via add-ons).
+- **Unset-stack marker**: occupied seat with no stack shows a pulsing amber "?" badge +
+  "SET STACK" on the tag; seats with a stack show `$N`. Fix = tap the name tag (opens the
+  player menu even mid-hand → Stack field).
+- **All-in gate**: `allIn()` now requires the actor's stack (dropped the typed-amount
+  fallback); `act()` blocks call/raise when an all-in is in play and the actor's stack is
+  unset, with a "set the stack" flash. Normal betting (no all-in) is never nagged.

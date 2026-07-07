@@ -108,6 +108,8 @@ export default function App() {
           heroSeat={h.heroSeat}
           heroName={h.session.heroName}
           buttonSeat={h.button}
+          dealt={h.session.dealt}
+          tableShape={h.session.tableShape}
           settling={h.settling}
           selectedWinners={winners}
           sittingOut={sittingOut}

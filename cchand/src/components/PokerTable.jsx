@@ -1,20 +1,44 @@
 import { X } from "lucide-react";
-import { HOLE_START, SEAT_COUNT, tableTheme, theme } from "../constants.js";
+import { HOLE_START, SEAT_COUNT, TABLE_EXPONENT, tableTheme, theme } from "../constants.js";
 import { sameTarget } from "../lib/cards.js";
 import Slot from "./Slot.jsx";
 
-// Wider-than-tall oval; seats CCW from the top (dealer notch). Seat 1
-// upper-right, seat 5 across from dealer at the bottom, seat 9 upper-left.
-// Positions are % of the inner aspect-ratio box (which is itself wide).
+// Seats ride a superellipse ring inside the felt. Positions are % of the inner
+// aspect-ratio box (which is itself wide). RX/RY are the ring's half-extents.
 const RX = 45;
 const RY = 41;
-function seatPos(n) {
-  const psi = (n * 2 * Math.PI) / (SEAT_COUNT + 1);
-  return { left: `${50 + RX * Math.sin(psi)}%`, top: `${50 - RY * Math.cos(psi)}%` };
+
+// A superellipse maps a circle direction (cos t, sin t) onto |x|^n+|y|^n=1 by
+// keeping the sign and raising the magnitude to 2/n. n=2 => plain ellipse.
+const sgn = (v) => (v < 0 ? -1 : v > 0 ? 1 : 0);
+function superPt(u, v, expo) {
+  const p = 2 / expo;
+  return { sx: sgn(u) * Math.abs(u) ** p, sy: sgn(v) * Math.abs(v) ** p };
 }
-function buttonChipPos(n) {
-  const psi = (n * 2 * Math.PI) / (SEAT_COUNT + 1);
-  return { left: `${50 + (RX - 13) * Math.sin(psi)}%`, top: `${50 - (RY - 11) * Math.cos(psi)}%` };
+
+// Seat angle. Dealer mode: 10 evenly-spaced slots with slot 0 left empty at the
+// top for the DEALER notch (seat 1 to its left, seat 5 opposite, seat 9 to its
+// right). Self-dealt: 9 seats, no gap — seat 2 at the right "end" of the oval,
+// seats 6 and 7 flanking the far ("west") end.
+function seatAngle(n, dealt) {
+  if (dealt === "self") return ((n - 2) / SEAT_COUNT) * 2 * Math.PI;
+  return (n * 2 * Math.PI) / (SEAT_COUNT + 1) - Math.PI / 2;
+}
+function ringPos(n, rx, ry, dealt, expo) {
+  const a = seatAngle(n, dealt);
+  const { sx, sy } = superPt(Math.cos(a), Math.sin(a), expo);
+  return { left: `${50 + rx * sx}%`, top: `${50 + ry * sy}%` };
+}
+
+// Superellipse outline as a clip-path polygon, in % of the element's own box.
+function superClip(expo, steps = 72) {
+  const pts = [];
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * 2 * Math.PI;
+    const { sx, sy } = superPt(Math.cos(a), Math.sin(a), expo);
+    pts.push(`${(50 + 50 * sx).toFixed(2)}% ${(50 + 50 * sy).toFixed(2)}%`);
+  }
+  return `polygon(${pts.join(", ")})`;
 }
 
 function CardBack({ w = 32, h = 46, onClick }) {
@@ -33,8 +57,8 @@ function CardBack({ w = 32, h = 46, onClick }) {
   );
 }
 
-function SeatFrame({ n, active, folded, children }) {
-  const { left, top } = seatPos(n);
+function SeatFrame({ n, pos, active, folded, warnStack, children }) {
+  const { left, top } = pos;
   return (
     <div
       data-seat={n}
@@ -54,18 +78,42 @@ function SeatFrame({ n, active, folded, children }) {
       <div
         className={active ? "animate-pulse" : ""}
         style={{
+          position: "relative",
           padding: 3,
           borderRadius: 12,
           boxShadow: active ? `0 0 0 2px ${theme.gold}, 0 0 14px rgba(201,162,39,0.7)` : "none",
         }}
       >
         {children}
+        {warnStack && (
+          <span
+            title="Stack not set — tap the name to set it"
+            style={{
+              position: "absolute",
+              top: -6,
+              right: -6,
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              background: "#f0b429",
+              color: "#23201A",
+              fontSize: 11,
+              fontWeight: 900,
+              lineHeight: "16px",
+              textAlign: "center",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+            }}
+            className="animate-pulse"
+          >
+            ?
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function Tag({ name, sub, committed, allIn, onClick }) {
+function Tag({ name, sub, stack, committed, allIn, onClick }) {
   return (
     <button onClick={onClick} className="flex flex-col items-center" style={{ lineHeight: 1.15, marginTop: 1 }}>
       <span
@@ -82,6 +130,11 @@ function Tag({ name, sub, committed, allIn, onClick }) {
           committed > 0 && <b style={{ color: theme.gold }}>{sub ? " · " : ""}${committed}</b>
         )}
       </span>
+      {stack == null ? (
+        <b style={{ fontSize: 8, letterSpacing: "0.06em", color: "#f0b429" }}>SET STACK</b>
+      ) : (
+        <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)" }}>${stack}</span>
+      )}
     </button>
   );
 }
@@ -99,6 +152,8 @@ export default function PokerTable({
   heroSeat,
   heroName,
   buttonSeat,
+  dealt,
+  tableShape,
   settling,
   selectedWinners,
   sittingOut,
@@ -115,6 +170,11 @@ export default function PokerTable({
   onSitHere,
 }) {
   const showdown = phase === "showdown";
+  const selfDealt = dealt === "self";
+  const expo = TABLE_EXPONENT[tableShape] ?? TABLE_EXPONENT.oval;
+  const clip = superClip(expo);
+  const seatPos = (n) => ringPos(n, RX, RY, dealt, expo);
+  const buttonChipPos = (n) => ringPos(n, RX - 13, RY - 11, dealt, expo);
   // menu is disabled while awarding a pot so a seat change can't wipe the hand
   const openMenu = (n) => {
     if (!settling) onOpenMenu(n);
@@ -142,39 +202,50 @@ export default function PokerTable({
       style={{ flex: 1, minHeight: 250 }}
     >
       <div style={{ position: "relative", width: "100%", aspectRatio: "1.35" }}>
+      {/* rail (superellipse) */}
       <div
         style={{
           position: "absolute",
-          inset: 4,
-          borderRadius: "50%",
+          inset: 0,
+          background: tableTheme.rail,
+          clipPath: clip,
+        }}
+      />
+      {/* felt (superellipse), sits inside the rail leaving an 8px ring */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 8,
           background: tableTheme.feltOval,
-          border: `8px solid ${tableTheme.rail}`,
+          clipPath: clip,
           boxShadow: "inset 0 4px 24px rgba(0,0,0,0.55)",
         }}
       />
 
-      {/* dealer notch */}
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: 0,
-          transform: "translate(-50%, -50%)",
-          width: 56,
-          height: 20,
-          borderRadius: 10,
-          background: tableTheme.rail,
-          border: "1px solid rgba(255,255,255,0.15)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 9,
-          letterSpacing: "0.15em",
-          color: "rgba(255,255,255,0.55)",
-        }}
-      >
-        DEALER
-      </div>
+      {/* dealer notch — only in dealer mode (self-dealt has no house dealer) */}
+      {!selfDealt && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: 0,
+            transform: "translate(-50%, -50%)",
+            width: 56,
+            height: 20,
+            borderRadius: 10,
+            background: tableTheme.rail,
+            border: "1px solid rgba(255,255,255,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 9,
+            letterSpacing: "0.15em",
+            color: "rgba(255,255,255,0.55)",
+          }}
+        >
+          DEALER
+        </div>
+      )}
 
       {/* community + pot */}
       <div
@@ -217,7 +288,7 @@ export default function PokerTable({
         if (n === heroSeat && !sittingOut) {
           const faceUp = heroRevealed || showdown;
           return (
-            <SeatFrame key={n} n={n} active={isActor} folded={folded}>
+            <SeatFrame key={n} n={n} pos={seatPos(n)} active={isActor} folded={folded} warnStack={seat.stack == null}>
               <div className="flex gap-1">
                 {[HOLE_START, HOLE_START + 1].map((i) => {
                   if (!cards[i]) {
@@ -241,7 +312,7 @@ export default function PokerTable({
                   );
                 })}
               </div>
-              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
+              <Tag name={heroName || "You"} sub={`S${n} · ${pos}`} stack={seat.stack ?? null} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
             </SeatFrame>
           );
         }
@@ -285,7 +356,7 @@ export default function PokerTable({
           mode === "cards" && active.type === "reveal" && active.r === ri && active.c === c;
 
         return (
-          <SeatFrame key={n} n={n} active={isActor} folded={folded}>
+          <SeatFrame key={n} n={n} pos={seatPos(n)} active={isActor} folded={folded} warnStack={seat.stack == null}>
             {hasReveal ? (
               <div className="flex gap-1">
                 {[0, 1].map((c) => (
@@ -316,7 +387,7 @@ export default function PokerTable({
                 {folded ? "folded" : showdown ? "show?" : "—"}
               </button>
             )}
-            <Tag name={seat.name} sub={`S${n} · ${pos}`} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
+            <Tag name={seat.name} sub={`S${n} · ${pos}`} stack={seat.stack ?? null} committed={committed} allIn={isAllIn} onClick={() => openMenu(n)} />
             {hasReveal && showdown && (
               <button
                 onClick={() => onRemoveReveal(ri)}

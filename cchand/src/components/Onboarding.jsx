@@ -10,6 +10,38 @@ const field = {
   border: "1px solid rgba(255,255,255,0.12)",
 };
 
+// A small two-option segmented control.
+function Seg({ label, value, options, onChange }) {
+  return (
+    <label style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+      {label}
+      <div
+        className="mt-1 flex rounded-lg overflow-hidden"
+        style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+      >
+        {options.map((o) => {
+          const on = o.value === value;
+          return (
+            <button
+              key={o.value}
+              onClick={() => onChange(o.value)}
+              className="flex-1 py-2"
+              style={{
+                fontSize: 13,
+                fontWeight: on ? 700 : 400,
+                background: on ? theme.gold : "rgba(255,255,255,0.04)",
+                color: on ? theme.ink : "rgba(255,255,255,0.6)",
+              }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </label>
+  );
+}
+
 // Startup / re-openable setup: venue, table, hero name + seat, which seats are
 // occupied, the button, and the rake profile.
 export default function Onboarding({ session, rakes, onDone, onClose, onUpsertRake, onDeleteRake }) {
@@ -19,6 +51,8 @@ export default function Onboarding({ session, rakes, onDone, onClose, onUpsertRa
   const [heroName, setHeroName] = useState(session.heroName || "Scott");
   const [heroSeat, setHeroSeat] = useState(parseInt(session.seat, 10) || 2);
   const [button, setButton] = useState(session.button || 1);
+  const [dealt, setDealt] = useState(session.dealt === "self" ? "self" : "dealer");
+  const [tableShape, setTableShape] = useState(session.tableShape === "rect" ? "rect" : "oval");
   const [rakeProfileId, setRakeProfileId] = useState(session.rakeProfileId || rakes[0]?.id);
   const [seats, setSeats] = useState(
     session.seats && session.seats.length ? session.seats.map((s) => ({ ...s })) : defaultSeats()
@@ -49,6 +83,8 @@ export default function Onboarding({ session, rakes, onDone, onClose, onUpsertRa
       heroName: hn,
       seat: String(heroSeat),
       button,
+      dealt,
+      tableShape,
       rakeProfileId,
       seats: outSeats,
     });
@@ -140,6 +176,27 @@ export default function Onboarding({ session, rakes, onDone, onClose, onUpsertRa
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Seg
+              label="Dealing"
+              value={dealt}
+              onChange={setDealt}
+              options={[
+                { value: "dealer", label: "Dealer" },
+                { value: "self", label: "Self-dealt" },
+              ]}
+            />
+            <Seg
+              label="Table shape"
+              value={tableShape}
+              onChange={setTableShape}
+              options={[
+                { value: "oval", label: "Oval" },
+                { value: "rect", label: "Rect" },
+              ]}
+            />
           </div>
 
           <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>

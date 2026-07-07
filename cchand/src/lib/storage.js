@@ -53,6 +53,8 @@ export function loadSession() {
     heroName: DEFAULT_HERO_NAME,
     rakeProfileId: "danville-1-3",
     seats: defaultSeats(),
+    dealt: "dealer", // "dealer" (house dealer, notch + top gap) | "self" (self-dealt, no gap)
+    tableShape: "oval", // "oval" (superellipse) | "rect" (squarer superellipse)
     onboarded: false,
     startedAt: null, // epoch ms — start of the current sitting
     endedAt: null, // epoch ms — set when the sitting is ended
@@ -70,6 +72,8 @@ export function loadSession() {
     heroName: s.heroName || base.heroName,
     rakeProfileId: s.rakeProfileId || base.rakeProfileId,
     seats: normalizeSeats(s.seats),
+    dealt: s.dealt === "self" ? "self" : "dealer",
+    tableShape: s.tableShape === "rect" ? "rect" : "oval",
     onboarded: !!s.onboarded,
     startedAt: typeof s.startedAt === "number" ? s.startedAt : null,
     endedAt: typeof s.endedAt === "number" ? s.endedAt : null,

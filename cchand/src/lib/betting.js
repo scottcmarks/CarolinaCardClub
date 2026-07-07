@@ -22,6 +22,10 @@ export function reduceBetting(actions, ctx) {
   const { seats, button } = ctx;
   const bbAmt = ctx.bb ?? 0;
   const occ = occupiedSeats(seats);
+  const stackOf = (seat) => {
+    const s = seats[seat - 1];
+    return s && typeof s.stack === "number" ? s.stack : null;
+  };
   const inHand = new Set(occ);
   const allInSet = new Set(); // seats with no chips left — still in, can't act
   const foldedStreet = {};
@@ -82,7 +86,11 @@ export function reduceBetting(actions, ctx) {
       actedSinceRaise.add(seat);
       lastActor = seat;
     } else if (type === "call") {
-      const add = Math.max(0, currentBet - (committed[seat] || 0));
+      // A caller can only put in what they have left; calling for more than the
+      // remaining stack is an all-in for less (a side pot forms).
+      let add = Math.max(0, currentBet - (committed[seat] || 0));
+      const st = stackOf(seat);
+      if (st != null) add = Math.min(add, Math.max(0, st - (totalCommitted[seat] || 0)));
       committed[seat] += add;
       totalCommitted[seat] += add;
       actedThisStreet.add(seat);
@@ -128,6 +136,17 @@ export function reduceBetting(actions, ctx) {
       lastActor = seat;
     }
   }
+
+  // Any in-hand player whose committed chips reach their tracked stack is all-in,
+  // however they got there — a plain "call" or "bet" for the last chip counts,
+  // not just the all-in button. Without this the lone big stack looks like it
+  // still has someone to bet into and gets wrongly offered action on later
+  // streets when everyone else is already all-in.
+  occ.forEach((seat) => {
+    const st = stackOf(seat);
+    if (inHand.has(seat) && st != null && (totalCommitted[seat] || 0) >= st)
+      allInSet.add(seat);
+  });
 
   // Live pot = all chips on the table (raw). Uncalled bets are only returned at
   // hand end — see contestedPot(), used for rake + the recorded pot.
