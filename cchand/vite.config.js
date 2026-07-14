@@ -4,6 +4,11 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Allow the Cloudflare quick-tunnel host (cloudflared tunnel --url
+  // http://localhost:5173) to reach the dev server for remote testing.
+  server: {
+    allowedHosts: [".trycloudflare.com"],
+  },
   plugins: [
     tailwindcss(),
     react(),

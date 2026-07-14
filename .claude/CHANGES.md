@@ -221,7 +221,7 @@ from "record the cards" to "record the play." See `cchand/BETTING_MODEL.md`.
 
 ---
 
-# Carolina Card Club — cchand table shape + all-in stack fixes (2026-07-07)
+# Carolina Card Club — cchand table shape + all-in stack fixes (2026-07-14)
 
 ## Table geometry (`PokerTable.jsx`, `constants.js`, `Onboarding.jsx`, `storage.js`)
 - Felt + seat ring now ride a **superellipse** (Lamé curve) instead of a pure ellipse —
@@ -258,3 +258,16 @@ from "record the cards" to "record the play." See `cchand/BETTING_MODEL.md`.
 - **All-in gate**: `allIn()` now requires the actor's stack (dropped the typed-amount
   fallback); `act()` blocks call/raise when an all-in is in play and the actor's stack is
   unset, with a "set the stack" flash. Normal betting (no all-in) is never nagged.
+
+## Remote testing + deployment (same session)
+- **Live PWA: https://cchand.pages.dev** (Cloudflare Pages, project `cchand`, account
+  scott.c.marks@gmail.com). Deploy/update = `npm run deploy` in `cchand/` (builds then
+  `wrangler pages deploy dist --project-name=cchand`). Install on iPhone: open URL in
+  Safari once → Share → Add to Home Screen → fully offline thereafter (SW precache).
+- Quick tunnel for live-dev testing: `cloudflared tunnel --url http://localhost:5173`
+  (rotating trycloudflare.com URL); vite.config.js now has
+  `server.allowedHosts: [".trycloudflare.com"]`.
+- Each origin (LAN IP, tunnel, pages.dev) has its OWN localStorage — hands don't cross.
+- Gotcha: `wrangler login` fails (OAuth timeout) when run inside Claude's sandboxed
+  shell — the browser launch/localhost:8976 callback is blocked; needed an unsandboxed
+  run. `.wrangler` cache gitignored.
