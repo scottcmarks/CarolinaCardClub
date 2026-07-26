@@ -1,9 +1,13 @@
-// Pure Texas Hold'em hand evaluator — determines the winner(s) at showdown from
-// the board + each shown hand, retiring the winner-tap scaffolding (the tap
-// survives only as the override for mucked / unknown hands).
+// Pure hand evaluator — determines the winner(s) at showdown from the board +
+// each shown hand, retiring the winner-tap scaffolding (the tap survives only
+// as the override for mucked / unknown hands).
+//
+// Hold'em: best 5 of any 7. Omaha (PLO): EXACTLY 2 of the 4 hole cards +
+// exactly 3 board cards — a board flush isn't yours without two of that suit
+// in hand. Double-board bomb pots score each board separately (half pot each).
 //
 // Cards are { rank, suit } with rank in A K Q J T 9..2 and suit in s h d c.
-// Suits never break ties (Hold'em) — equal keys ⇒ a chop.
+// Suits never break ties — equal keys ⇒ a chop.
 
 const VAL = { A: 14, K: 13, Q: 12, J: 11, T: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
 const CAT = [
@@ -76,16 +80,47 @@ export function bestKey(cards) {
 
 export const handName = (key) => (key ? CAT[key[0]] : "");
 
-// Determine showdown winner(s). Only hands that show TWO cards compete (the
-// two-card rule); an unshown hand can't win.
-//   contenders : [{ seat, cards:[c,c] }]  (cards may be null/partial = unshown)
-//   board      : community cards
+const pairs = (a) => {
+  const r = [];
+  for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) r.push([a[i], a[j]]);
+  return r;
+};
+const triples = (a) => {
+  const r = [];
+  for (let i = 0; i < a.length; i++)
+    for (let j = i + 1; j < a.length; j++)
+      for (let k = j + 1; k < a.length; k++) r.push([a[i], a[j], a[k]]);
+  return r;
+};
+
+// Best Omaha key: exactly 2 of the (4) hole cards + exactly 3 of the board.
+// Needs a full hand and a full board; returns null otherwise.
+export function bestKeyOmaha(hole, board) {
+  const h = (hole || []).filter(Boolean);
+  const b = (board || []).filter(Boolean);
+  if (h.length < 4 || b.length < 5) return null;
+  let best = null;
+  for (const hp of pairs(h))
+    for (const bt of triples(b)) {
+      const k = eval5([...hp, ...bt]);
+      if (!best || cmpKey(k, best) > 0) best = k;
+    }
+  return best;
+}
+
+// Determine one board's showdown winner(s). Only fully-shown hands compete
+// (Hold'em: both cards; Omaha: all four — you show your whole hand to win).
+//   contenders : [{ seat, cards:[…] }]  (cards may be null/partial = unshown)
+//   board      : that board's 5 community cards
+//   omaha      : use the exactly-2-from-hand rule
 // Returns { winners:[seat…], names:{seat:name}, best } or null if nobody showed.
-export function showdownWinners(contenders, board) {
+export function showdownWinners(contenders, board, omaha = false) {
+  const need = omaha ? 4 : 2;
   const scored = [];
   for (const c of contenders) {
-    if (!c.cards || !c.cards[0] || !c.cards[1]) continue; // unshown
-    const key = bestKey([...c.cards, ...board]);
+    const cs = (c.cards || []).filter(Boolean);
+    if (cs.length < need) continue; // unshown / partial
+    const key = omaha ? bestKeyOmaha(cs, board) : bestKey([...cs, ...board]);
     if (key) scored.push({ seat: c.seat, key });
   }
   if (!scored.length) return null;
@@ -95,4 +130,18 @@ export function showdownWinners(contenders, board) {
   const names = {};
   scored.forEach((s) => (names[s.seat] = handName(s.key)));
   return { winners, names, best: handName(top) };
+}
+
+// Multi-board showdown (double-board bomb pot): score each board separately.
+//   boards : [board5, board5, …]
+// Returns { perBoard: [{winners,best}|null …], names, any } — `names` labels a
+// seat "Flush / Two pair" across boards; `any` is true if any board resolved.
+export function showdownWinnersMulti(contenders, boards, omaha = false) {
+  const perBoard = boards.map((b) => showdownWinners(contenders, b, omaha));
+  const names = {};
+  contenders.forEach((c) => {
+    const parts = perBoard.map((r) => (r && r.names[c.seat]) || null);
+    if (parts.some(Boolean)) names[c.seat] = parts.map((p) => p || "—").join(" / ");
+  });
+  return { perBoard, names, any: perBoard.some(Boolean) };
 }

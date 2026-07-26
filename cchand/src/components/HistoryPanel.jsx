@@ -1,6 +1,6 @@
 import { Copy, X, Trash2, FileText, Eye, EyeOff } from "lucide-react";
 import { theme } from "../constants.js";
-import { hhmm, holeStr } from "../lib/cards.js";
+import { hhmm, holeStr, geoOf, holeStartOf } from "../lib/cards.js";
 import { actionsSummary } from "../lib/betting.js";
 import { toText, toCSV, download } from "../lib/export.js";
 import Chip from "./Chip.jsx";
@@ -68,25 +68,41 @@ export default function HistoryPanel({ log, editingId, onClose, onEdit, onDelete
                     <Trash2 size={14} />
                   </button>
                 </div>
-                <div className="flex items-center flex-wrap gap-y-1">
-                  {h.cards.slice(0, 3).map((c, i) => <Chip key={"f" + i} c={c} />)}
-                  <span style={{ width: 4 }} />
-                  <Chip c={h.cards[3]} />
-                  <span style={{ width: 4 }} />
-                  <Chip c={h.cards[4]} />
-                  {!holeStr(h.cards).includes("·") && (
+                {(() => {
+                  const geo = geoOf(h);
+                  const hs = holeStartOf(geo);
+                  return (
                     <>
-                      <span style={{ color: "rgba(201,162,39,0.8)", fontSize: 10, margin: "0 4px" }}>HERO</span>
-                      <Chip c={h.cards[5]} />
-                      <Chip c={h.cards[6]} />
-                      {h.heroRevealed ? (
-                        <Eye size={11} color="rgba(255,255,255,0.5)" style={{ marginLeft: 3 }} />
-                      ) : (
-                        <EyeOff size={11} color="rgba(255,255,255,0.4)" style={{ marginLeft: 3 }} />
+                      {h.bomb && (
+                        <div style={{ color: "#ff9d6e", fontSize: 10, fontWeight: 700, marginBottom: 2 }}>
+                          💣 BOMB POT · {h.bomb.participants?.length} in
+                        </div>
                       )}
+                      {Array.from({ length: geo.boards }, (_, b) => (
+                        <div key={b} className="flex items-center flex-wrap gap-y-1">
+                          {h.cards.slice(5 * b, 5 * b + 3).map((c, i) => <Chip key={"f" + i} c={c} />)}
+                          <span style={{ width: 4 }} />
+                          <Chip c={h.cards[5 * b + 3]} />
+                          <span style={{ width: 4 }} />
+                          <Chip c={h.cards[5 * b + 4]} />
+                          {b === geo.boards - 1 && !holeStr(h.cards, geo).includes("·") && (
+                            <>
+                              <span style={{ color: "rgba(201,162,39,0.8)", fontSize: 10, margin: "0 4px" }}>HERO</span>
+                              {h.cards.slice(hs, hs + geo.hole).map((c, ci) => (
+                                <Chip key={"h" + ci} c={c} />
+                              ))}
+                              {h.heroRevealed ? (
+                                <Eye size={11} color="rgba(255,255,255,0.5)" style={{ marginLeft: 3 }} />
+                              ) : (
+                                <EyeOff size={11} color="rgba(255,255,255,0.4)" style={{ marginLeft: 3 }} />
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
                     </>
-                  )}
-                </div>
+                  );
+                })()}
                 {h.reveals.length > 0 && (
                   <div className="flex items-center flex-wrap gap-y-1 mt-1.5">
                     {h.reveals.map((rv, ri) => (

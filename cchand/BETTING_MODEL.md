@@ -218,3 +218,43 @@ Occupancy/position changes go through `applySeating(newSeats, patch)` → `setSe
 - `rakes` (`phl:rakes:v1`): editable rake profiles (percent/time/none).
 
 Old hands without these fields stay readable (treated as no-betting hands).
+
+## PLO / Danville 2-2 (2026-07-15)
+
+**Variant model.** A profile may set `game: "plo"` → 4 hole cards, pot-limit betting
+(`gameOf(profile)` in rake.js). Per-hand card geometry `{boards: 1|2, hole: 2|4}` lives
+on the hook (`geo`) and on every saved hand (`boards`/`hole`/`game`); the `cards` array
+is `5×boards` board cards then the hole cards (legacy len-7 = NLHE). All dealing /
+street logic is geometry-aware (`streetIndices`/`communityComplete`/`firstCommunityIndex`
+in cards.js).
+
+**Bring-in.** `bringIn: 5` on the profile seeds a third forced post (type `straddle`,
+`seeded: true`) by UTG: it sets the preflop bet to $5, UTG acts last (engine's straddle
+anchor), min re-raise to $10. Skipped heads-up. A seeded bring-in is NOT "play": it
+doesn't block re-seeding, seat changes, or the bomb-pot button (`anyEntered` excludes it).
+
+**Pot limit.** `potLimitMaxTo(state) = currentBet + pot + toCall` (2-2-5: open max $19).
+`raiseLegality(..., {potLimit:true})` flags over-pot bets/raises — warned, never blocked,
+like every rule. All-ins over the max are gated the same way. The pad gets a **POT $X**
+button (one tap = pot-size bet/raise).
+
+**Timed rake in blocks.** `blockMinutes: 30` + `perHour: 16` ⇒ $8 per half-hour
+(`blockCharge`). `computeTimeCharge` meters in blocks. For bomb-pot venues the session
+sheet counts actual collections instead: bombs played (the $8 rides into those pots) +
+"collections sat out" (manual ± counter, `session.collections`), metered figure kept as
+a cross-check.
+
+**Bomb pot** (`profile.bombPot = {ante: 17, doubleBoard: true}`; at Danville every
+half-hour collection). `startBombPot(participants)`: each participant posts
+ante+collection ($25) — 9 players ⇒ **$225 at the flops** (the pot forms BEFORE the rake
+comes out); the hand's rake = collection × participants ($72), applied at settlement.
+No preflop betting: the hand starts dealing the (double) flop immediately; flop betting
+opens pot-limit on the full $225. Seated non-participants are debited the $8 collection
+from their stacks at deal time (hero sit-out bumps `session.collections`).
+
+**Double-board settlement.** Each board is worth half the pot, side-pot layers included:
+`settleResultBoards(tc, winnersA, winnersB, rake)` runs the layered distribution once per
+board and averages, integer-safe (odd dollars to the lowest odd-total seat). The
+evaluator (`bestKeyOmaha`: exactly 2 of 4 hole + 3 of board; `showdownWinnersMulti`)
+resolves winners per board from full 4-card reveals; the winner-tap override awards a
+scoop. Entries record `winnersByBoard` alongside the union `winner`.

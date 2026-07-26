@@ -30,6 +30,25 @@ export const SEED_RAKES = [
     dropOnFlopOnly: true, // "no flop, no drop" (user's recollection)
     straddleAmounts: [5], // UTG-only, fixed $5 (automatic — single option)
   },
+  // Danville 2-2 PLO (Caesars Virginia). 4-card pot-limit Omaha, $2/$2 blinds
+  // with a mandatory $5 UTG bring-in. Timed rake $8 per half hour (no pot
+  // rake). At each half-hour collection: a double-board PLO bomb pot — $17
+  // participation + the $8 collection = $25 into the pot (or pay $8 and sit
+  // out); the pot forms BEFORE the rake is removed (9 players ⇒ $225 at the
+  // flops, house then takes 9×$8).
+  {
+    id: "danville-2-2-plo",
+    venue: "Danville",
+    label: "Danville 2-2 PLO (Caesars VA)",
+    type: "time",
+    game: "plo",
+    sb: 2,
+    bb: 2,
+    bringIn: 5,
+    perHour: 16,
+    blockMinutes: 30,
+    bombPot: { ante: 17, doubleBoard: true },
+  },
   // Five Oaks Club (Durham, NC) — time charge, not a pot rake.
   // $6/hr, 2-hr minimum, or prepay $30 flat for the session. Blinds unknown —
   // placeholder $1/$2; edit in setup.
@@ -46,6 +65,20 @@ export const SEED_RAKES = [
     straddleAmounts: [4, 5], // UTG-only, $4 or $5 (user picks). RoE variant ~$10 — TODO
   },
 ];
+
+// Game variant implied by a profile. PLO = 4 hole cards, pot-limit betting
+// ("Big O" 5-card exists elsewhere but not at Danville — add when needed).
+export function gameOf(profile) {
+  if (profile && profile.game === "plo") return { game: "plo", hole: 4, potLimit: true };
+  return { game: "nlhe", hole: 2, potLimit: false };
+}
+
+// Per-collection charge for a block-metered time rake ($16/hr in 30-min
+// blocks ⇒ $8). Falls back to a whole hour for plain hourly venues.
+export const blockCharge = (p) =>
+  p && p.type === "time"
+    ? Math.round((p.perHour || 0) * ((p.blockMinutes || 60) / 60))
+    : 0;
 
 // Straddle: a UTG-only forced blind raise, posted before the deal, that acts
 // last preflop. Amount is site/table-dependent (Danville 1-3 fixed $5; Five Oaks
@@ -90,7 +123,13 @@ export function loadRakes() {
   if (typeof localStorage === "undefined") return [...SEED_RAKES];
   const data = safeParse(localStorage.getItem(RAKES_KEY), null);
   if (!Array.isArray(data) || data.length === 0) return [...SEED_RAKES];
-  return data.map(migrate);
+  const out = data.map(migrate);
+  // merge in any NEW seed profiles this build knows about (non-destructive:
+  // stored profiles — including edited copies of seeds — always win by id)
+  SEED_RAKES.forEach((s) => {
+    if (!out.some((r) => r.id === s.id)) out.push({ ...s });
+  });
+  return out;
 }
 
 export function saveRakes(rakes) {
@@ -123,30 +162,42 @@ export function computeRake({ pot, playersDealt, sawFlop, profile }) {
   return { total: parts.reduce((a, b) => a + b, 0), parts };
 }
 
-// Session-level time charge for a 'time' profile.
+// Session-level time charge for a 'time' profile. Metered in blocks of
+// `blockMinutes` (default a whole hour): charged = ceil(time / block) × the
+// per-block rate, with at least `minHours` charged.
 //   elapsedHours  seated hours (fractional)
 //   prepaid       did the player take the flat prepay option
 // Returns { metered, prepay, charge } in whole dollars.
 export function computeTimeCharge({ elapsedHours, prepaid, profile }) {
   const p = profile || {};
   if (p.type !== "time") return { metered: 0, prepay: 0, charge: 0 };
-  const hrs = Math.max(p.minHours || 0, Math.ceil(elapsedHours || 0));
-  const metered = hrs * (p.perHour || 0);
+  const blockMin = p.blockMinutes || 60;
+  const chargedMin = Math.max((p.minHours || 0) * 60, (elapsedHours || 0) * 60);
+  const blocks = Math.ceil(chargedMin / blockMin - 1e-9) || 0;
+  const metered = blocks * blockCharge(p);
   const prepay = p.prepay ?? null;
   const charge = prepaid && prepay != null ? prepay : metered;
-  return { metered, prepay, charge, hours: hrs };
+  return { metered, prepay, charge, hours: (blocks * blockMin) / 60 };
 }
 
 // Human summary line for a profile.
 export function rakeSummary(p) {
   if (!p) return "";
+  let prefix = "";
+  if (p.game === "plo") prefix = "PLO · ";
+  if (p.bringIn) prefix += `$${p.bringIn} bring-in · `;
   if (p.type === "time") {
-    let s = `$${p.perHour}/hr`;
+    let s =
+      p.blockMinutes && p.blockMinutes !== 60
+        ? `$${blockCharge(p)}/${p.blockMinutes}min`
+        : `$${p.perHour}/hr`;
     if (p.minHours) s += `, ${p.minHours}hr min`;
     if (p.prepay != null) s += `, or $${p.prepay}/session`;
-    return s;
+    if (p.bombPot)
+      s += ` · bomb pot $${p.bombPot.ante + blockCharge(p)}${p.bombPot.doubleBoard ? " (2 boards)" : ""}`;
+    return prefix + s;
   }
-  if (p.type === "none") return "no house rake";
+  if (p.type === "none") return prefix + "no house rake";
   // percent
   const pct = (x) => `${Math.round((x || 0) * 100)}%`;
   const comps = (p.components || []).map((c) => `${pct(c.percent)} to $${c.cap}`).join(" + ");
@@ -154,5 +205,5 @@ export function rakeSummary(p) {
   const sc = (p.components || []).find((c) => c.shortCap != null);
   if (sc) s += ` (≤${p.shortHandedThreshold}: rake to $${sc.shortCap})`;
   if (p.dropOnFlopOnly) s += " · no flop no drop";
-  return s;
+  return prefix + s;
 }

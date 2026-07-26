@@ -271,3 +271,56 @@ from "record the cards" to "record the play." See `cchand/BETTING_MODEL.md`.
 - Gotcha: `wrangler login` fails (OAuth timeout) when run inside Claude's sandboxed
   shell — the browser launch/localhost:8976 callback is blocked; needed an unsandboxed
   run. `.wrangler` cache gitignored.
+
+---
+
+# Carolina Card Club — cchand PLO + bomb pots (2026-07-15)
+
+## Danville 2-2 PLO (user-sourced spec)
+4-card PLO, $2/$2 + mandatory $5 UTG bring-in, pot-limit; timed rake $8/half-hour; at
+each collection a double-board bomb pot: $17 + the $8 = $25 a head into the pot (or $8
+to sit out); pot forms before the rake — 9 players = $225 at the flops, house takes $72.
+
+## Variant foundation
+- Profiles: `game: "plo"` (4 cards, pot-limit), `bringIn`, `blockMinutes` (time rake in
+  blocks), `bombPot {ante, doubleBoard}`; seed `danville-2-2-plo`; stored-rakes loader
+  now merges NEW seed profiles in by id (non-destructive).
+- Card geometry generalized: per-hand `{boards: 1|2, hole: 2|4}` (`geo` in the hook,
+  `game/boards/hole` on saved entries); `cards` = 5×boards board cards + hole cards.
+  Geometry-aware dealing/street helpers in cards.js; legacy len-7 hands unchanged.
+
+## Engine (betting.js)
+- `seedPosts(..., bringIn)`: UTG bring-in as a seeded straddle — bet $5, UTG last,
+  min-raise $10; skipped heads-up; excluded from "hand started"/anyEntered checks.
+- Pot limit: `potLimitMaxTo` (open $19 in 2-2-5; re-pot $66 over a $19 open),
+  `raiseLegality(..., {potLimit})` — warn-not-block, all-ins included. ActionPad gets a
+  one-tap **POT $X** button.
+- `settleResultBoards`: double-board = half pot per board through the full layered
+  side-pot distribution, integer-safe odd dollars; `settleStacks` takes `winnersB`.
+
+## Evaluator (handeval.js)
+- `bestKeyOmaha`: exactly 2 of 4 hole + 3 of board (a board flush needs two in hand);
+  full-hand reveal gating (4 cards to compete in PLO); `showdownWinnersMulti` per-board
+  winners + combined names ("Flush / Two pair").
+
+## Bomb pot flow
+- 💣 button (fresh preflop hand at a bombPot venue) → participant picker (all seated
+  pre-selected, live "$N at the flop" math) → antes posted, straight to dealing two
+  flops, pot-limit betting on $225; hand rake = $8 × participants at settlement;
+  sit-outs auto-debited $8 (hero sit-out counted in `session.collections`).
+- Session sheet (bomb venues): bombs played + collections sat out (± counter) = time
+  paid, with the block-metered figure as a cross-check.
+
+## UI
+- Double boards render as two stacked rows; hero shows 4 smaller hole slots in PLO;
+  villain reveals sized for 4 cards; RakeEditor gains Game (NLHE/PLO), Bring-in $,
+  collected-every-N-minutes, Bomb pot $ + double-board toggle; history/export carry
+  game/boards/bomb (CSV adds flop2/turn2/river2/game/bomb columns).
+
+## Verification
+- Node harness: 25-case smoke + 27-case integration (bring-in order/last-option,
+  pot-limit maxes, Omaha must-use-2 incl. wheel/chop, double-board settlement incl.
+  odd-dollar + side pots, bomb lifecycle to showdown, NLHE regressions) — 52/52 green.
+- Browser end-to-end on the dev preview: PLO profile → bring-in seeded ($9 pot, POT $19
+  open), bomb picker (9 in → $225), double-flop dealt, flop betting opened at SB with
+  stack $275 and POT $225. Found+fixed: seeded bring-in wrongly hid the bomb button.

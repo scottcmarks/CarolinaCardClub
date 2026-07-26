@@ -1,18 +1,29 @@
 // Pure betting engine. The action log is the source of truth; this replays it
 // into the derived round state (who's in, current bet, pot, whose turn).
 
-import { occupiedSeats, blinds } from "./positions.js";
+import { occupiedSeats, blinds, nextOccupied } from "./positions.js";
 
 export const STREETS_ORDER = ["preflop", "flop", "turn", "river"];
 
-// Seed the two blind posts for the start of a hand. Returns [] if <2 players.
-export function seedPosts(seats, button, sbAmt, bbAmt) {
+// Seed the blind posts for the start of a hand. Returns [] if <2 players.
+// `bringIn` (e.g. Danville 2-2-5 PLO): a MANDATORY UTG post that acts like a
+// straddle — it sets the preflop bet, and the poster gets the last option.
+// Seeded as type "straddle" (the engine already gives the last forced poster
+// the option) with `seeded: true` so the blinds-seed effect can tell it apart
+// from a voluntary straddle. Skipped heads-up (no seat behind the blinds).
+export function seedPosts(seats, button, sbAmt, bbAmt, bringIn) {
   const b = blinds(seats, button);
   if (!b) return [];
-  return [
+  const posts = [
     { seat: b.sb, street: "preflop", type: "post", amount: sbAmt },
     { seat: b.bb, street: "preflop", type: "post", amount: bbAmt },
   ];
+  if (bringIn) {
+    const utg = nextOccupied(seats, b.bb);
+    if (utg != null && utg !== b.sb && utg !== b.bb)
+      posts.push({ seat: utg, street: "preflop", type: "straddle", amount: bringIn, seeded: true });
+  }
+  return posts;
 }
 
 // Replay the action log into derived state.
@@ -204,11 +215,20 @@ export function reduceBetting(actions, ctx) {
   };
 }
 
+// Pot-limit maximum raise-to for the current actor: call, then raise BY the
+// pot after the call. maxTo = currentBet + (pot + toCall). (2-2 with a $5
+// bring-in: pot $9, to-call $5 ⇒ "pot" opens to $19.)
+export function potLimitMaxTo(state, seat = state.actor) {
+  const owe = Math.max(0, state.currentBet - (state.committed[seat] || 0));
+  return state.currentBet + state.pot + owe;
+}
+
 // Legality of a proposed bet/raise for the current actor. Returns a reason
-// string if it appears ILLEGAL (min-raise / reopening rules), else null. The
-// app never blocks — it uses this to gate the action behind an explained
-// "are you sure?" override. All-in / call / check / fold are always legal.
-export function raiseLegality(state, type, amount, bb) {
+// string if it appears ILLEGAL (min-raise / reopening / pot-limit rules),
+// else null. The app never blocks — it uses this to gate the action behind an
+// explained "are you sure?" override. All-in / call / check / fold are always
+// legal (an all-in over the pot-limit max is checked upstream).
+export function raiseLegality(state, type, amount, bb, opts = {}) {
   if (type !== "bet" && type !== "raise") return null;
   if (!state.reraiseAllowed) {
     return (
@@ -223,6 +243,14 @@ export function raiseLegality(state, type, amount, bb) {
       `The minimum raise is to $${state.minRaiseTo} — a raise must be at least ` +
       `the size of the last raise ($${state.lastRaiseSize}).`
     );
+  }
+  if (opts.potLimit) {
+    const maxTo = potLimitMaxTo(state);
+    if (amount > maxTo)
+      return (
+        `Pot limit: the maximum ${state.currentBet ? "raise is to" : "bet is"} ` +
+        `$${maxTo} (call + pot). $${amount} is over the pot.`
+      );
   }
   return null;
 }
@@ -299,9 +327,9 @@ export function distributePots(totalCommitted, winners) {
   return { winnings, unresolved };
 }
 
-// Rake-adjusted winnings: winners bear the rake proportionally to their gross.
-export function settleResult(totalCommitted, winners, rake) {
-  const { winnings, unresolved } = distributePots(totalCommitted, winners);
+// Subtract the rake from `winnings`, borne by `winners` proportionally to
+// their gross. Mutates a copy; returns it.
+function applyRake(winnings, winners, rake) {
   const out = { ...winnings };
   const gross = (winners || []).reduce((a, w) => a + (winnings[w] || 0), 0);
   if (rake > 0 && gross > 0) {
@@ -318,13 +346,51 @@ export function settleResult(totalCommitted, winners, rake) {
       left -= take;
     }
   }
-  return { winnings: out, unresolved };
+  return out;
+}
+
+// Rake-adjusted winnings: winners bear the rake proportionally to their gross.
+export function settleResult(totalCommitted, winners, rake) {
+  const { winnings, unresolved } = distributePots(totalCommitted, winners);
+  return { winnings: applyRake(winnings, winners, rake), unresolved };
+}
+
+// Double-board settlement: each board is worth half the pot (side-pot layers
+// included), so run the layered distribution once per board's winners and
+// average the two, integer-safe (leftover odd dollars go to the lowest seats
+// that had an odd combined total — the "odd chip" rule, in dollars).
+export function settleResultBoards(totalCommitted, winnersA, winnersB, rake) {
+  const A = distributePots(totalCommitted, winnersA);
+  const B = distributePots(totalCommitted, winnersB);
+  const seats = new Set([...Object.keys(A.winnings), ...Object.keys(B.winnings)].map(Number));
+  const combined = {};
+  let paid = 0;
+  let pot = 0;
+  seats.forEach((s) => {
+    const raw = (A.winnings[s] || 0) + (B.winnings[s] || 0);
+    combined[s] = Math.floor(raw / 2);
+    paid += combined[s];
+    pot += raw;
+  });
+  pot = Math.round(pot / 2); // A and B each sum to the full pot
+  const odd = [...seats]
+    .filter((s) => ((A.winnings[s] || 0) + (B.winnings[s] || 0)) % 2 === 1)
+    .sort((a, b) => a - b);
+  for (let i = 0; paid < pot && i < odd.length; i++, paid++) combined[odd[i]] += 1;
+  const winners = [...new Set([...(winnersA || []), ...(winnersB || [])])];
+  return {
+    winnings: applyRake(combined, winners, rake),
+    unresolved: A.unresolved || B.unresolved,
+  };
 }
 
 // Settle stacks after a hand: newStack = stack − committed + winnings. Seats
-// with a null stack (untracked) are left untouched.
-export function settleStacks(seats, state, winners, rake) {
-  const { winnings } = settleResult(state.totalCommitted, winners, rake);
+// with a null stack (untracked) are left untouched. `winnersB` (second-board
+// winners) switches to the double-board split.
+export function settleStacks(seats, state, winners, rake, winnersB) {
+  const { winnings } = winnersB
+    ? settleResultBoards(state.totalCommitted, winners, winnersB, rake)
+    : settleResult(state.totalCommitted, winners, rake);
   return seats.map((s, i) => {
     const n = i + 1;
     if (!s || s.stack == null) return s;

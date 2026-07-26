@@ -5,8 +5,9 @@ const PAD_W = 198;
 const PAD_H = 312;
 
 // Floating numeric action pad: 7 8 9 / 4 5 6 / 1 2 3 / ✖ 0 ✓, plus "!" all-in.
+// Pot-limit games also get a POT button (the max legal raise-to).
 // Positions itself so the bottom-row 0 sits just under the actor's seat.
-export default function ActionPad({ actorSeat, actorLabel, stack, toCall, currentBet, onAct, onAllIn }) {
+export default function ActionPad({ actorSeat, actorLabel, stack, toCall, currentBet, potMaxTo, onAct, onAllIn }) {
   const [amount, setAmount] = useState("");
   const [err, setErr] = useState("");
   const [pos, setPos] = useState(null);
@@ -149,6 +150,22 @@ export default function ActionPad({ actorSeat, actorLabel, stack, toCall, curren
         <span style={{ color: err ? "#ff9a9a" : "rgba(255,255,255,0.75)", fontSize: 11 }}>
           {err || checkLabel}
         </span>
+        {potMaxTo != null && (
+          <button
+            onClick={() => onAct(currentBet > 0 ? "raise" : "bet", potMaxTo)}
+            className="rounded-lg flex items-center justify-center active:scale-95 font-extrabold"
+            style={{
+              height: 30,
+              padding: "0 10px",
+              background: "rgba(201,162,39,0.9)",
+              color: theme.ink,
+              fontSize: 12,
+              boxShadow: "0 2px 0 rgba(0,0,0,0.35)",
+            }}
+          >
+            POT ${potMaxTo}
+          </button>
+        )}
         <button
           onClick={() => onAllIn(n > 0 ? n : null)}
           className="rounded-lg flex items-center justify-center gap-1 active:scale-95 font-extrabold"

@@ -59,6 +59,7 @@ export function loadSession() {
     startedAt: null, // epoch ms — start of the current sitting
     endedAt: null, // epoch ms — set when the sitting is ended
     prepaid: false, // time venues: did the player take the flat prepay
+    collections: 0, // half-hour collections hero paid OUTSIDE bomb pots ($8 each)
     sittingOut: false, // hero has stood up (seatless)
   };
   if (typeof localStorage === "undefined") return base;
@@ -78,6 +79,7 @@ export function loadSession() {
     startedAt: typeof s.startedAt === "number" ? s.startedAt : null,
     endedAt: typeof s.endedAt === "number" ? s.endedAt : null,
     prepaid: !!s.prepaid,
+    collections: typeof s.collections === "number" ? s.collections : 0,
     sittingOut: !!s.sittingOut,
   };
 }

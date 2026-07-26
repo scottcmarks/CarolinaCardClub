@@ -37,7 +37,12 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
   const [perHour, setPerHour] = useState(init?.perHour ?? 6);
   const [minHours, setMinHours] = useState(init?.minHours ?? 2);
   const [prepay, setPrepay] = useState(init?.prepay ?? "");
+  const [blockMinutes, setBlockMinutes] = useState(init?.blockMinutes ?? "");
   const [straddle, setStraddle] = useState((init?.straddleAmounts || []).join(", "));
+  const [game, setGame] = useState(init?.game === "plo" ? "plo" : "nlhe");
+  const [bringIn, setBringIn] = useState(init?.bringIn ?? "");
+  const [bombAnte, setBombAnte] = useState(init?.bombPot?.ante ?? "");
+  const [bombDouble, setBombDouble] = useState(init?.bombPot ? !!init.bombPot.doubleBoard : true);
 
   const setComp = (i, k, v) =>
     setComponents((p) => p.map((c, j) => (j === i ? { ...c, [k]: v } : c)));
@@ -66,6 +71,11 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
       sb: num(sb) ?? 1,
       bb: num(bb) ?? 2,
       type,
+      ...(game === "plo" ? { game: "plo" } : {}),
+      ...(num(bringIn) ? { bringIn: num(bringIn) } : {}),
+      ...(num(bombAnte)
+        ? { bombPot: { ante: num(bombAnte), doubleBoard: bombDouble } }
+        : {}),
       ...(straddleAmounts.length ? { straddleAmounts } : {}),
     };
     let profile;
@@ -83,7 +93,13 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
         dropOnFlopOnly,
       };
     } else if (type === "time") {
-      profile = { ...base, perHour: num(perHour) || 0, minHours: num(minHours) || 0, prepay: num(prepay) };
+      profile = {
+        ...base,
+        perHour: num(perHour) || 0,
+        minHours: num(minHours) || 0,
+        prepay: num(prepay),
+        ...(num(blockMinutes) ? { blockMinutes: num(blockMinutes) } : {}),
+      };
     } else {
       profile = base;
     }
@@ -143,6 +159,36 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
             </label>
           </div>
 
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <Label>Game</Label>
+              <div className="flex gap-1">
+                {["nlhe", "plo"].map((g) => (
+                  <button key={g} onClick={() => setGame(g)}
+                    className="flex-1 py-2 rounded-lg font-semibold"
+                    style={{
+                      fontSize: 13,
+                      background: game === g ? theme.gold : "rgba(255,255,255,0.08)",
+                      color: game === g ? theme.ink : theme.textLight,
+                    }}>
+                    {g === "plo" ? "PLO" : "NLHE"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="flex flex-col gap-1">
+              <Label>Bring-in $ (forced UTG)</Label>
+              <input value={bringIn} inputMode="numeric" placeholder="—"
+                onChange={(e) => setBringIn(e.target.value)}
+                className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
+            </label>
+          </div>
+          {game === "plo" && (
+            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 11.5, marginTop: -6 }}>
+              PLO = 4 hole cards, pot-limit betting (the pad gets a POT button).
+            </div>
+          )}
+
           <label className="flex flex-col gap-1">
             <Label>Straddle $ (UTG; comma-separated, blank = none)</Label>
             <input value={straddle} inputMode="numeric" placeholder="e.g. 5   or   4, 5"
@@ -200,22 +246,54 @@ export default function RakeEditor({ init, rakes, onSave, onDelete, onClose }) {
           )}
 
           {type === "time" && (
-            <div className="grid grid-cols-3 gap-2">
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <label className="flex flex-col gap-1">
+                  <Label>$ / hour</Label>
+                  <input value={perHour} inputMode="numeric" onChange={(e) => setPerHour(e.target.value)}
+                    className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <Label>Min hours</Label>
+                  <input value={minHours} inputMode="numeric" onChange={(e) => setMinHours(e.target.value)}
+                    className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <Label>Prepay $</Label>
+                  <input value={prepay} inputMode="numeric" placeholder="—" onChange={(e) => setPrepay(e.target.value)}
+                    className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
+                </label>
+              </div>
               <label className="flex flex-col gap-1">
-                <Label>$ / hour</Label>
-                <input value={perHour} inputMode="numeric" onChange={(e) => setPerHour(e.target.value)}
+                <Label>Collected every N minutes (blank = hourly; Danville PLO = 30)</Label>
+                <input value={blockMinutes} inputMode="numeric" placeholder="60"
+                  onChange={(e) => setBlockMinutes(e.target.value)}
                   className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
               </label>
-              <label className="flex flex-col gap-1">
-                <Label>Min hours</Label>
-                <input value={minHours} inputMode="numeric" onChange={(e) => setMinHours(e.target.value)}
-                  className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <Label>Prepay $</Label>
-                <input value={prepay} inputMode="numeric" placeholder="—" onChange={(e) => setPrepay(e.target.value)}
-                  className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
-              </label>
+            </>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 items-end">
+            <label className="flex flex-col gap-1">
+              <Label>Bomb pot $ (blank = none)</Label>
+              <input value={bombAnte} inputMode="numeric" placeholder="—"
+                onChange={(e) => setBombAnte(e.target.value)}
+                className="px-3 py-2 rounded-lg outline-none text-center" style={field} />
+            </label>
+            <button onClick={() => setBombDouble((v) => !v)} className="py-2 rounded-lg font-semibold"
+              style={{
+                fontSize: 12.5,
+                background: bombDouble ? theme.gold : "rgba(255,255,255,0.08)",
+                color: bombDouble ? theme.ink : theme.textLight,
+                opacity: num(bombAnte) ? 1 : 0.45,
+              }}>
+              Double board {bombDouble ? "✓" : ""}
+            </button>
+          </div>
+          {num(bombAnte) != null && num(bombAnte) > 0 && (
+            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 11.5, marginTop: -6 }}>
+              Participation = bomb pot $ + the time collection; the collection is raked
+              from the pot at the end.
             </div>
           )}
 

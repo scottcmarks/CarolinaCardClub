@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { theme } from "./constants.js";
 import { hhmm } from "./lib/cards.js";
 import { toCall } from "./lib/betting.js";
+import { blockCharge } from "./lib/rake.js";
 import { useHandLogger } from "./hooks/useHandLogger.js";
 import SessionBar from "./components/SessionBar.jsx";
 import PokerTable from "./components/PokerTable.jsx";
@@ -23,6 +24,7 @@ export default function App() {
   const [menuSeat, setMenuSeat] = useState(null);
   const [moving, setMoving] = useState(false);
   const [winners, setWinners] = useState([]);
+  const [bombPick, setBombPick] = useState(null); // null | seat[] — bomb-pot participant picker
   const sittingOut = h.session.sittingOut;
 
   // on settling, pre-select the evaluated winner(s); the tap can still override
@@ -110,6 +112,7 @@ export default function App() {
           buttonSeat={h.button}
           dealt={h.session.dealt}
           tableShape={h.session.tableShape}
+          geo={h.geo}
           settling={h.settling}
           selectedWinners={winners}
           sittingOut={sittingOut}
@@ -142,6 +145,7 @@ export default function App() {
           seats={h.seats}
           heroSeat={h.heroSeat}
           heroName={h.session.heroName}
+          holeStart={h.holeStart}
           editing={editing}
         />
 
@@ -192,6 +196,20 @@ export default function App() {
             </div>
           ) : betting ? (
             <>
+              {h.canBombPot && (
+                <button
+                  onClick={() => setBombPick(h.seats.map((s, i) => (s.occupied ? i + 1 : null)).filter(Boolean))}
+                  className="w-full h-9 rounded-lg font-semibold active:scale-95 mb-1"
+                  style={{
+                    background: "rgba(201,70,31,0.2)",
+                    color: "#ff9d6e",
+                    border: "1px solid rgba(201,70,31,0.55)",
+                    fontSize: 13,
+                  }}
+                >
+                  💣 Bomb pot — ${(h.rakeProfile.bombPot?.ante || 0) + (h.rakeProfile.bombPot ? blockCharge(h.rakeProfile) : 0)} a head
+                </button>
+              )}
               {h.canStraddle && (
                 <div className="flex gap-2 mb-1">
                   {h.straddleAmounts.map((amt) => (
@@ -282,9 +300,86 @@ export default function App() {
           })()}
           toCall={toCall(h.bet, h.bet.actor)}
           currentBet={h.bet.currentBet}
+          potMaxTo={h.potMaxTo}
           onAct={h.act}
           onAllIn={h.allIn}
         />
+      )}
+
+      {bombPick && (
+        <div
+          className="fixed inset-0 z-[88] flex items-center justify-center px-6"
+          style={{ background: "rgba(0,0,0,0.75)" }}
+          onClick={() => setBombPick(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl p-4"
+            style={{ background: theme.panel, border: "1px solid rgba(201,70,31,0.55)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ color: "#ff9d6e", fontSize: 14, fontWeight: 800 }}>💣 Bomb pot</div>
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 4 }}>
+              ${h.rakeProfile.bombPot?.ante || 0} + ${blockCharge(h.rakeProfile)} collection = $
+              {(h.rakeProfile.bombPot?.ante || 0) + blockCharge(h.rakeProfile)} a head. Tap who's
+              in — sit-outs pay the ${blockCharge(h.rakeProfile)} collection.
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 mt-3">
+              {h.seats.map((s, i) =>
+                s.occupied ? (
+                  <button
+                    key={i}
+                    onClick={() =>
+                      setBombPick((p) =>
+                        p.includes(i + 1) ? p.filter((x) => x !== i + 1) : [...p, i + 1]
+                      )
+                    }
+                    className="h-10 rounded-lg font-semibold active:scale-95"
+                    style={{
+                      background: bombPick.includes(i + 1) ? "rgba(201,70,31,0.45)" : "rgba(255,255,255,0.07)",
+                      color: bombPick.includes(i + 1) ? "#ffb08a" : "rgba(255,255,255,0.45)",
+                      border: bombPick.includes(i + 1)
+                        ? "1px solid rgba(201,70,31,0.8)"
+                        : "1px solid rgba(255,255,255,0.12)",
+                      fontSize: 12,
+                    }}
+                  >
+                    S{i + 1}
+                    {i + 1 === h.heroSeat ? " ·you" : ""}
+                  </button>
+                ) : null
+              )}
+            </div>
+            <div
+              style={{ color: theme.gold, fontSize: 12, fontWeight: 700, marginTop: 8 }}
+            >
+              {bombPick.length} in → ${bombPick.length * ((h.rakeProfile.bombPot?.ante || 0) + blockCharge(h.rakeProfile))} at the flop
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => setBombPick(null)}
+                className="h-10 px-4 rounded-lg"
+                style={{ background: "rgba(255,255,255,0.08)", color: theme.textLight, fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  h.startBombPot(bombPick.sort((a, b) => a - b));
+                  setBombPick(null);
+                }}
+                disabled={bombPick.length < 2}
+                className="flex-1 h-10 rounded-lg font-bold"
+                style={{
+                  background: bombPick.length >= 2 ? "#c9461f" : "rgba(255,255,255,0.08)",
+                  color: bombPick.length >= 2 ? "#fff" : "rgba(255,255,255,0.35)",
+                  fontSize: 13,
+                }}
+              >
+                Deal the bomb pot
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {h.illegalPrompt && (
@@ -365,6 +460,7 @@ export default function App() {
           profile={h.rakeProfile}
           onSetStart={h.setSessionStart}
           onSetPrepaid={h.setPrepaid}
+          onBumpCollections={h.bumpCollections}
           onEndSession={h.endSession}
           onStartNew={() => {
             h.startNewSession();

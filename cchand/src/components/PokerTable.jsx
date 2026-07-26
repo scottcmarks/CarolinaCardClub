@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
-import { HOLE_START, SEAT_COUNT, TABLE_EXPONENT, tableTheme, theme } from "../constants.js";
-import { sameTarget } from "../lib/cards.js";
+import { SEAT_COUNT, TABLE_EXPONENT, tableTheme, theme } from "../constants.js";
+import { sameTarget, holeStartOf } from "../lib/cards.js";
 import Slot from "./Slot.jsx";
 
 // Seats ride a superellipse ring inside the felt. Positions are % of the inner
@@ -154,6 +154,7 @@ export default function PokerTable({
   buttonSeat,
   dealt,
   tableShape,
+  geo,
   settling,
   selectedWinners,
   sittingOut,
@@ -171,6 +172,9 @@ export default function PokerTable({
 }) {
   const showdown = phase === "showdown";
   const selfDealt = dealt === "self";
+  const boards = geo?.boards || 1;
+  const holeN = geo?.hole || 2;
+  const holeStart = holeStartOf(geo);
   const expo = TABLE_EXPONENT[tableShape] ?? TABLE_EXPONENT.oval;
   const clip = superClip(expo);
   const seatPos = (n) => ringPos(n, RX, RY, dealt, expo);
@@ -182,7 +186,16 @@ export default function PokerTable({
   const revealBySeat = new Map();
   reveals.forEach((r, i) => r.seat && revealBySeat.set(String(r.seat), i));
 
-  const communitySlot = (i) => {
+  // card sizes shrink for double boards / 4-card hands so everything fits
+  const commW = boards > 1 ? 26 : 34;
+  const commH = boards > 1 ? 37 : 48;
+  const holeW = holeN > 2 ? 24 : 32;
+  const holeH = holeN > 2 ? 35 : 46;
+  const rvW = holeN > 2 ? 19 : 28;
+  const rvH = holeN > 2 ? 28 : 40;
+
+  const communitySlot = (b) => (i0) => {
+    const i = 5 * b + i0;
     const target = { type: "board", index: i };
     return (
       <Slot
@@ -190,8 +203,8 @@ export default function PokerTable({
         card={cards[i]}
         isActive={mode === "cards" && sameTarget(active, target)}
         onSelect={() => onSelectCommunity(target)}
-        w={34}
-        h={48}
+        w={commW}
+        h={commH}
       />
     );
   };
@@ -247,18 +260,23 @@ export default function PokerTable({
         </div>
       )}
 
-      {/* community + pot */}
+      {/* community + pot (one row per board) */}
       <div
         className="flex flex-col items-center"
-        style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
+        style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", gap: boards > 1 ? 4 : 0 }}
       >
-        <div className="flex items-center">
-          <div className="flex gap-1">{[0, 1, 2].map(communitySlot)}</div>
-          <div style={{ width: 12 }} />
-          {communitySlot(3)}
-          <div style={{ width: 12 }} />
-          {communitySlot(4)}
-        </div>
+        {Array.from({ length: boards }, (_, b) => {
+          const slot = communitySlot(b);
+          return (
+            <div key={b} className="flex items-center">
+              <div className="flex gap-1">{[0, 1, 2].map(slot)}</div>
+              <div style={{ width: boards > 1 ? 8 : 12 }} />
+              {slot(3)}
+              <div style={{ width: boards > 1 ? 8 : 12 }} />
+              {slot(4)}
+            </div>
+          );
+        })}
         <div
           style={{
             marginTop: 6,
@@ -290,7 +308,7 @@ export default function PokerTable({
           return (
             <SeatFrame key={n} n={n} pos={seatPos(n)} active={isActor} folded={folded} warnStack={seat.stack == null}>
               <div className="flex gap-1">
-                {[HOLE_START, HOLE_START + 1].map((i) => {
+                {Array.from({ length: holeN }, (_, k) => holeStart + k).map((i) => {
                   if (!cards[i]) {
                     const target = { type: "board", index: i };
                     return (
@@ -299,16 +317,16 @@ export default function PokerTable({
                         card={null}
                         isActive={mode === "cards" && sameTarget(active, target)}
                         onSelect={() => onTapHeroCard(i)}
-                        w={32}
-                        h={46}
+                        w={holeW}
+                        h={holeH}
                         hole
                       />
                     );
                   }
                   return faceUp ? (
-                    <Slot key={i} card={cards[i]} isActive={false} onSelect={() => onTapHeroCard(i)} w={32} h={46} hole />
+                    <Slot key={i} card={cards[i]} isActive={false} onSelect={() => onTapHeroCard(i)} w={holeW} h={holeH} hole />
                   ) : (
-                    <CardBack key={i} onClick={() => onTapHeroCard(i)} />
+                    <CardBack key={i} w={holeW} h={holeH} onClick={() => onTapHeroCard(i)} />
                   );
                 })}
               </div>
@@ -358,15 +376,15 @@ export default function PokerTable({
         return (
           <SeatFrame key={n} n={n} pos={seatPos(n)} active={isActor} folded={folded} warnStack={seat.stack == null}>
             {hasReveal ? (
-              <div className="flex gap-1">
-                {[0, 1].map((c) => (
+              <div className="flex gap-0.5">
+                {reveals[ri].cards.map((c, ci) => (
                   <Slot
-                    key={c}
-                    card={reveals[ri].cards[c]}
-                    isActive={revealActive(c)}
+                    key={ci}
+                    card={c}
+                    isActive={revealActive(ci)}
                     onSelect={() => onSelectSeat(n)}
-                    w={28}
-                    h={40}
+                    w={rvW}
+                    h={rvH}
                   />
                 ))}
               </div>

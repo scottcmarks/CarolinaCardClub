@@ -1,4 +1,4 @@
-import { HOLE_START, theme } from "../constants.js";
+import { theme } from "../constants.js";
 import { toCall as toCallFn } from "../lib/betting.js";
 
 const dim = { color: "rgba(255,255,255,0.55)", fontSize: 12.5 };
@@ -15,6 +15,7 @@ export default function StatusLine({
   seats,
   heroSeat,
   heroName,
+  holeStart = 5,
   editing,
 }) {
   let content;
@@ -37,7 +38,7 @@ export default function StatusLine({
     );
   } else if (mode === "cards" && phase === "showdown") {
     content = <span style={dim}>Showdown — tap a seat to record a shown hand, or end the hand</span>;
-  } else if (mode === "cards" && active.type === "board" && active.index >= HOLE_START) {
+  } else if (mode === "cards" && active.type === "board" && active.index >= holeStart) {
     content = <span style={dim}>Your cards</span>;
   } else if (mode === "cards" && active.type === "reveal") {
     content = <span style={dim}>Shown hand · card {active.c + 1}</span>;
