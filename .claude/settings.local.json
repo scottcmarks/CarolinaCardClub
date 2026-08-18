@@ -61,7 +61,11 @@
       "Bash(/opt/homebrew/bin/brew list *)",
       "Bash(/opt/homebrew/bin/brew install *)",
       "Bash(ls -1 tailwind.config.* postcss.config.*)",
-      "Bash(grep -rin \"tailwind\" src index.html package.json)"
+      "Bash(grep -rin \"tailwind\" src index.html package.json)",
+      "Bash(git -C /Users/scott/carolina_card_club status --short)",
+      "Bash(git -C /Users/scott/carolina_card_club diff --stat)",
+      "Bash(git -C /Users/scott/carolina_card_club diff client/pubspec.yaml client/linux/flutter/generated_plugins.cmake client/windows/flutter/generated_plugins.cmake weekly_poker_email/INVOCATION.md .claude/settings.local.json)",
+      "Bash(git -C /Users/scott/carolina_card_club log --oneline -S 'dependency_overrides' -- client/pubspec.yaml)"
     ]
   }
 }

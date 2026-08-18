@@ -37,6 +37,12 @@ Steps:
    - If you find one whose dates are LATER than the embedded block's, replace the
      embedded block in the body with the corresponding text from Don's email.
    - Match the surrounding formatting as closely as you can.
+   - CLEANUP: the tournament block names a specific tournament date (in the subject/
+     "Date:" line, e.g. "SUNDAY JULY 26"). Don and Jon almost never remove that same
+     date from the "Future Dates:" line — so remove it yourself. The upcoming
+     tournament date should NOT also appear in "Future Dates:"; that line lists only
+     the dates AFTER it. (e.g. tournament = July 26 → drop "Sun July 26," and start
+     Future Dates at the next one.)
    - If you find nothing newer, leave the block as-is and flag it (step 6).
    (This substitution is fine — I review before anything goes out.)
 
