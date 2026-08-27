@@ -65,7 +65,17 @@
       "Bash(git -C /Users/scott/carolina_card_club status --short)",
       "Bash(git -C /Users/scott/carolina_card_club diff --stat)",
       "Bash(git -C /Users/scott/carolina_card_club diff client/pubspec.yaml client/linux/flutter/generated_plugins.cmake client/windows/flutter/generated_plugins.cmake weekly_poker_email/INVOCATION.md .claude/settings.local.json)",
-      "Bash(git -C /Users/scott/carolina_card_club log --oneline -S 'dependency_overrides' -- client/pubspec.yaml)"
+      "Bash(git -C /Users/scott/carolina_card_club log --oneline -S 'dependency_overrides' -- client/pubspec.yaml)",
+      "Bash(git -C /Users/scott/carolina_card_club status --short client/pubspec.lock)",
+      "Bash(git -C /Users/scott/carolina_card_club show a664b9d --stat)",
+      "Bash(git -C /Users/scott/carolina_card_club show a664b9d -- client/pubspec.yaml)",
+      "Bash(git -C /Users/scott/carolina_card_club log --oneline --all -S 'meta: ^1.18.1' -- client/pubspec.yaml)",
+      "Bash(git -C /Users/scott/carolina_card_club log --oneline -3 -- client/pubspec.lock)",
+      "Bash(git -C /Users/scott/carolina_card_club ls-files client/pubspec.lock)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git -C /Users/scott/carolina_card_club check-ignore -v client/pubspec.lock)",
+      "Bash(git -C /Users/scott/carolina_card_club show 5004e28 -- client/pubspec.yaml)",
+      "Bash(git -C /Users/scott/carolina_card_club show dc544a1 --stat)"
     ]
   }
 }
