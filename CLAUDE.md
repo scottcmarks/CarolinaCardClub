@@ -116,12 +116,13 @@ making structural changes.
 
 ## Known Gaps
 
-- `POST /system/reload` and `POST /maintenance/restore` do **not** call
-  `_broadcastStateChanged()`. Clients connected at the time of a restore or
-  reload silently hold stale state. Fix: add `_broadcastStateChanged()` to
-  both handlers.
+(None currently. Resolved gaps, for the record:)
 
-- On WebSocket reconnect the server sends only `ack`. The client must
-  explicitly re-poll all REST endpoints (`/state`, `/sessions/panel`,
-  `/players/selection`, `/tables`) after receiving `ack`. Verify that
-  `DbConnectionProvider` does this on reconnect.
+- ~~`POST /system/reload` and `POST /maintenance/restore` did not call
+  `_broadcastStateChanged()`~~ — fixed 2026-08: both handlers now broadcast
+  after a successful reload/restore.
+
+- ~~Verify the client re-polls after WebSocket reconnect~~ — verified 2026-08:
+  after every successful handshake (initial or reconnect) `DbConnectionProvider`
+  emits a `connected` event, and `ApiProvider` responds with `reloadAll()`,
+  re-fetching all REST state.

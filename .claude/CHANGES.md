@@ -324,3 +324,28 @@ to sit out); pot forms before the rake — 9 players = $225 at the flops, house 
 - Browser end-to-end on the dev preview: PLO profile → bring-in seeded ($9 pot, POT $19
   open), bomb picker (9 in → $225), double-flop dealt, flop betting opened at SB with
   stack $275 and POT $225. Found+fixed: seeded bring-in wrongly hid the bomb button.
+
+# Carolina Card Club — housekeeping: broadcast fix + repo audit (2026-08-30/31)
+
+## Server
+- `server/bin/carolina_card_club_server.dart`: `_manualRestoreHandler` and
+  `_manualReloadHandler` now call `_broadcastStateChanged()` on success, so
+  connected clients reload instead of silently holding stale state after a
+  restore/reload (closes the long-standing Known Gap). `dart analyze` clean.
+  Live server on Mac-mini-X86 needs a restart to pick this up.
+
+## Docs
+- `CLAUDE.md`: Known Gaps section rewritten — broadcast gap marked fixed;
+  reconnect re-poll gap marked verified (DbConnectionProvider emits
+  `connected` after every successful handshake → ApiProvider `reloadAll()`).
+
+## Audit (no code changes)
+- Post-wapex-sync "dirty" files were phantom: the git index lagged one commit
+  behind HEAD, so status/diff replayed 5004e28's own changes; they evaporated
+  as git refreshed. Diagnostic: `git diff HEAD -- <file>` empty ⇒ phantom.
+- `meta: ^1.18.1` dependency_override removal (committed in 5004e28) verified
+  safe: Flutter 3.47.1 resolves meta 1.19.0 as plain transitive; pub get +
+  flutter analyze clean.
+- TODO sweep: real items are legacy `client/session.py` (delete candidate),
+  RoE straddle in `cchand/src/lib/rake.js:65`, Android release signing still
+  debug config. Rest is Flutter template boilerplate.

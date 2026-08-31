@@ -480,6 +480,7 @@ Future<Response> _manualRestoreHandler(Request request) async {
       await _db;
 
       print('✓ Restore successful. Database reloaded.');
+      _broadcastStateChanged();
       return Response.ok(json.encode({'success': true}));
     } else {
       print('🛑 Restore failed: ${response.body}');
@@ -500,6 +501,7 @@ Future<Response> _manualReloadHandler(Request request) async {
     }
     await _db;
     print('✓ Database connection reloaded.');
+    _broadcastStateChanged();
     return Response.ok(json.encode({'success': true}));
   } catch (e) {
     print('🛑 ERROR [_manualReloadHandler]: $e');
