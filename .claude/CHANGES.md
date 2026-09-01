@@ -349,3 +349,20 @@ to sit out); pot forms before the rake — 9 players = $225 at the flops, house 
 - TODO sweep: real items are legacy `client/session.py` (delete candidate),
   RoE straddle in `cchand/src/lib/rake.js:65`, Android release signing still
   debug config. Rest is Flutter template boilerplate.
+
+# Carolina Card Club — weekly email run + churn (2026-09-01)
+
+## Weekly email (no code changes)
+- Investigated "what happened to the mailout": the Cowork task `weekly-poker-email`
+  had fired on schedule (draft 1:02 PM Tue) — it's just invisible from Claude Code's
+  scheduled-task list (lives in Cowork's own store). M1 has no crontab, so the
+  README's export/auto-send cron jobs are not installed here.
+- Redrafted the Sep 1 email in place: tournament block Aug 27 → Thu Sept 17
+  (from Don's 8/27 "last before Danville WSOP break" email; Future Dates trimmed
+  to Sept 24 + Sun Sept 27 per the CLEANUP rule), BCC refreshed to the 159-address
+  export (new player michael.henson). Scott reviewed and sent.
+- Memory: new `weekly-email.md` topic file capturing the operational reality.
+
+## Data (operational churn)
+- `server/CarolinaCardClub.db` — player updates (new player added)
+- `server/weekly_recipients.json` — re-exported 2026-09-01 14:34, 159 emails

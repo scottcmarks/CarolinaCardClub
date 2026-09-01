@@ -75,7 +75,24 @@
       "Bash(echo \"exit=$?\")",
       "Bash(git -C /Users/scott/carolina_card_club check-ignore -v client/pubspec.lock)",
       "Bash(git -C /Users/scott/carolina_card_club show 5004e28 -- client/pubspec.yaml)",
-      "Bash(git -C /Users/scott/carolina_card_club show dc544a1 --stat)"
+      "Bash(git -C /Users/scott/carolina_card_club show dc544a1 --stat)",
+      "Bash(git -C /Users/scott/carolina_card_club log --oneline -S 'CLEANUP: the tournament block' -- weekly_poker_email/INVOCATION.md)",
+      "Bash(git -C /Users/scott/carolina_card_club grep -nE '\\(TODO|FIXME|HACK|XXX\\)' -- ':!*.lock' ':!*generated*' ':!*.g.dart')",
+      "Bash(git -C /Users/scott/carolina_card_club grep -n '_broadcastStateChanged\\\\|/system/reload\\\\|/maintenance/restore' -- server/)",
+      "Bash(dart analyze *)",
+      "Bash(cat >> *)",
+      "mcp__scheduled-tasks__list_scheduled_tasks",
+      "Bash(crontab -l)",
+      "Bash(launchctl list *)",
+      "Bash(git -C /Users/scott/carolina_card_club log --oneline -5 --format='%h %ad %s' --date=short)",
+      "Read(//private/tmp/**)",
+      "Read(//tmp/**)",
+      "Bash(git -C /Users/scott/carolina_card_club status --short server/weekly_recipients.json)",
+      "mcp__b5e1dfbf-a70b-48f6-9ded-95356e5b1a30__search_threads",
+      "mcp__b5e1dfbf-a70b-48f6-9ded-95356e5b1a30__list_drafts",
+      "mcp__b5e1dfbf-a70b-48f6-9ded-95356e5b1a30__get_thread",
+      "mcp__b5e1dfbf-a70b-48f6-9ded-95356e5b1a30__update_draft",
+      "Bash(git -C /Users/scott/carolina_card_club show --stat --format='%h %s' acbd8d7 cebb738)"
     ]
   }
 }
